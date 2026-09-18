@@ -110,11 +110,21 @@ fi
 if [ "$NODE_NEED_INSTALL" = true ]; then
   echo -e "${YELLOW}⚡ Installing Node.js 20 LTS...${NC}"
   if command -v apt-get >/dev/null 2>&1; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO -E bash -
-    $SUDO apt-get install -y nodejs
+    if [ "$EUID" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+      curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+    else
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      apt-get install -y nodejs
+    fi
   elif command -v yum >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
-    curl -fsSL https://rpm.nodesource.com/setup_20.x | $SUDO bash -
-    $SUDO yum install -y nodejs || $SUDO dnf install -y nodejs
+    if [ "$EUID" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+      curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+      sudo yum install -y nodejs || sudo dnf install -y nodejs
+    else
+      curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+      yum install -y nodejs || dnf install -y nodejs
+    fi
   elif command -v brew >/dev/null 2>&1; then
     brew install node@20
   else
@@ -155,7 +165,11 @@ npm run build
 echo -e "${BLUE}▶ [6/6] Configuring 24/7 Permanent Background Daemon (PM2)...${NC}"
 if ! command -v pm2 >/dev/null 2>&1; then
   echo -e "${YELLOW}⚙ Installing PM2 process manager globally...${NC}"
-  $SUDO npm install -g pm2 || npm install pm2
+  if [ "$EUID" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    sudo npm install -g pm2 || npm install pm2
+  else
+    npm install -g pm2 || npm install pm2
+  fi
 fi
 
 # Release port 3000 if occupied
