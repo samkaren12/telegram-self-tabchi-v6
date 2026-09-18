@@ -368,6 +368,93 @@ async function startServer() {
     }
   });
 
+  // Direct One-Click Deployment Bundle & Script
+  app.get("/api/download-bundle", (req, res) => {
+    const bundlePath = path.join(process.cwd(), "public", "project-bundle.tar.gz");
+    res.download(bundlePath, "telegram-self-tabchi-v6.tar.gz");
+  });
+
+  app.get("/api/deploy.sh", (req, res) => {
+    const host = req.get("host") || "ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+    const baseUrl = `${protocol}://${host}`;
+
+    const script = `#!/usr/bin/env bash
+# ==============================================================================
+# Autonomous 1-Click Installer for Telegram Self & Tabchi v6
+# ==============================================================================
+set -e
+
+echo "🚀 Starting 1-Click Telegram Self & Tabchi v6 Installation..."
+
+# 1. Update and install prerequisites
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get update -y && apt-get install -y curl tar gzip lsof
+elif command -v yum >/dev/null 2>&1; then
+  yum install -y curl tar gzip lsof
+elif command -v dnf >/dev/null 2>&1; then
+  dnf install -y curl tar gzip lsof
+fi
+
+# 2. Check or install Node.js 20 LTS
+if ! command -v node >/dev/null 2>&1 || [ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 18 ]; then
+  echo "📦 Installing Node.js 20 LTS..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  apt-get install -y nodejs || yum install -y nodejs || dnf install -y nodejs
+fi
+echo "✓ Node.js $(node -v) is ready."
+
+# 3. Create destination folder and extract project
+INSTALL_DIR="/root/telegram-self-tabchi-v6"
+mkdir -p "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+
+echo "📥 Downloading project bundle from cloud..."
+curl -fsSL "${baseUrl}/api/download-bundle" -o bundle.tar.gz
+
+echo "📦 Extracting files..."
+tar -xzf bundle.tar.gz --overwrite
+rm -f bundle.tar.gz
+
+# 4. Install dependencies and PM2
+echo "⚙️ Installing dependencies..."
+npm install --no-audit --prefer-offline 2>/dev/null || npm install
+
+if ! command -v pm2 >/dev/null 2>&1; then
+  echo "⚡ Installing PM2 24/7 process manager..."
+  npm install -g pm2
+fi
+
+# 5. Build and launch daemon
+echo "🔨 Building production assets..."
+npm run build
+
+echo "🚀 Starting 24/7 Background Daemon..."
+chmod +x start.sh stop.sh status.sh
+./start.sh
+
+# 6. Setup auto-start on reboot
+pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || pm2 startup >/dev/null 2>&1 || true
+pm2 save >/dev/null 2>&1 || true
+
+SERVER_IP=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+
+echo ""
+echo "======================================================================"
+echo "🎉 INSTALLATION COMPLETED SUCCESSFULLY!"
+echo "======================================================================"
+echo "🌐 Web Dashboard:        http://$SERVER_IP:3000"
+echo "🔑 Login Password:       selfsamkaren12"
+echo "🛡️ 24/7 Daemon:          ACTIVE (Runs even if you exit SSH)"
+echo "📜 View live logs:       pm2 logs telegram-self-tabchi-v6"
+echo "📊 Check status:         pm2 status"
+echo "======================================================================"
+`;
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.send(script);
+  });
+
   // Live Logs
   app.get("/api/logs", (req, res) => {
     const logs = telegramManager.getLogs();
