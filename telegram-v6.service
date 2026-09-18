@@ -1,0 +1,19 @@
+[Unit]
+Description=Telegram Self & Tabchi Hacker Edition v6 (24/7 Automation Service)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/telegram-self-tabchi
+ExecStart=/usr/bin/node dist/server.cjs
+Restart=always
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=telegram-self-v6
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+[Install]
+WantedBy=multi-user.target

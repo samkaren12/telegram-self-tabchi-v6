@@ -1,0 +1,153 @@
+export interface TelegramAccountFeatures {
+  self_access?: {
+    enabled: boolean;
+    expires_at: string | null;
+  };
+  tabchi_access?: {
+    enabled: boolean;
+    expires_at: string | null;
+  };
+  self_time: {
+    active: boolean;
+    format: string; // e.g. "HH:mm" or "HH:mm ⚡"
+    font_style: "bold" | "italic" | "monospace" | "double" | "sans" | "gothic" | "normal";
+    original_last_name: string | null;
+    last_updated?: string;
+  };
+  auto_reply: {
+    active: boolean;
+    messages: string[];
+    delay_seconds: number;
+    last_replied_at?: string;
+  };
+  mandatory_join: {
+    active: boolean;
+    channels: Array<{ name: string; ref: string }>;
+  };
+  broadcast: {
+    active: boolean;
+    message: string;
+    interval_seconds: number;
+    max_recipients: number;
+    recipients: Record<string, { last_seen: string }>;
+    last_message_hash?: string | null;
+    status?: "idle" | "broadcasting" | "stopped";
+    total_sent?: number;
+  };
+  tools: {
+    calculator_active: boolean;
+    market_active: boolean;
+  };
+  font: {
+    active: boolean;
+    style: "bold" | "italic" | "bold_italic" | "monospace" | "double" | "sans" | "gothic" | "normal" | "default";
+    scopes: {
+      self_time: boolean;
+      manual_messages: boolean;
+      auto_reply: boolean;
+      mandatory_join: boolean;
+      tabchi: boolean;
+      remote_ui: boolean;
+    };
+  };
+  tabchi: {
+    active: boolean;
+    message: string;
+    interval_seconds: number;
+    repeat_rounds: number;
+    repeat_infinite: boolean;
+    total_sent: number;
+    total_failed: number;
+    last_run?: string;
+    status: "idle" | "broadcasting" | "stopped" | "error";
+    target_mode: "all" | "selected";
+    targets: string[];
+  };
+  keep_alive: boolean;
+}
+
+export interface TelegramAccount {
+  phone: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  username: string;
+  sessionString: string;
+  connectedAt: string;
+  isOnline: boolean;
+  features: TelegramAccountFeatures;
+  apiId?: number;
+  apiHash?: string;
+}
+
+export interface BotSettings {
+  bot_token: string;
+  owner_id: number;
+  enabled: boolean;
+}
+
+export interface MarketQuote {
+  asset: string;
+  amount: number;
+  unit_usd: number;
+  total_usd: number;
+  unit_toman: number;
+  total_toman: number;
+  unit_irr: number;
+  total_irr: number;
+  updated_at: string;
+}
+
+export interface SendCodeResponse {
+  success: boolean;
+  sessionId?: string;
+  phoneCodeHash?: string;
+  isCodeViaApp?: boolean;
+  timeout?: number;
+  message?: string;
+  errorCode?: string;
+}
+
+export interface SignInResponse {
+  success: boolean;
+  requires2FA?: boolean;
+  hint?: string;
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+    phone: string;
+  };
+  message?: string;
+  errorCode?: string;
+}
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+  level: "info" | "success" | "warn" | "error";
+  accountPhone?: string;
+  module: "auth" | "self_time" | "auto_reply" | "tabchi" | "mandatory_join" | "tools" | "broadcast" | "bot" | "system";
+  message: string;
+  details?: any;
+}
+
+export interface SystemHealth {
+  status: "online" | "degraded" | "offline";
+  uptimeSeconds: number;
+  connectedAccountsCount: number;
+  activeAccounts: string[];
+  nodeVersion: string;
+  memoryUsageMb: number;
+  defaultApiId: number;
+  hasCustomBotToken: boolean;
+  botStatus?: {
+    configured: boolean;
+    enabled: boolean;
+    owner_id: number;
+    token_masked?: string;
+  };
+  serverTime: string;
+}
+
