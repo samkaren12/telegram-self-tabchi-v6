@@ -87,10 +87,17 @@
 
 ## 🚀 نصب سریع و اجرای دائمی با یک دستور (1-Click Permanent Install)
 
-تنها با اجرای **یک خط دستور** در ترمینال سرور مجازی (Ubuntu / Debian / CentOS / macOS)، پروژه نصب شده، پیش‌نیازها تنظیم شده و سرویس به عنوان **دیمن دائمی در پس‌زمینه** آغاز به کار می‌کند:
+تنها با کپی و پیست کردن **یک خط دستور زیر** در ترمینال سرور لینوکس، کلیه پیش‌نیازها نصب شده، سورس کلون شده و سامانه به صورت **دائمی ۲۴/۷ در پس‌زمینه** اجرا می‌شود:
 
 ```bash
-# کلون پروژه و اجرای اسکریپت نصب خودکار
+# روش ۱ (پیشنهادی): نصب مستقیم با یک خط فرمان از گیت‌هاب
+curl -fsSL https://raw.githubusercontent.com/samkaren/telegram-self-tabchi-v6/main/install.sh | bash
+```
+
+یا در صورت تمایل به کلون دستی مخزن:
+
+```bash
+# روش ۲: کلون پروژه و اجرای اسکریپت
 git clone https://github.com/samkaren/telegram-self-tabchi-v6.git
 cd telegram-self-tabchi-v6
 chmod +x install.sh
@@ -273,7 +280,10 @@ sudo ufw reload
 Deploy with a single command on any modern Linux or macOS machine:
 
 ```bash
-# Clone and run the automated installer
+# Method 1 (Recommended): 1-Click Universal Installer from GitHub
+curl -fsSL https://raw.githubusercontent.com/samkaren/telegram-self-tabchi-v6/main/install.sh | bash
+
+# Method 2: Manual Git Clone
 git clone https://github.com/samkaren/telegram-self-tabchi-v6.git
 cd telegram-self-tabchi-v6
 chmod +x install.sh

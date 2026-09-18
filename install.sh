@@ -35,11 +35,6 @@ cat << "EOF"
 EOF
 echo -e "${NC}"
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$PROJECT_DIR"
-
-echo -e "${BLUE}▶ [1/6] Inspecting operating system & environment...${NC}"
-
 # Detect root / sudo
 SUDO=""
 if [ "$EUID" -ne 0 ]; then
@@ -64,13 +59,37 @@ install_pkg() {
   fi
 }
 
-# Check essential utilities
-for tool in curl git lsof; do
+# Check essential utilities immediately
+for tool in curl git lsof tar gzip; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo -e "${YELLOW}⚙ Installing required tool: $tool...${NC}"
     install_pkg "$tool" || true
   fi
 done
+
+# If executed via curl | bash outside the repo, auto-clone or pull project
+if [ ! -f "package.json" ]; then
+  echo -e "${CYAN}📥 Initializing Telegram Self & Tabchi v6 environment...${NC}"
+  REPO_DIR="telegram-self-tabchi-v6"
+  if [ -d "$REPO_DIR" ] && [ -f "$REPO_DIR/package.json" ]; then
+    cd "$REPO_DIR"
+  else
+    echo -e "${BLUE}▶ Fetching repository from GitHub...${NC}"
+    if git clone https://github.com/samkaren/telegram-self-tabchi-v6.git "$REPO_DIR" 2>/dev/null; then
+      cd "$REPO_DIR"
+    else
+      echo -e "${YELLOW}⚡ GitHub clone unavailable, retrieving cloud release bundle...${NC}"
+      mkdir -p "$REPO_DIR"
+      cd "$REPO_DIR"
+      curl -fsSL "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app/api/download-bundle" -o bundle.tar.gz || \
+      curl -fsSL "https://ais-dev-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app/api/download-bundle" -o bundle.tar.gz
+      tar -xzf bundle.tar.gz --overwrite
+      rm -f bundle.tar.gz
+    fi
+  fi
+fi
+
+PROJECT_DIR="$(pwd)"
 
 # Check Node.js
 echo -e "${BLUE}▶ [2/6] Checking Node.js (v18+ recommended)...${NC}"
