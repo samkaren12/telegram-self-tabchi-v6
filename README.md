@@ -91,14 +91,14 @@
 
 ```bash
 # روش ۱ (پیشنهادی): نصب مستقیم با یک خط فرمان از گیت‌هاب
-curl -fsSL https://raw.githubusercontent.com/samkaren/telegram-self-tabchi-v6/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/samkaren12/telegram-self-tabchi-v6/main/install.sh | bash
 ```
 
 یا در صورت تمایل به کلون دستی مخزن:
 
 ```bash
 # روش ۲: کلون پروژه و اجرای اسکریپت
-git clone https://github.com/samkaren/telegram-self-tabchi-v6.git
+git clone https://github.com/samkaren12/telegram-self-tabchi-v6.git
 cd telegram-self-tabchi-v6
 chmod +x install.sh
 ./install.sh
@@ -281,10 +281,10 @@ Deploy with a single command on any modern Linux or macOS machine:
 
 ```bash
 # Method 1 (Recommended): 1-Click Universal Installer from GitHub
-curl -fsSL https://raw.githubusercontent.com/samkaren/telegram-self-tabchi-v6/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/samkaren12/telegram-self-tabchi-v6/main/install.sh | bash
 
 # Method 2: Manual Git Clone
-git clone https://github.com/samkaren/telegram-self-tabchi-v6.git
+git clone https://github.com/samkaren12/telegram-self-tabchi-v6.git
 cd telegram-self-tabchi-v6
 chmod +x install.sh
 ./install.sh

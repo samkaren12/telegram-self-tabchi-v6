@@ -75,7 +75,7 @@ if [ ! -f "package.json" ]; then
     cd "$REPO_DIR"
   else
     echo -e "${BLUE}▶ Fetching repository from GitHub...${NC}"
-    if git clone https://github.com/samkaren/telegram-self-tabchi-v6.git "$REPO_DIR" 2>/dev/null; then
+    if git clone https://github.com/samkaren12/telegram-self-tabchi-v6.git "$REPO_DIR" 2>/dev/null; then
       cd "$REPO_DIR"
     else
       echo -e "${YELLOW}⚡ GitHub clone unavailable, retrieving cloud release bundle...${NC}"
