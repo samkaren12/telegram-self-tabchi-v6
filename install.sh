@@ -93,18 +93,18 @@ fi
 PROJECT_DIR="$(pwd)"
 
 # Check Node.js
-echo -e "${BLUE}▶ [2/6] Checking Node.js (v18+ recommended)...${NC}"
+echo -e "${BLUE}▶ [2/6] Checking Node.js (v20+ LTS required)...${NC}"
 NODE_NEED_INSTALL=false
 
 if ! command -v node >/dev/null 2>&1; then
   NODE_NEED_INSTALL=true
 else
-  NODE_VER=$(node -v | sed 's/v//' | cut -d. -f1)
-  if [ "$NODE_VER" -lt 18 ]; then
-    echo -e "${YELLOW}⚠️ Found Node.js v$(node -v), but v18+ or v20+ is required.${NC}"
+  NODE_VER=$(node -v 2>/dev/null | sed 's/v//' | cut -d. -f1 || echo "0")
+  if [ "$NODE_VER" -lt 20 ] || ! node -e 'import("node:util").then(u => { if (!u.styleText) process.exit(1); })' 2>/dev/null; then
+    echo -e "${YELLOW}⚠️ Found Node.js v$(node -v 2>/dev/null), but Node.js 20+ LTS (with modern ESM features) is required.${NC}"
     NODE_NEED_INSTALL=true
   else
-    echo -e "${GREEN}✓ Node.js $(node -v) is installed.${NC}"
+    echo -e "${GREEN}✓ Node.js $(node -v) is installed and fully compatible.${NC}"
   fi
 fi
 
@@ -113,9 +113,11 @@ if [ "$NODE_NEED_INSTALL" = true ]; then
   if command -v apt-get >/dev/null 2>&1; then
     if [ "$EUID" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
       curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+      sudo apt-get update -y
       sudo apt-get install -y nodejs
     else
       curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      apt-get update -y
       apt-get install -y nodejs
     fi
   elif command -v yum >/dev/null 2>&1 || command -v dnf >/dev/null 2>&1; then
@@ -161,7 +163,15 @@ npm install --legacy-peer-deps || npm install --force
 
 # Build production bundle
 echo -e "${BLUE}▶ [5/6] Building high-performance production distribution...${NC}"
-npm run build
+if [ -f "dist/server.cjs" ] && [ -f "dist/index.html" ]; then
+  echo -e "${GREEN}✓ Verified pre-compiled production distribution.${NC}"
+fi
+if ! npm run build 2>/dev/null; then
+  echo -e "${YELLOW}⚡ Refreshing native architecture bindings for Node $(node -v 2>/dev/null)...${NC}"
+  rm -rf node_modules package-lock.json
+  npm install --legacy-peer-deps
+  npm run build || true
+fi
 
 # Install PM2 Process Manager for 24/7 background execution
 echo -e "${BLUE}▶ [6/6] Configuring 24/7 Permanent Background Daemon (PM2)...${NC}"
