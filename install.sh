@@ -73,6 +73,7 @@ if [ ! -f "package.json" ]; then
   REPO_DIR="telegram-self-tabchi-v6"
   if [ -d "$REPO_DIR" ] && [ -f "$REPO_DIR/package.json" ]; then
     cd "$REPO_DIR"
+    git pull origin main 2>/dev/null || true
   else
     echo -e "${BLUE}▶ Fetching repository from GitHub...${NC}"
     if git clone https://github.com/samkaren12/telegram-self-tabchi-v6.git "$REPO_DIR" 2>/dev/null; then
@@ -155,7 +156,8 @@ fi
 
 # Install dependencies
 echo -e "${BLUE}▶ [4/6] Installing project packages via npm...${NC}"
-npm install --no-audit --prefer-offline 2>/dev/null || npm install
+npm config set legacy-peer-deps true 2>/dev/null || true
+npm install --legacy-peer-deps || npm install --force
 
 # Build production bundle
 echo -e "${BLUE}▶ [5/6] Building high-performance production distribution...${NC}"
