@@ -84,6 +84,9 @@ export interface BotSettings {
   bot_token: string;
   owner_id: number;
   enabled: boolean;
+  bot_username?: string;
+  api_id?: number;
+  api_hash?: string;
 }
 
 export interface MarketQuote {

@@ -337,25 +337,50 @@ async function startServer() {
     }
   });
 
-  // Bot Controller Settings
-  app.get("/api/bot-settings", (req, res) => {
+  // Bot Controller Settings (Supporting both /api/bot-settings and /api/bot/settings)
+  const handleGetBotSettings = (req: any, res: any) => {
     const settings = telegramManager.getBotSettings();
-    return res.json({ success: true, settings });
-  });
+    return res.json({ success: true, settings, bot: settings });
+  };
 
-  app.post("/api/bot-settings", (req, res) => {
+  const handlePostBotSettings = async (req: any, res: any) => {
     try {
-      const { botToken, ownerId, enabled } = req.body;
-      const settings = telegramManager.updateBotSettings(
-        botToken || "",
-        Number(ownerId) || 0,
-        Boolean(enabled)
+      const {
+        botToken,
+        bot_token,
+        ownerId,
+        ownerUserId,
+        owner_id,
+        enabled,
+        apiId,
+        api_id,
+        apiHash,
+        api_hash,
+      } = req.body;
+
+      const tokenToUse = botToken !== undefined ? botToken : bot_token;
+      const ownerToUse = ownerId !== undefined ? ownerId : (ownerUserId !== undefined ? ownerUserId : owner_id);
+      const apiIdToUse = apiId !== undefined ? apiId : api_id;
+      const apiHashToUse = apiHash !== undefined ? apiHash : api_hash;
+
+      const settings = await telegramManager.updateBotSettings(
+        tokenToUse || "",
+        Number(ownerToUse) || 0,
+        Boolean(enabled),
+        apiIdToUse ? Number(apiIdToUse) : undefined,
+        apiHashToUse ? String(apiHashToUse).trim() : undefined
       );
-      return res.json({ success: true, settings });
+
+      return res.json({ success: true, settings, bot: settings, message: "تنظیمات با موفقیت ذخیره شد." });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }
-  });
+  };
+
+  app.get("/api/bot-settings", handleGetBotSettings);
+  app.get("/api/bot/settings", handleGetBotSettings);
+  app.post("/api/bot-settings", handlePostBotSettings);
+  app.post("/api/bot/settings", handlePostBotSettings);
 
   // Dialogs count
   app.get("/api/accounts/:phone/dialogs", async (req, res) => {

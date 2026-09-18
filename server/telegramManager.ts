@@ -352,11 +352,18 @@ export class TelegramManager {
     bot_token: "",
     owner_id: 0,
     enabled: false,
+    api_id: DEFAULT_API_ID,
+    api_hash: DEFAULT_API_HASH,
   };
+  private botPollingActive = false;
+  private botLastUpdateId = 0;
 
   constructor() {
     this.loadState();
     setInterval(() => this.cleanupStaleSessions(), 5 * 60 * 1000);
+    if (this.botSettings.enabled && this.botSettings.bot_token) {
+      setTimeout(() => this.startBotController(), 2000);
+    }
   }
 
   public addLog(
@@ -1679,22 +1686,193 @@ export class TelegramManager {
   }
 
   // -------------------------------------------------------------
-  // BOT CONTROLLER SETTINGS
+  // BOT CONTROLLER SETTINGS & RUNNER
   // -------------------------------------------------------------
 
   public getBotSettings(): BotSettings {
     return this.botSettings;
   }
 
-  public updateBotSettings(botToken: string, ownerId: number, enabled: boolean) {
+  public async updateBotSettings(
+    botToken: string,
+    ownerId: number,
+    enabled: boolean,
+    apiId?: number,
+    apiHash?: string
+  ): Promise<BotSettings> {
+    const cleanToken = (botToken || "").trim();
+    const cleanOwnerId = Number(ownerId) || 0;
+    let botUsername = this.botSettings.bot_username || "";
+
+    if (enabled && cleanToken) {
+      // Live test with Telegram Bot API
+      try {
+        const testRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
+        const testData: any = await testRes.json();
+        if (!testData.ok || !testData.result) {
+          throw new Error(testData.description || "توکن ربات تلگرام نامعتبر است.");
+        }
+        botUsername = testData.result.username || "";
+        this.addLog("success", "bot", `ربات کنترل تلگرام با موفقیت تایید شد: @${botUsername}`);
+      } catch (err: any) {
+        this.addLog("error", "bot", `خطا در اتصال به توکن ربات: ${err.message}`);
+        throw new Error(`خطای تایید توکن تلگرام: ${err.message}`);
+      }
+    }
+
     this.botSettings = {
-      bot_token: botToken.trim(),
-      owner_id: Number(ownerId) || 0,
+      bot_token: cleanToken,
+      owner_id: cleanOwnerId,
       enabled: Boolean(enabled),
+      bot_username: botUsername,
+      api_id: apiId && apiId > 0 ? Number(apiId) : (this.botSettings.api_id || DEFAULT_API_ID),
+      api_hash: apiHash && apiHash.trim() ? apiHash.trim() : (this.botSettings.api_hash || DEFAULT_API_HASH),
     };
+
     this.saveState();
-    this.addLog("info", "bot", `تنظیمات ربات کنترل تلگرام ذخیره شد (Owner ID: ${ownerId}).`);
+
+    if (this.botSettings.enabled && this.botSettings.bot_token) {
+      this.startBotController();
+    } else {
+      this.stopBotController();
+    }
+
+    this.addLog("info", "bot", `تنظیمات ربات ذخیره شد (مالک: ${cleanOwnerId}, ربات: @${botUsername || "ندارد"}).`);
     return this.botSettings;
+  }
+
+  public startBotController() {
+    if (this.botPollingActive) return;
+    if (!this.botSettings.enabled || !this.botSettings.bot_token) return;
+
+    this.botPollingActive = true;
+    this.addLog("info", "bot", `سرویس کنترل از راه دور ربات فعال شد.`);
+    this.pollBotUpdates();
+  }
+
+  public stopBotController() {
+    this.botPollingActive = false;
+  }
+
+  private async pollBotUpdates() {
+    if (!this.botPollingActive || !this.botSettings.bot_token) return;
+
+    try {
+      const url = `https://api.telegram.org/bot${this.botSettings.bot_token}/getUpdates?offset=${this.botLastUpdateId + 1}&timeout=10`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.ok && Array.isArray(data.result)) {
+          for (const update of data.result) {
+            this.botLastUpdateId = Math.max(this.botLastUpdateId, update.update_id);
+            if (update.message && update.message.text) {
+              await this.handleBotMessage(update.message);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (this.botPollingActive) {
+      setTimeout(() => this.pollBotUpdates(), 2000);
+    }
+  }
+
+  private async sendBotMessage(chatId: number | string, text: string) {
+    if (!this.botSettings.bot_token) return;
+    try {
+      await fetch(`https://api.telegram.org/bot${this.botSettings.bot_token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          parse_mode: "HTML",
+        }),
+      });
+    } catch (_) {}
+  }
+
+  private async handleBotMessage(msg: any) {
+    const fromId = msg.from?.id;
+    const chatId = msg.chat?.id;
+    const text = (msg.text || "").trim();
+
+    // Security check: If owner_id is set, only respond to owner
+    if (this.botSettings.owner_id > 0 && fromId !== this.botSettings.owner_id) {
+      await this.sendBotMessage(chatId, `⛔ دسترسی غیرمجاز!\nآیدی کاربری شما (${fromId}) با آیدی مالک ثبت‌شده مطابقت ندارد.`);
+      return;
+    }
+
+    const cmd = text.toLowerCase();
+
+    if (cmd === "/start" || cmd === "/help") {
+      const accountsCount = this.accounts.size;
+      const onlineWorkers = Array.from(this.workers.values()).filter((w) => w.client?.connected).length;
+      await this.sendBotMessage(
+        chatId,
+        `⚡ <b>پنل کنترل از راه دور ربات تلگرام v6 Pro</b>\n\n` +
+        `👤 وضعیت مالک: تایید شده ✅\n` +
+        `📱 اکانت‌های متصل: <b>${accountsCount}</b> (${onlineWorkers} فعال)\n\n` +
+        `<b>📌 دستورات قابل اجرا:</b>\n` +
+        `▫️ <code>/status</code> - وضعیت آنلاین سرور و اکانت‌ها\n` +
+        `▫️ <code>/accounts</code> - لیست شماره‌های متصل\n` +
+        `▫️ <code>/tabchi on</code> - روشن کردن ارسال تبچی همه اکانت‌ها\n` +
+        `▫️ <code>/tabchi off</code> - خاموش کردن ارسال تبچی\n` +
+        `▫️ <code>/self on</code> - فعال‌سازی قابلیت‌های سلف\n` +
+        `▫️ <code>/self off</code> - غیرفعال‌سازی سلف\n` +
+        `▫️ <code>/logs</code> - دریافت ۵ گزارش لاگ اخیر\n` +
+        `▫️ <code>/ping</code> - تست سرعت پاسخگویی سرور`
+      );
+    } else if (cmd === "/status") {
+      const accounts = Array.from(this.accounts.values());
+      const onlineCount = Array.from(this.workers.values()).filter((w) => w.client?.connected).length;
+      const memMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+      const uptimeH = (process.uptime() / 3600).toFixed(1);
+
+      await this.sendBotMessage(
+        chatId,
+        `📊 <b>وضعیت لحظه‌ای سرور و اسکریپت:</b>\n\n` +
+        `🟢 سرور: آنلاین (آپتایم: ${uptimeH} ساعت)\n` +
+        `💾 مصرف رم: ${memMb} مگابایت\n` +
+        `📱 تعداد کل اکانت‌ها: ${accounts.length}\n` +
+        `⚡ کارگرهای متصل: ${onlineCount}\n\n` +
+        accounts.map((a) => `• ${a.firstName || a.phone} (<code>${a.phone}</code>): ${a.features.broadcast?.active ? "تبچی روشن 🚀" : "عادی 💤"}`).join("\n")
+      );
+    } else if (cmd === "/accounts") {
+      const accounts = Array.from(this.accounts.values());
+      if (accounts.length === 0) {
+        await this.sendBotMessage(chatId, `هیچ اکانتی متصل نیست. از پنل وب اضافه کنید.`);
+      } else {
+        const textList = accounts.map((a, i) => `${i + 1}. <b>${a.firstName || "کاربر"}</b> (<code>${a.phone}</code>)\n   ساعت بیو: ${a.features?.self_time?.active ? "روشن" : "خاموش"} | تبچی: ${a.features?.broadcast?.active ? "روشن" : "خاموش"}`).join("\n\n");
+        await this.sendBotMessage(chatId, `📱 <b>اکانت‌های تلگرام:</b>\n\n${textList}`);
+      }
+    } else if (cmd === "/tabchi on") {
+      for (const phone of this.accounts.keys()) {
+        this.startBroadcast(phone).catch(() => {});
+      }
+      await this.sendBotMessage(chatId, `🚀 تبچی و ارسال خودکار برای تمام اکانت‌ها <b>روشن</b> شد.`);
+    } else if (cmd === "/tabchi off") {
+      for (const phone of this.accounts.keys()) {
+        this.stopBroadcast(phone);
+      }
+      await this.sendBotMessage(chatId, `⏸️ تبچی برای تمام اکانت‌ها <b>متوقف</b> شد.`);
+    } else if (cmd === "/self on") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(phone, true, acc.features?.self_time?.format || "HH:mm", acc.features?.self_time?.font_style || "bold").catch(() => {});
+      }
+      await this.sendBotMessage(chatId, ` ساعت و قابلیت‌های سلف برای تمام اکانت‌ها <b>فعال</b> شد.`);
+    } else if (cmd === "/self off") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(phone, false, acc.features?.self_time?.format || "HH:mm", acc.features?.self_time?.font_style || "bold").catch(() => {});
+      }
+      await this.sendBotMessage(chatId, `⏸️ ساعت و قابلیت‌های سلف <b>غیرفعال</b> شد.`);
+    } else if (cmd === "/logs") {
+      const lastLogs = this.logs.slice(-5).map((l) => `[${l.level.toUpperCase()}] ${l.message}`).join("\n");
+      await this.sendBotMessage(chatId, `📋 <b>آخرین گزارشات:</b>\n\n<code>${lastLogs || "هیچ لاگی ثبت نشده است."}</code>`);
+    } else if (cmd === "/ping") {
+      await this.sendBotMessage(chatId, `🏓 پونگ! ربات و سرور با بالاترین سرعت متصل هستند.`);
+    }
   }
 
   public getAccounts(): TelegramAccount[] {

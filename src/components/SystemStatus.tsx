@@ -29,12 +29,16 @@ interface SystemStatusProps {
 export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
   const t = translations[lang];
 
-  // BotFather Controller State
+  // BotFather Controller & MTProto API State
   const [botEnabled, setBotEnabled] = useState(false);
   const [botToken, setBotToken] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [botUsername, setBotUsername] = useState("");
+  const [apiId, setApiId] = useState("");
+  const [apiHash, setApiHash] = useState("");
   const [savingBot, setSavingBot] = useState(false);
   const [botFeedback, setBotFeedback] = useState<string | null>(null);
+  const [isFeedbackError, setIsFeedbackError] = useState(false);
 
   useEffect(() => {
     fetchBotSettings();
@@ -42,12 +46,16 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
 
   const fetchBotSettings = async () => {
     try {
-      const res = await fetch("/api/bot/settings");
+      const res = await fetch("/api/bot-settings");
       const data = await res.json();
-      if (data.bot) {
-        setBotEnabled(Boolean(data.bot.enabled));
-        setBotToken(data.bot.bot_token || "");
-        setOwnerId(data.bot.owner_user_id || "");
+      const b = data.settings || data.bot;
+      if (b) {
+        setBotEnabled(Boolean(b.enabled));
+        setBotToken(b.bot_token || "");
+        setOwnerId(b.owner_id ? String(b.owner_id) : "");
+        setBotUsername(b.bot_username || "");
+        if (b.api_id) setApiId(String(b.api_id));
+        if (b.api_hash) setApiHash(String(b.api_hash));
       }
     } catch (_) {}
   };
@@ -55,27 +63,35 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
   const handleSaveBotSettings = async () => {
     setSavingBot(true);
     setBotFeedback(null);
+    setIsFeedbackError(false);
     try {
-      const res = await fetch("/api/bot/settings", {
+      const res = await fetch("/api/bot-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enabled: botEnabled,
           botToken,
-          ownerUserId: ownerId,
+          ownerId,
+          apiId: apiId ? Number(apiId) : undefined,
+          apiHash: apiHash ? apiHash.trim() : undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Failed to save bot settings.");
       }
+      const b = data.settings || data.bot;
+      if (b?.bot_username) {
+        setBotUsername(b.bot_username);
+      }
       setBotFeedback(
         lang === "fa"
-          ? "تنظیمات ربات کنترل از راه دور ذخیره شد."
-          : "Remote controller bot settings saved successfully!"
+          ? `تنظیمات با موفقیت ذخیره شد ${b?.bot_username ? `(متصل به @${b.bot_username})` : ""}`
+          : `Settings saved successfully ${b?.bot_username ? `(@${b.bot_username})` : ""}`
       );
-      setTimeout(() => setBotFeedback(null), 3000);
+      setTimeout(() => setBotFeedback(null), 5000);
     } catch (err: any) {
+      setIsFeedbackError(true);
       setBotFeedback(err.message || "Error saving bot config");
     } finally {
       setSavingBot(false);
@@ -174,9 +190,21 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
                 <h4 className="font-bold text-slate-100 text-sm sm:text-base">
                   {t.system.botTitle}
                 </h4>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
-                  @BotFather
-                </span>
+                {botUsername ? (
+                  <a
+                    href={`https://t.me/${botUsername}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1 hover:underline"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    @{botUsername}
+                  </a>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
+                    @BotFather
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 max-w-xl">
                 {t.system.botDesc}
@@ -223,11 +251,39 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
             />
           </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              {lang === "fa" ? "Telegram API ID (اختیاری)" : "Telegram API ID (Optional)"}
+            </label>
+            <input
+              type="text"
+              value={apiId}
+              onChange={(e) => setApiId(e.target.value)}
+              placeholder="پیش‌فرض: 2496"
+              dir="ltr"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              {lang === "fa" ? "Telegram API HASH (اختیاری)" : "Telegram API HASH (Optional)"}
+            </label>
+            <input
+              type="text"
+              value={apiHash}
+              onChange={(e) => setApiHash(e.target.value)}
+              placeholder="پیش‌فرض: my.telegram.org"
+              dir="ltr"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
         </div>
 
         {botFeedback && (
-          <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/40 text-cyan-300 text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+          <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${isFeedbackError ? "bg-rose-950/80 border-rose-500/50 text-rose-300" : "bg-emerald-950/80 border-emerald-500/50 text-emerald-300"}`}>
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
             <span>{botFeedback}</span>
           </div>
         )}
@@ -239,7 +295,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 disabled:opacity-50 transition-all active:scale-95"
           >
             <Save className="w-4 h-4" />
-            <span>{savingBot ? (lang === "fa" ? "درحال ذخیره..." : "Saving...") : t.self.saveChanges}</span>
+            <span>{savingBot ? (lang === "fa" ? "درحال اتصال و ذخیره..." : "Connecting & Saving...") : t.self.saveChanges}</span>
           </button>
         </div>
       </div>
