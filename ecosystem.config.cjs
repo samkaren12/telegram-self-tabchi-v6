@@ -10,6 +10,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3000,
+        TZ: "Asia/Tehran",
       },
       error_file: "./data/logs/pm2-error.log",
       out_file: "./data/logs/pm2-out.log",

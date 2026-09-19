@@ -30,6 +30,7 @@ import {
   MarketQuote,
 } from "../types";
 import { transformFont } from "../utils/fontStyler";
+import { formatTehranTime } from "../utils/tehranTime";
 
 interface SelfModuleProps {
   account: TelegramAccount | null;
@@ -156,17 +157,10 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
     }
   }, [account]);
 
-  // Live preview clock updater
+  // Live preview clock updater (Iran Standard Time - Asia/Tehran UTC+03:30)
   useEffect(() => {
     const updatePreview = () => {
-      const now = new Date();
-      const HH = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const ss = String(now.getSeconds()).padStart(2, "0");
-      const raw = timeFormat
-        .replace("HH", HH)
-        .replace("mm", mm)
-        .replace("ss", ss);
+      const raw = formatTehranTime(timeFormat);
       setPreviewTime(transformFont(raw, timeStyle));
     };
     updatePreview();
@@ -572,8 +566,11 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
                 {account.firstName ? account.firstName[0].toUpperCase() : "U"}
               </div>
               <div>
-                <div className="text-[11px] text-slate-500 font-medium uppercase tracking-wider mb-0.5">
-                  {t.self.previewLabel}
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mb-0.5">
+                  <span>{t.self.previewLabel}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/70 border border-cyan-800/60 text-cyan-300 font-mono">
+                    {lang === "fa" ? "ساعت رسمی ایران (IRST / +03:30)" : "Iran Time (IRST / +03:30)"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-base font-bold text-slate-100">
                   <span>{account.firstName || "Telegram"}</span>

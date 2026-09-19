@@ -1,3 +1,5 @@
+process.env.TZ = "Asia/Tehran";
+
 import express from "express";
 import path from "path";
 import os from "os";

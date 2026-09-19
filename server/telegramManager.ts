@@ -1,3 +1,5 @@
+process.env.TZ = "Asia/Tehran";
+
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -14,6 +16,10 @@ import {
   MarketQuote,
 } from "../src/types.js";
 import { transformFont } from "../src/utils/fontStyler.js";
+import {
+  formatTehranTime,
+  getTehranTimeParts,
+} from "../src/utils/tehranTime.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
@@ -333,10 +339,12 @@ export async function getMarketQuote(
     total_toman: totalToman,
     unit_irr: Math.round(unitIrr),
     total_irr: Math.round(totalIrr),
-    updated_at: new Date().toLocaleTimeString("fa-IR"),
+    updated_at: new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" }),
     profitLossText,
   };
 }
+
+export { formatTehranTime, getTehranTimeParts };
 
 // =============================================================
 // MAIN TELEGRAM MANAGER CLASS
@@ -1120,10 +1128,15 @@ export class TelegramManager {
     if (cmd === "/self") {
       if (sub === "time" && parts[2]) {
         const on = parts[2].toLowerCase() === "on";
-        account.features.self_time.active = on;
-        this.saveState();
+        await this.updateSelfTimeConfig(
+          phone,
+          on,
+          account.features.self_time.format || "HH:mm",
+          account.features.self_time.font_style || "bold"
+        );
+        const { hours, minutes } = getTehranTimeParts();
         await worker.client.sendMessage("me", {
-          message: `⏰ سلف‌تایم: ${on ? "روشن شد ✅" : "خاموش شد ⛔"}`,
+          message: `⏰ ساعت سلف پروفایل (تایم رسمی ایران): ${on ? `روشن شد ✅ (ساعت فعلی تهران: ${hours}:${minutes})` : "خاموش شد ⛔"}`,
         });
         return;
       }
@@ -1201,16 +1214,8 @@ export class TelegramManager {
       }
 
       try {
-        const now = new Date();
-        const hours = String(now.getHours()).padStart(2, "0");
-        const minutes = String(now.getMinutes()).padStart(2, "0");
-        const seconds = String(now.getSeconds()).padStart(2, "0");
-
         const fmt = account.features.self_time.format || "HH:mm";
-        const timeStr = fmt
-          .replace("HH", hours)
-          .replace("mm", minutes)
-          .replace("ss", seconds);
+        const timeStr = formatTehranTime(fmt);
 
         if (timeStr === lastClockStr) {
           return;
