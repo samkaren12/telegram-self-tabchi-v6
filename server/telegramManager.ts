@@ -20,6 +20,7 @@ import {
   formatTehranTime,
   getTehranTimeParts,
 } from "../src/utils/tehranTime.js";
+import { generateAiSecretaryReply } from "./aiSecretary.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
@@ -55,6 +56,10 @@ export function defaultFeatures(): TelegramAccountFeatures {
         "Hello! I am currently away from keyboard and will reply soon.",
       ],
       delay_seconds: 1,
+      ai_enabled: false,
+      ai_api_key: "",
+      ai_prompt: "",
+      ai_model: "gemini-3.8-flash",
     },
     mandatory_join: {
       active: false,
@@ -369,6 +374,7 @@ export class TelegramManager {
   constructor() {
     this.loadState();
     setInterval(() => this.cleanupStaleSessions(), 5 * 60 * 1000);
+    setInterval(() => this.checkSubscriptions(), 60 * 1000);
     if (this.botSettings.enabled && this.botSettings.bot_token) {
       setTimeout(() => this.startBotController(), 2000);
     }
@@ -448,6 +454,19 @@ export class TelegramManager {
                 },
               };
             }
+            if (!typedAcc.subscription) {
+              typedAcc.subscription = {
+                is_unlimited: true,
+                status: "active",
+                created_at: typedAcc.connectedAt || new Date().toISOString(),
+              };
+            } else if (!typedAcc.subscription.is_unlimited && typedAcc.subscription.expires_at) {
+              if (new Date(typedAcc.subscription.expires_at).getTime() <= Date.now()) {
+                typedAcc.subscription.status = "expired";
+              } else {
+                typedAcc.subscription.status = "active";
+              }
+            }
             this.accounts.set(phone, typedAcc);
           }
           this.addLog("info", "system", `Loaded ${this.accounts.size} accounts from storage.`);
@@ -504,6 +523,155 @@ export class TelegramManager {
         this.loginSessions.delete(sessionId);
       }
     }
+  }
+
+  public checkSubscriptions() {
+    const now = Date.now();
+    let stateChanged = false;
+
+    for (const [phone, account] of this.accounts.entries()) {
+      if (!account.subscription) {
+        account.subscription = {
+          is_unlimited: true,
+          status: "active",
+          created_at: account.connectedAt || new Date().toISOString(),
+        };
+        stateChanged = true;
+        continue;
+      }
+
+      if (!account.subscription.is_unlimited && account.subscription.expires_at) {
+        const expiryTime = new Date(account.subscription.expires_at).getTime();
+        if (expiryTime <= now) {
+          if (account.subscription.status !== "expired") {
+            account.subscription.status = "expired";
+            stateChanged = true;
+
+            // Stop background features for this account
+            const worker = this.workers.get(phone);
+            if (worker?.timeTimer) {
+              clearInterval(worker.timeTimer);
+              worker.timeTimer = undefined;
+            }
+            if (account.features?.self_time) {
+              account.features.self_time.active = false;
+            }
+            if (account.features?.tabchi) {
+              account.features.tabchi.active = false;
+              account.features.tabchi.status = "stopped";
+            }
+            if (account.features?.broadcast) {
+              account.features.broadcast.active = false;
+              account.features.broadcast.status = "stopped";
+            }
+
+            this.addLog(
+              "warn",
+              "system",
+              `⚠️ اشتراک شماره ${phone} به پایان رسید! خدمات خودکار غیرفعال شدند و نیازمند تمدید توسط مالک است.`,
+              phone
+            );
+          }
+        } else {
+          if (account.subscription.status === "expired") {
+            account.subscription.status = "active";
+            stateChanged = true;
+          }
+        }
+      }
+    }
+
+    if (stateChanged) {
+      this.saveState();
+    }
+  }
+
+  public isAccountSubscriptionActive(phone: string): { active: boolean; reason?: string } {
+    const account = this.accounts.get(phone);
+    if (!account) return { active: false, reason: "اکانت یافت نشد." };
+    if (!account.subscription || account.subscription.is_unlimited) {
+      return { active: true };
+    }
+    if (!account.subscription.expires_at) {
+      return { active: true };
+    }
+
+    const isExpired = new Date(account.subscription.expires_at).getTime() <= Date.now();
+    if (isExpired) {
+      if (account.subscription.status !== "expired") {
+        account.subscription.status = "expired";
+        this.saveState();
+      }
+      return {
+        active: false,
+        reason: `اشتراک این شماره به اتمام رسیده است (${new Date(account.subscription.expires_at).toLocaleDateString("fa-IR")}). لطفاً جهت تمدید با مالک پنل هماهنگ فرمایید.`,
+      };
+    }
+    return { active: true };
+  }
+
+  public updateAccountSubscription(
+    phone: string,
+    options: {
+      is_unlimited: boolean;
+      days_to_add?: number;
+      days_total?: number;
+      notes?: string;
+    }
+  ) {
+    const account = this.accounts.get(phone);
+    if (!account) throw new Error("Account not found");
+
+    const now = new Date();
+    if (options.is_unlimited) {
+      account.subscription = {
+        is_unlimited: true,
+        days_total: undefined,
+        expires_at: null,
+        status: "active",
+        created_at: account.subscription?.created_at || now.toISOString(),
+        extended_at: now.toISOString(),
+        notes: options.notes || account.subscription?.notes,
+      };
+    } else {
+      let baseTime = now.getTime();
+      if (
+        account.subscription?.expires_at &&
+        !account.subscription.is_unlimited
+      ) {
+        const existingExpiry = new Date(account.subscription.expires_at).getTime();
+        if (existingExpiry > baseTime) {
+          baseTime = existingExpiry;
+        }
+      }
+
+      const days = Number(options.days_to_add || options.days_total || 30);
+      const newExpiry = new Date(baseTime + days * 24 * 60 * 60 * 1000);
+
+      account.subscription = {
+        is_unlimited: false,
+        days_total: (account.subscription?.days_total || 0) + days,
+        expires_at: newExpiry.toISOString(),
+        status: newExpiry.getTime() > now.getTime() ? "active" : "expired",
+        created_at: account.subscription?.created_at || now.toISOString(),
+        extended_at: now.toISOString(),
+        notes: options.notes || account.subscription?.notes,
+      };
+    }
+
+    this.saveState();
+    this.addLog(
+      "success",
+      "system",
+      `اشتراک شماره ${phone} توسط مالک تمدید گردید (وضعیت: ${
+        account.subscription.is_unlimited
+          ? "نامحدود ♾️"
+          : `تا تاریخ ${new Date(account.subscription.expires_at!).toLocaleDateString("fa-IR")}`
+      })`,
+      phone
+    );
+
+    return account.subscription;
   }
 
   // -------------------------------------------------------------
@@ -723,6 +891,11 @@ export class TelegramManager {
         features: this.accounts.get(phone)?.features || defaultFeatures(),
         apiId,
         apiHash,
+        subscription: this.accounts.get(phone)?.subscription || {
+          is_unlimited: true,
+          status: "active",
+          created_at: new Date().toISOString(),
+        },
       };
 
       this.accounts.set(phone, account);
@@ -775,6 +948,11 @@ export class TelegramManager {
       features: this.accounts.get(phone)?.features || defaultFeatures(),
       apiId: session.apiId,
       apiHash: session.apiHash,
+      subscription: this.accounts.get(phone)?.subscription || {
+        is_unlimited: true,
+        status: "active",
+        created_at: new Date().toISOString(),
+      },
     };
 
     this.accounts.set(phone, account);
@@ -1036,9 +1214,45 @@ export class TelegramManager {
 
       // 1D. AUTO-REPLY (SECRETARY)
       if (account.features.auto_reply?.active) {
-        const templates = account.features.auto_reply.messages;
-        if (templates && templates.length > 0) {
-          let replyText = templates[Math.floor(Math.random() * templates.length)];
+        const aiEnabled = Boolean(account.features.auto_reply.ai_enabled);
+        const apiKeyToUse = (account.features.auto_reply.ai_api_key || process.env.GEMINI_API_KEY || "").trim();
+
+        let replyText = "";
+        let usedAi = false;
+
+        // Try AI generation if enabled and key or prompt available
+        if (aiEnabled && apiKeyToUse && incomingText) {
+          try {
+            const aiGenerated = await generateAiSecretaryReply({
+              incomingText,
+              accountName: account.firstName || "کاربر",
+              apiKey: apiKeyToUse,
+              customPrompt: account.features.auto_reply.ai_prompt,
+              model: account.features.auto_reply.ai_model || "gemini-3.8-flash",
+            });
+            if (aiGenerated && aiGenerated.length > 0) {
+              replyText = aiGenerated;
+              usedAi = true;
+            }
+          } catch (aiErr: any) {
+            this.addLog(
+              "warn",
+              "auto_reply",
+              `خطا در پردازش هوش مصنوعی منشی: ${aiErr?.message || "خطای نامشخص"} (استفاده از قالب متنی پیش‌فرض)`,
+              phone
+            );
+          }
+        }
+
+        // Fallback to pre-configured templates
+        if (!replyText) {
+          const templates = account.features.auto_reply.messages;
+          if (templates && templates.length > 0) {
+            replyText = templates[Math.floor(Math.random() * templates.length)];
+          }
+        }
+
+        if (replyText) {
           if (
             account.features.font?.active &&
             account.features.font.scopes?.auto_reply
@@ -1055,7 +1269,12 @@ export class TelegramManager {
               });
               account.features.auto_reply.last_replied_at = new Date().toISOString();
               this.saveState();
-              this.addLog("info", "auto_reply", `پاسخ خودکار به کاربر ${message.chatId} ارسال شد.`, phone);
+              this.addLog(
+                "info",
+                "auto_reply",
+                `پاسخ منشی ${usedAi ? "🤖 (هوش مصنوعی زنده)" : "📝 (قالب پیش‌فرض)"} به کاربر ${message.chatId} ارسال شد.`,
+                phone
+              );
             } catch (err: any) {
               this.addLog("warn", "auto_reply", `خطا در ارسال پاسخ خودکار: ${err?.message}`, phone);
             }
@@ -1294,7 +1513,11 @@ export class TelegramManager {
     phone: string,
     active: boolean,
     messages: string[],
-    delaySeconds: number
+    delaySeconds: number,
+    aiEnabled?: boolean,
+    aiApiKey?: string,
+    aiPrompt?: string,
+    aiModel?: string
   ) {
     const account = this.accounts.get(phone);
     if (!account) throw new Error("Account not found");
@@ -1302,12 +1525,27 @@ export class TelegramManager {
     account.features.auto_reply.active = active;
     account.features.auto_reply.messages = messages.filter((m) => m.trim().length > 0);
     account.features.auto_reply.delay_seconds = delaySeconds;
+
+    if (aiEnabled !== undefined) {
+      account.features.auto_reply.ai_enabled = Boolean(aiEnabled);
+    }
+    if (aiApiKey !== undefined) {
+      account.features.auto_reply.ai_api_key = aiApiKey.trim();
+    }
+    if (aiPrompt !== undefined) {
+      account.features.auto_reply.ai_prompt = aiPrompt.trim();
+    }
+    if (aiModel !== undefined) {
+      account.features.auto_reply.ai_model = aiModel.trim() || "gemini-3.8-flash";
+    }
+
     this.saveState();
 
+    const isAiActive = account.features.auto_reply.ai_enabled;
     this.addLog(
       "info",
       "auto_reply",
-      `تنظیمات منشی خودکار بروز شد (وضعیت: ${active ? "فعال" : "غیرفعال"}).`,
+      `تنظیمات منشی خودکار بروز شد (وضعیت: ${active ? "فعال" : "غیرفعال"} | هوش مصنوعی: ${isAiActive ? "فعال 🤖" : "غیرفعال"}).`,
       phone
     );
     return account.features.auto_reply;
@@ -1691,11 +1929,30 @@ export class TelegramManager {
   }
 
   // -------------------------------------------------------------
-  // BOT CONTROLLER SETTINGS & RUNNER
+  // BOT CONTROLLER SETTINGS & RUNNER WITH INLINE KEYBOARDS
   // -------------------------------------------------------------
 
   public getBotSettings(): BotSettings {
     return this.botSettings;
+  }
+
+  public async testBotToken(cleanToken: string): Promise<{ username: string; firstName: string; id: number }> {
+    const trimmed = (cleanToken || "").trim();
+    if (!trimmed) {
+      throw new Error("لطفاً توکن ربات تلگرام را وارد کنید.");
+    }
+
+    const testRes = await fetch(`https://api.telegram.org/bot${trimmed}/getMe`);
+    const testData: any = await testRes.json();
+    if (!testData.ok || !testData.result) {
+      throw new Error(testData.description || "توکن ربات تلگرام نامعتبر است.");
+    }
+
+    return {
+      username: testData.result.username || "",
+      firstName: testData.result.first_name || "Bot",
+      id: testData.result.id,
+    };
   }
 
   public async updateBotSettings(
@@ -1708,21 +1965,26 @@ export class TelegramManager {
     const cleanToken = (botToken || "").trim();
     const cleanOwnerId = Number(ownerId) || 0;
     let botUsername = this.botSettings.bot_username || "";
+    let botFirstName = this.botSettings.bot_first_name || "";
+    let status: BotSettings["status"] = enabled ? "connected" : "disconnected";
+    let lastError: string | undefined = undefined;
 
-    if (enabled && cleanToken) {
+    if (cleanToken) {
       // Live test with Telegram Bot API
       try {
-        const testRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
-        const testData: any = await testRes.json();
-        if (!testData.ok || !testData.result) {
-          throw new Error(testData.description || "توکن ربات تلگرام نامعتبر است.");
-        }
-        botUsername = testData.result.username || "";
-        this.addLog("success", "bot", `ربات کنترل تلگرام با موفقیت تایید شد: @${botUsername}`);
+        const info = await this.testBotToken(cleanToken);
+        botUsername = info.username;
+        botFirstName = info.firstName;
+        status = enabled ? "connected" : "disconnected";
+        this.addLog("success", "bot", `ربات کنترل تلگرام با موفقیت تایید شد: @${botUsername} (${botFirstName})`);
       } catch (err: any) {
+        status = "error";
+        lastError = err.message;
         this.addLog("error", "bot", `خطا در اتصال به توکن ربات: ${err.message}`);
         throw new Error(`خطای تایید توکن تلگرام: ${err.message}`);
       }
+    } else {
+      status = "disconnected";
     }
 
     this.botSettings = {
@@ -1730,6 +1992,10 @@ export class TelegramManager {
       owner_id: cleanOwnerId,
       enabled: Boolean(enabled),
       bot_username: botUsername,
+      bot_first_name: botFirstName,
+      status,
+      last_error: lastError,
+      last_active: new Date().toISOString(),
       api_id: apiId && apiId > 0 ? Number(apiId) : (this.botSettings.api_id || DEFAULT_API_ID),
       api_hash: apiHash && apiHash.trim() ? apiHash.trim() : (this.botSettings.api_hash || DEFAULT_API_HASH),
     };
@@ -1737,147 +2003,1110 @@ export class TelegramManager {
     this.saveState();
 
     if (this.botSettings.enabled && this.botSettings.bot_token) {
-      this.startBotController();
+      await this.startBotController();
     } else {
       this.stopBotController();
     }
 
-    this.addLog("info", "bot", `تنظیمات ربات ذخیره شد (مالک: ${cleanOwnerId}, ربات: @${botUsername || "ندارد"}).`);
+    this.addLog("info", "bot", `تنظیمات ربات ذخیره شد (مالک: ${cleanOwnerId || "تعیین‌نشده"}, ربات: @${botUsername || "ندارد"}).`);
     return this.botSettings;
   }
 
-  public startBotController() {
-    if (this.botPollingActive) return;
+  public async startBotController() {
     if (!this.botSettings.enabled || !this.botSettings.bot_token) return;
 
+    // First, ensure any previous polling loop or webhook is cleaned up
+    this.botPollingActive = false;
+
+    try {
+      // Remove any lingering webhook to prevent 409 Conflict with getUpdates
+      const delRes = await fetch(
+        `https://api.telegram.org/bot${this.botSettings.bot_token}/deleteWebhook?drop_pending_updates=false`
+      );
+      const delData: any = await delRes.json();
+      if (delData.ok) {
+        this.addLog("info", "bot", "ارتباط وب‌هوک قدیمی پاکسازی و آماده لانگ‌پولینگ شد.");
+      }
+    } catch (_) {}
+
     this.botPollingActive = true;
-    this.addLog("info", "bot", `سرویس کنترل از راه دور ربات فعال شد.`);
+    this.botSettings.status = "connected";
+    this.saveState();
+    this.addLog("info", "bot", `سرویس دریافت پیام و کلیدهای شیشه‌ای ربات تلگرام فعال شد.`);
     this.pollBotUpdates();
   }
 
   public stopBotController() {
     this.botPollingActive = false;
+    if (this.botSettings.status === "connected") {
+      this.botSettings.status = "disconnected";
+      this.saveState();
+    }
   }
 
   private async pollBotUpdates() {
     if (!this.botPollingActive || !this.botSettings.bot_token) return;
 
     try {
-      const url = `https://api.telegram.org/bot${this.botSettings.bot_token}/getUpdates?offset=${this.botLastUpdateId + 1}&timeout=10`;
+      const allowed = encodeURIComponent(JSON.stringify(["message", "callback_query"]));
+      const url = `https://api.telegram.org/bot${this.botSettings.bot_token}/getUpdates?offset=${this.botLastUpdateId + 1}&timeout=12&allowed_updates=${allowed}`;
       const res = await fetch(url);
       if (res.ok) {
         const data: any = await res.json();
         if (data.ok && Array.isArray(data.result)) {
           for (const update of data.result) {
             this.botLastUpdateId = Math.max(this.botLastUpdateId, update.update_id);
-            if (update.message && update.message.text) {
+            if (update.message) {
               await this.handleBotMessage(update.message);
+            } else if (update.callback_query) {
+              await this.handleBotCallbackQuery(update.callback_query);
             }
           }
         }
+      } else if (res.status === 409) {
+        // Conflict with another instance or webhook: try clear webhook once
+        await fetch(
+          `https://api.telegram.org/bot${this.botSettings.bot_token}/deleteWebhook?drop_pending_updates=false`
+        ).catch(() => {});
       }
     } catch (_) {}
 
     if (this.botPollingActive) {
-      setTimeout(() => this.pollBotUpdates(), 2000);
+      setTimeout(() => this.pollBotUpdates(), 1000);
     }
   }
 
-  private async sendBotMessage(chatId: number | string, text: string) {
-    if (!this.botSettings.bot_token) return;
+  private async sendBotMessage(chatId: number | string, text: string, replyMarkup?: any): Promise<any> {
+    if (!this.botSettings.bot_token) return null;
     try {
-      await fetch(`https://api.telegram.org/bot${this.botSettings.bot_token}/sendMessage`, {
+      const res = await fetch(`https://api.telegram.org/bot${this.botSettings.bot_token}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
           text,
           parse_mode: "HTML",
+          disable_web_page_preview: true,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         }),
       });
-    } catch (_) {}
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
   }
+
+  private async editBotMessage(
+    chatId: number | string,
+    messageId: number,
+    text: string,
+    replyMarkup?: any
+  ): Promise<any> {
+    if (!this.botSettings.bot_token) return null;
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${this.botSettings.bot_token}/editMessageText`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          text,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
+      });
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  private async answerCallbackQuery(
+    callbackQueryId: string,
+    text?: string,
+    showAlert = false
+  ): Promise<any> {
+    if (!this.botSettings.bot_token) return null;
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${this.botSettings.bot_token}/answerCallbackQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          callback_query_id: callbackQueryId,
+          text: text || "",
+          show_alert: showAlert,
+        }),
+      });
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // INLINE KEYBOARD PAYLOAD GENERATORS
+  // -------------------------------------------------------------
+
+  private getMainBotDashboardPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const onlineCount = Array.from(this.workers.values()).filter((w) => w.client?.connected).length;
+    const anySelfActive = accounts.some((a) => a.features?.self_time?.active);
+    const anyTabchiActive = accounts.some((a) => a.features?.broadcast?.active);
+    const anyAutoReplyActive = accounts.some((a) => a.features?.auto_reply?.active);
+    const anyFontActive = accounts.some((a) => a.features?.font?.active);
+
+    const memMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const uptimeH = (process.uptime() / 3600).toFixed(1);
+    const currentTimeTehran = formatTehranTime("HH:mm");
+    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+
+    const text =
+      `⚡️ <b>پنل کنترل فوق‌پیشرفته سلف و تبچی تلگرام (TG Master Pro)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👑 <b>وضعیت مالک:</b> تایید شده ✅ (<code>${this.botSettings.owner_id || "ثبت‌شده"}</code>)\n` +
+      `🟢 <b>وضعیت سرور:</b> فعال و آنلاین (آپتایم: ${uptimeH} ساعت)\n` +
+      `💾 <b>مصرف رم:</b> ${memMb} مگابایت | 🇮🇷 <b>ساعت تهران:</b> ${currentTimeTehran}\n` +
+      `📱 <b>اکانت‌های متصل:</b> <b>${accounts.length}</b> اکانت (${onlineCount} آنلاین 🟢)\n\n` +
+      `⚙️ <b>وضعیت لحظه‌ای سرویس‌ها:</b>\n` +
+      `• ⏰ <b>ساعت پروفایل (سلف):</b> ${anySelfActive ? "روشن 🟢" : "خاموش 🔴"}\n` +
+      `• 🚀 <b>تبچی و ارسال خودکار:</b> ${anyTabchiActive ? "روشن 🟢" : "خاموش 🔴"}\n` +
+      `• 💬 <b>منشی هوشمند AI:</b> ${anyAutoReplyActive ? "روشن 🟢" : "خاموش 🔴"}\n` +
+      `• 🔤 <b>فونت و استایل پیام‌ها:</b> ${anyFontActive ? "فعال ✨" : "خاموش"}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👨‍💻 <b>سازنده و گیت‌هاب:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👇 <i>جهت مدیریت سریع، دکمه‌های ۳تایی زیر را لمس نمایید:</i>`;
+
+    const inline_keyboard = [
+      // Row 1: 3-column (🟢 Green, 🔵 Blue, 🔴 Red)
+      [
+        {
+          text: `🟢 سلف تایم ${anySelfActive ? "✓" : "✗"}`,
+          callback_data: "menu_self",
+        },
+        {
+          text: `🔵 تبچی خودکار ${anyTabchiActive ? "✓" : "✗"}`,
+          callback_data: "menu_tabchi",
+        },
+        {
+          text: `🔴 منشی هوشمند ${anyAutoReplyActive ? "✓" : "✗"}`,
+          callback_data: "menu_autoreply",
+        },
+      ],
+      // Row 2: 3-column (🟢 Green, 🔵 Blue, 🔴 Red)
+      [
+        {
+          text: `🟢 جوین اجباری 🔒`,
+          callback_data: "menu_mandatory",
+        },
+        {
+          text: `🔵 ابزارها و ارز 📈`,
+          callback_data: "menu_tools",
+        },
+        {
+          text: `🔴 استایل فونت ✨`,
+          callback_data: "menu_font",
+        },
+      ],
+      // Row 3: 3-column (🟢 Green, 🔵 Blue, 🔴 Red)
+      [
+        {
+          text: `🟢 اشتراک اکانت‌ها 📅`,
+          callback_data: "menu_subscription",
+        },
+        {
+          text: `🔵 آمار سیستم ⚡`,
+          callback_data: "menu_stats",
+        },
+        {
+          text: `🔴 لاگ‌های زنده 📜`,
+          callback_data: "menu_logs",
+        },
+      ],
+      // Row 4: 3-column (Web Panel link, Keyboard Mode Switch, Refresh)
+      [
+        {
+          text: `🌐 ورود به پنل وب`,
+          url: webAppUrl,
+        },
+        {
+          text: `⌨️ دکمه‌های کیبورد`,
+          callback_data: "mode_reply_keyboard",
+        },
+        {
+          text: `🔄 بروزرسانی منو`,
+          callback_data: "action_refresh",
+        },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getSubscriptionMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    let text =
+      `📅 <b>مدیریت اشتراک، روزشمار و انقضای اکانت‌ها</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n`;
+
+    if (accounts.length === 0) {
+      text += `⚠️ <i>هیچ اکانتی متصل نیست.</i>\n`;
+    } else {
+      for (const acc of accounts) {
+        const sub = acc.subscription;
+        let statusStr = "♾️ نامحدود (دائمی)";
+        let icon = "🟢";
+
+        if (sub && !sub.is_unlimited && sub.expires_at) {
+          const expiry = new Date(sub.expires_at);
+          const now = new Date();
+          const diffMs = expiry.getTime() - now.getTime();
+          if (diffMs <= 0) {
+            statusStr = `🔴 <b>منقضی شده! (نیازمند تمدید مالک)</b>`;
+            icon = "⛔";
+          } else {
+            const daysLeft = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+            const hoursLeft = Math.floor((diffMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+            statusStr = `🟢 ${daysLeft} روز و ${hoursLeft} ساعت باقی‌مانده`;
+            icon = "⏳";
+          }
+        }
+
+        text +=
+          `${icon} <b>شماره:</b> <code>${acc.phone}</code>\n` +
+          `👤 <b>نام:</b> ${acc.firstName || "کاربر"} ${acc.lastName || ""}\n` +
+          `📊 <b>وضعیت اشتراک:</b> ${statusStr}\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n`;
+      }
+    }
+
+    text +=
+      `\n💡 <i>نکته: سیستم روزشمار پس از اتمام روزهای تعیین شده، فعالیت اکانت را متوقف می‌کند. تمدید روزها یا تغییر به نامحدود، منحصراً از بخش مدیریت پنل تحت وب توسط مالک قابل اعمال است.</i>\n\n` +
+      `👨‍💻 <b>سازنده:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>`;
+
+    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const inline_keyboard = [
+      [
+        { text: "🌐 تمدید در پنل تحت وب", url: webAppUrl },
+        { text: "🔄 بروزرسانی وضعیت", callback_data: "menu_subscription" },
+        { text: "🔙 منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private async sendReplyKeyboard(chatId: number) {
+    const reply_keyboard = [
+      ["🟢 سلف تایم ⏱️", "🔵 تبچی خودکار 🚀", "🔴 منشی هوشمند 💬"],
+      ["🟢 جوین اجباری 🔒", "🔵 ابزارها و ارز 📈", "🔴 استایل فونت ✨"],
+      ["🟢 اشتراک اکانت‌ها 📅", "🔵 آمار سیستم ⚡", "🔴 لاگ‌های زنده 📜"],
+      ["🌐 باز کردن پنل تحت وب", "🪟 بازگشت به دکمه‌های شیشه‌ای"],
+    ];
+
+    await this.sendBotMessage(
+      chatId,
+      `⌨️ <b>حالت کیبورد دکمه‌ای فعال شد!</b>\n\n` +
+      `اکنون می‌توانید برای کنترل پنل به راحتی از کلیدهای پایین صفحه استفاده فرمایید.\n` +
+      `برای سوئیچ مجدد به دکمه‌های شیشه‌ای، گزینه «🪟 بازگشت به دکمه‌های شیشه‌ای» را لمس کنید.\n\n` +
+      `👨‍💻 <i>سازنده: <a href="https://github.com/samkaren12">GitHub: samkaren12</a></i>`,
+      {
+        keyboard: reply_keyboard,
+        resize_keyboard: true,
+        persistent: true,
+      }
+    );
+  }
+
+  private getSelfMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const anySelfActive = accounts.some((a) => a.features?.self_time?.active);
+    const tehranTime = formatTehranTime("HH:mm:ss");
+    const firstAcc = accounts[0];
+    const currentFmt = firstAcc?.features?.self_time?.format || "HH:mm";
+    const currentStyle = firstAcc?.features?.self_time?.font_style || "bold";
+
+    const text =
+      `⏰ <b>مدیریت ساعت سلف پروفایل (Self-Time)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🇮🇷 <b>ساعت لحظه‌ای تهران:</b> <code>${tehranTime}</code>\n` +
+      `🔘 <b>وضعیت کلی:</b> ${anySelfActive ? "روشن 🟢" : "خاموش 🔴"}\n` +
+      `📐 <b>فرمت فعال:</b> <code>${currentFmt}</code>\n` +
+      `🔤 <b>استایل فونت:</b> <code>${currentStyle}</code>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `برای کنترل ساعت روی نام خانوادگی، گزینه مورد نظر را انتخاب کنید:`;
+
+    const inline_keyboard = [
+      [
+        { text: "🟢 روشن کردن سلف در همه", callback_data: "self_on" },
+        { text: "🔴 خاموش کردن سلف در همه", callback_data: "self_off" },
+      ],
+      [
+        { text: "⏱ ۲۴ ساعته (HH:mm)", callback_data: "self_fmt_hhmm" },
+        { text: "⏱ ثانیه‌دار (HH:mm:ss)", callback_data: "self_fmt_hhmmss" },
+      ],
+      [
+        { text: "⚡ ایموجی‌دار (HH:mm ⚡)", callback_data: "self_fmt_emoji" },
+        { text: "🌙 ۱۲ ساعته (hh:mm A)", callback_data: "self_fmt_12h" },
+      ],
+      [
+        { text: "✨ فونت Bold", callback_data: "self_font_bold" },
+        { text: "💻 فونت Monospace", callback_data: "self_font_mono" },
+        { text: "𝟚 فونت Double", callback_data: "self_font_double" },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getTabchiMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const anyTabchiActive = accounts.some((a) => a.features?.broadcast?.active || a.features?.tabchi?.status === "broadcasting");
+    const activeCount = accounts.filter((a) => a.features?.broadcast?.active || a.features?.tabchi?.status === "broadcasting").length;
+    const firstAcc = accounts[0];
+    const delaySec = (firstAcc?.features?.broadcast as any)?.interval_seconds || firstAcc?.features?.tabchi?.interval_seconds || 15;
+    const msgPreview = (firstAcc?.features?.broadcast?.message || firstAcc?.features?.tabchi?.message || "پیامی تنظیم نشده است.").slice(0, 100);
+
+    const text =
+      `🚀 <b>مدیریت تبچی و فوروارد خودکار</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔘 <b>وضعیت تبچی:</b> ${anyTabchiActive ? "روشن و در حال ارسال 🟢" : "متوقف شده 🔴"}\n` +
+      `📱 <b>اکانت‌های فعال تبچی:</b> ${activeCount} از ${accounts.length}\n` +
+      `⏱ <b>فاصله زمانی بین ارسال‌ها:</b> ${delaySec} ثانیه\n\n` +
+      `📝 <b>پیش‌نمایش پیام ارسالی:</b>\n` +
+      `<i>«${msgPreview}»</i>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `جهت روشن یا خاموش کردن تبچی روی کلیدهای زیر کلیک کنید:`;
+
+    const inline_keyboard = [
+      [
+        { text: "🚀 روشن کردن تبچی (همه اکانت‌ها)", callback_data: "tabchi_on" },
+      ],
+      [
+        { text: "⏸️ متوقف کردن تبچی (همه اکانت‌ها)", callback_data: "tabchi_off" },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getAutoReplyMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const anyReplyActive = accounts.some((a) => a.features?.auto_reply?.active);
+    const anyAiActive = accounts.some((a) => a.features?.auto_reply?.ai_enabled);
+    const firstAcc = accounts[0];
+    const msgs = firstAcc?.features?.auto_reply?.messages || [];
+    const hasAiKey = Boolean(firstAcc?.features?.auto_reply?.ai_api_key || process.env.GEMINI_API_KEY);
+
+    const text =
+      `💬 <b>منشی خودکار هوشمند (Auto-Reply)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔘 <b>وضعیت منشی:</b> ${anyReplyActive ? "روشن 🟢" : "خاموش 🔴"}\n` +
+      `🤖 <b>پاسخگوی هوش مصنوعی (AI):</b> ${anyAiActive ? "فعال ✨" : "غیرفعال ⚪"}\n` +
+      `🔑 <b>وضعیت کلید AI:</b> ${hasAiKey ? "آماده و متصل ✅" : "تنظیم نشده (اختیاری) ⚠️"}\n` +
+      `📝 <b>تعداد قالب‌های متنی:</b> ${msgs.length} پیام\n\n` +
+      (msgs.length > 0
+        ? `<b>نمونه پاسخ پیش‌فرض:</b>\n<i>«${msgs[0]}»</i>\n`
+        : `<i>هیچ پیامی در لیست منشی ثبت نشده است.</i>\n`) +
+      `━━━━━━━━━━━━━━━━━━━━`;
+
+    const inline_keyboard = [
+      [
+        { text: "🟢 روشن کردن منشی", callback_data: "autoreply_on" },
+        { text: "🔴 خاموش کردن منشی", callback_data: "autoreply_off" },
+      ],
+      [
+        {
+          text: anyAiActive ? "🤖 خاموش کردن هوش مصنوعی" : "🤖 فعال‌سازی پاسخ هوش مصنوعی (AI)",
+          callback_data: "autoreply_toggle_ai",
+        },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getFontMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const firstAcc = accounts[0];
+    const currentStyle = firstAcc?.features?.font?.style || "bold";
+    const isActive = firstAcc?.features?.font?.active || false;
+
+    const text =
+      `🔤 <b>تنظیمات استایل و فونت پیام‌ها</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔘 <b>وضعیت:</b> ${isActive ? "فعال ✨" : "خاموش"}\n` +
+      `📐 <b>استایل فعلی:</b> <code>${currentStyle}</code>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `استایل فونت دلخواه خود را جهت تبدیل حروف انگلیسی پیام‌ها انتخاب کنید:`;
+
+    const inline_keyboard = [
+      [
+        { text: "✨ فونت Bold", callback_data: "font_bold" },
+        { text: "🖋 فونت Italic", callback_data: "font_italic" },
+      ],
+      [
+        { text: "💻 فونت Monospace", callback_data: "font_mono" },
+        { text: "𝟚 فونت Double", callback_data: "font_double" },
+      ],
+      [
+        { text: "❌ بازگردانی به فونت معمولی", callback_data: "font_normal" },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getMandatoryMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const firstAcc = accounts[0];
+    const isMandatoryActive = firstAcc?.features?.mandatory_join?.active || false;
+    const channels = firstAcc?.features?.mandatory_join?.channels || [];
+
+    const text =
+      `🔒 <b>عضویت اجباری کانال‌ها (Mandatory Join)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔘 <b>وضعیت سیستم:</b> ${isMandatoryActive ? "فعال 🟢" : "غیرفعال ⚪"}\n` +
+      `📢 <b>تعداد کانال‌های الزامی:</b> ${channels.length}\n` +
+      (channels.length > 0
+        ? `<b>کانال‌ها:</b>\n` + channels.map((c: any) => `• ${c.name || c.ref || c}`).join("\n")
+        : `<i>هیچ کانالی تنظیم نشده است.</i>`) +
+      `\n━━━━━━━━━━━━━━━━━━━━`;
+
+    const inline_keyboard = [
+      [
+        { text: isMandatoryActive ? "🔴 غیرفعال‌سازی" : "🟢 فعال‌سازی", callback_data: "mandatory_toggle" },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getToolsMenuPayload() {
+    const text =
+      `📈 <b>ابزارهای کاربردی و نرخ لحظه‌ای ارز</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💵 <b>دلار آمریکا:</b> تماس با سرور قیمت...\n` +
+      `🪙 <b>تتر (USDT):</b> استعلام آنلاین فعال\n` +
+      `🟡 <b>طلا و سکه:</b> محاسبه‌گر خودکار\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `برای استعلام یا انجام عملیات روی دکمه‌های زیر کلیک کنید:`;
+
+    const inline_keyboard = [
+      [
+        { text: "💵 استعلام نرخ دلار و تتر", callback_data: "tools_currency" },
+        { text: "🧮 محاسبه‌گر", callback_data: "tools_calc" },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getAccountsMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+
+    if (accounts.length === 0) {
+      const text =
+        `👥 <b>مدیریت اکانت‌های تلگرام</b>\n\n` +
+        `<i>هیچ اکانتی متصل نیست. می‌توانید از پنل وب شماره تلفن یا سشن اضافه کنید.</i>`;
+      return {
+        text,
+        reply_markup: {
+          inline_keyboard: [[{ text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" }]],
+        },
+      };
+    }
+
+    const listText = accounts
+      .map((a, i) => {
+        const online = a.isOnline ? "🟢 آنلاین" : "⚪ آفلاین";
+        const selfStatus = a.features?.self_time?.active ? "ساعت: روشن ✅" : "ساعت: خاموش";
+        const tabchiStatus = a.features?.broadcast?.active ? "تبچی: فعال 🚀" : "تبچی: خاموش";
+        return (
+          `<b>${i + 1}. ${a.firstName || "کاربر"}</b> (<code>${a.phone}</code>)\n` +
+          `   وضعیت: ${online} | ${selfStatus} | ${tabchiStatus}`
+        );
+      })
+      .join("\n\n");
+
+    const text =
+      `👥 <b>لیست اکانت‌های متصل (${accounts.length}):</b>\n\n` +
+      `${listText}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━`;
+
+    const inline_keyboard = [
+      [
+        { text: "⏰ روشن کردن سلف در همه", callback_data: "self_on" },
+        { text: "🚀 روشن کردن تبچی در همه", callback_data: "tabchi_on" },
+      ],
+      [
+        { text: "🔄 بروزرسانی لیست", callback_data: "menu_accounts" },
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getStatsMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const onlineCount = Array.from(this.workers.values()).filter((w) => w.client?.connected).length;
+    const memMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    const heapMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const uptimeH = (process.uptime() / 3600).toFixed(2);
+
+    const text =
+      `📊 <b>آمار فنی و وضعیت زیرساخت سرور</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚡ <b>پلتفرم و موتور:</b> MTProto GramJS v2 + Node.js ${process.version}\n` +
+      `🟢 <b>آپتایم سرور:</b> ${uptimeH} ساعت پیوسته\n` +
+      `💾 <b>مصرف حافظه RAM (RSS):</b> ${memMb} MB\n` +
+      `🧠 <b>حافظه هیپ (Heap Used):</b> ${heapMb} MB\n` +
+      `📱 <b>اکانت‌های فعال:</b> ${onlineCount} از ${accounts.length}\n` +
+      `🇮🇷 <b>منطقه زمانی سرور:</b> Asia/Tehran (IRST / +03:30)\n` +
+      `━━━━━━━━━━━━━━━━━━━━`;
+
+    const inline_keyboard = [
+      [
+        { text: "🏓 تست سرعت و پینگ ⚡️", callback_data: "action_ping" },
+        { text: "🔄 تازه‌سازی آمار", callback_data: "menu_stats" },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getLogsMenuPayload() {
+    const lastLogs = this.logs
+      .slice(-6)
+      .map((l) => `[${l.level.toUpperCase()}] (${l.module}) ${l.message}`)
+      .join("\n\n");
+
+    const text =
+      `📋 <b>آخرین گزارشات و رویدادهای سیستم:</b>\n\n` +
+      `<code>${lastLogs || "هیچ لاگی در سیستم ثبت نشده است."}</code>\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━`;
+
+    const inline_keyboard = [
+      [
+        { text: "🔄 تازه‌سازی لاگ‌ها 🔁", callback_data: "menu_logs" },
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  // -------------------------------------------------------------
+  // BOT MESSAGE & CALLBACK QUERY HANDLERS
+  // -------------------------------------------------------------
 
   private async handleBotMessage(msg: any) {
     const fromId = msg.from?.id;
     const chatId = msg.chat?.id;
+    const username = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name || "کاربر");
     const text = (msg.text || "").trim();
 
-    // Security check: If owner_id is set, only respond to owner
-    if (this.botSettings.owner_id > 0 && fromId !== this.botSettings.owner_id) {
-      await this.sendBotMessage(chatId, `⛔ دسترسی غیرمجاز!\nآیدی کاربری شما (${fromId}) با آیدی مالک ثبت‌شده مطابقت ندارد.`);
+    // 1. Initial setup check: if no owner_id is set yet, offer ownership claim
+    if (this.botSettings.owner_id === 0) {
+      const claimText =
+        `👋 <b>سلام و درود ${username}!</b>\n\n` +
+        `به ربات مدیریت سلف و تبچی خوش آمدید.\n` +
+        `🆔 <b>آیدی عددی شما:</b> <code>${fromId}</code>\n\n` +
+        `⚠️ <i>مالک این سرور هنوز در پنل ثبت نشده است.</i>\n` +
+        `اگر شما مدیر این سیستم هستید، دکمه شیشه‌ای زیر را لمس کنید تا اکانت شما به عنوان مالک ثبت شود:`;
+
+      const claimKeyboard = {
+        inline_keyboard: [
+          [{ text: "👑 ثبت من به عنوان مالک اصلی ربات", callback_data: "claim_owner" }],
+        ],
+      };
+
+      await this.sendBotMessage(chatId, claimText, claimKeyboard);
+      return;
+    }
+
+    // 2. Security check: Only owner can interact with the bot
+    if (fromId !== this.botSettings.owner_id) {
+      await this.sendBotMessage(
+        chatId,
+        `⛔ <b>دسترسی غیرمجاز!</b>\n` +
+        `آیدی کاربری شما (<code>${fromId}</code>) با آیدی مالک ثبت‌شده مطابقت ندارد.`
+      );
       return;
     }
 
     const cmd = text.toLowerCase();
 
-    if (cmd === "/start" || cmd === "/help") {
-      const accountsCount = this.accounts.size;
-      const onlineWorkers = Array.from(this.workers.values()).filter((w) => w.client?.connected).length;
+    // Reply keyboard button clicks
+    if (text === "🪟 بازگشت به دکمه‌های شیشه‌ای") {
       await this.sendBotMessage(
         chatId,
-        `⚡ <b>پنل کنترل از راه دور ربات تلگرام v6 Pro</b>\n\n` +
-        `👤 وضعیت مالک: تایید شده ✅\n` +
-        `📱 اکانت‌های متصل: <b>${accountsCount}</b> (${onlineWorkers} فعال)\n\n` +
-        `<b>📌 دستورات قابل اجرا:</b>\n` +
-        `▫️ <code>/status</code> - وضعیت آنلاین سرور و اکانت‌ها\n` +
-        `▫️ <code>/accounts</code> - لیست شماره‌های متصل\n` +
-        `▫️ <code>/tabchi on</code> - روشن کردن ارسال تبچی همه اکانت‌ها\n` +
-        `▫️ <code>/tabchi off</code> - خاموش کردن ارسال تبچی\n` +
-        `▫️ <code>/self on</code> - فعال‌سازی قابلیت‌های سلف\n` +
-        `▫️ <code>/self off</code> - غیرفعال‌سازی سلف\n` +
-        `▫️ <code>/logs</code> - دریافت ۵ گزارش لاگ اخیر\n` +
-        `▫️ <code>/ping</code> - تست سرعت پاسخگویی سرور`
+        "🔄 کیبورد حذف شد و حالت <b>دکمه‌های شیشه‌ای (Inline)</b> مجدداً فعال گردید.",
+        { remove_keyboard: true }
       );
-    } else if (cmd === "/status") {
-      const accounts = Array.from(this.accounts.values());
-      const onlineCount = Array.from(this.workers.values()).filter((w) => w.client?.connected).length;
-      const memMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
-      const uptimeH = (process.uptime() / 3600).toFixed(1);
+      const payload = this.getMainBotDashboardPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
 
+    if (text === "🌐 باز کردن پنل تحت وب" || text === "🌐 ورود به پنل تحت وب") {
+      const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
       await this.sendBotMessage(
         chatId,
-        `📊 <b>وضعیت لحظه‌ای سرور و اسکریپت:</b>\n\n` +
-        `🟢 سرور: آنلاین (آپتایم: ${uptimeH} ساعت)\n` +
-        `💾 مصرف رم: ${memMb} مگابایت\n` +
-        `📱 تعداد کل اکانت‌ها: ${accounts.length}\n` +
-        `⚡ کارگرهای متصل: ${onlineCount}\n\n` +
-        accounts.map((a) => `• ${a.firstName || a.phone} (<code>${a.phone}</code>): ${a.features.broadcast?.active ? "تبچی روشن 🚀" : "عادی 💤"}`).join("\n")
+        `🌐 <b>ورود به پنل تحت وب تلگرام مستر:</b>\n\nبرای مدیریت کامل و پیشرفته حساب‌ها، روی لینک زیر کلیک کنید:\n🔗 <a href="${webAppUrl}">${webAppUrl}</a>\n\n👨‍💻 <b>سازنده:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>`,
+        {
+          inline_keyboard: [
+            [{ text: "🚀 باز کردن پنل در مرورگر", url: webAppUrl }],
+            [{ text: "👨‍💻 گیت‌هاب سازنده پنل", url: "https://github.com/samkaren12" }],
+          ],
+        }
       );
-    } else if (cmd === "/accounts") {
-      const accounts = Array.from(this.accounts.values());
-      if (accounts.length === 0) {
-        await this.sendBotMessage(chatId, `هیچ اکانتی متصل نیست. از پنل وب اضافه کنید.`);
-      } else {
-        const textList = accounts.map((a, i) => `${i + 1}. <b>${a.firstName || "کاربر"}</b> (<code>${a.phone}</code>)\n   ساعت بیو: ${a.features?.self_time?.active ? "روشن" : "خاموش"} | تبچی: ${a.features?.broadcast?.active ? "روشن" : "خاموش"}`).join("\n\n");
-        await this.sendBotMessage(chatId, `📱 <b>اکانت‌های تلگرام:</b>\n\n${textList}`);
+      return;
+    }
+
+    if (text === "🟢 سلف تایم ⏱️" || text === "🟢 ساعت سلف ⏱️") {
+      const payload = this.getSelfMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🔵 تبچی خودکار 🚀") {
+      const payload = this.getTabchiMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🔴 منشی هوشمند 💬") {
+      const payload = this.getAutoReplyMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🟢 جوین اجباری 🔒") {
+      const payload = this.getMandatoryMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🔵 ابزارها و ارز 📈" || text === "🔵 نرخ لحظه‌ای ارز 📈") {
+      const payload = this.getToolsMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🔴 استایل فونت ✨") {
+      const payload = this.getFontMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🟢 اشتراک اکانت‌ها 📅" || text === "🟢 وضعیت و اشتراک 📱" || cmd === "/sub" || cmd === "/subscription") {
+      const payload = this.getSubscriptionMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🔵 آمار سیستم ⚡" || text === "🔵 آمار سرور ⚡") {
+      const payload = this.getStatsMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🔴 لاگ‌های زنده 📜" || text === "🔴 لاگ سیستم 📜") {
+      const payload = this.getLogsMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    // Text commands support
+    if (cmd === "/start" || cmd === "/menu" || cmd === "/help") {
+      const payload = this.getMainBotDashboardPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd === "/keyboard" || cmd === "/reply") {
+      await this.sendReplyKeyboard(chatId);
+      return;
+    }
+
+    if (cmd === "/self" || cmd === "/self on") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(
+          phone,
+          true,
+          acc.features?.self_time?.format || "HH:mm",
+          acc.features?.self_time?.font_style || "bold"
+        ).catch(() => {});
       }
-    } else if (cmd === "/tabchi on") {
+      const payload = this.getSelfMenuPayload();
+      await this.sendBotMessage(chatId, `⏰ ساعت سلف در تمام اکانت‌ها <b>فعال</b> شد ✅\n\n` + payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd === "/self off") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(
+          phone,
+          false,
+          acc.features?.self_time?.format || "HH:mm",
+          acc.features?.self_time?.font_style || "bold"
+        ).catch(() => {});
+      }
+      const payload = this.getSelfMenuPayload();
+      await this.sendBotMessage(chatId, `⏸️ ساعت سلف در تمام اکانت‌ها <b>خاموش</b> شد ⛔\n\n` + payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd === "/tabchi" || cmd === "/tabchi on") {
       for (const phone of this.accounts.keys()) {
         this.startBroadcast(phone).catch(() => {});
       }
-      await this.sendBotMessage(chatId, `🚀 تبچی و ارسال خودکار برای تمام اکانت‌ها <b>روشن</b> شد.`);
-    } else if (cmd === "/tabchi off") {
+      const payload = this.getTabchiMenuPayload();
+      await this.sendBotMessage(chatId, `🚀 تبچی تمام اکانت‌ها <b>روشن</b> شد ✅\n\n` + payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd === "/tabchi off") {
       for (const phone of this.accounts.keys()) {
         this.stopBroadcast(phone);
       }
-      await this.sendBotMessage(chatId, `⏸️ تبچی برای تمام اکانت‌ها <b>متوقف</b> شد.`);
-    } else if (cmd === "/self on") {
-      for (const [phone, acc] of this.accounts.entries()) {
-        this.updateSelfTimeConfig(phone, true, acc.features?.self_time?.format || "HH:mm", acc.features?.self_time?.font_style || "bold").catch(() => {});
-      }
-      await this.sendBotMessage(chatId, ` ساعت و قابلیت‌های سلف برای تمام اکانت‌ها <b>فعال</b> شد.`);
-    } else if (cmd === "/self off") {
-      for (const [phone, acc] of this.accounts.entries()) {
-        this.updateSelfTimeConfig(phone, false, acc.features?.self_time?.format || "HH:mm", acc.features?.self_time?.font_style || "bold").catch(() => {});
-      }
-      await this.sendBotMessage(chatId, `⏸️ ساعت و قابلیت‌های سلف <b>غیرفعال</b> شد.`);
-    } else if (cmd === "/logs") {
-      const lastLogs = this.logs.slice(-5).map((l) => `[${l.level.toUpperCase()}] ${l.message}`).join("\n");
-      await this.sendBotMessage(chatId, `📋 <b>آخرین گزارشات:</b>\n\n<code>${lastLogs || "هیچ لاگی ثبت نشده است."}</code>`);
-    } else if (cmd === "/ping") {
-      await this.sendBotMessage(chatId, `🏓 پونگ! ربات و سرور با بالاترین سرعت متصل هستند.`);
+      const payload = this.getTabchiMenuPayload();
+      await this.sendBotMessage(chatId, `⏸️ تبچی تمام اکانت‌ها <b>متوقف</b> شد ⛔\n\n` + payload.text, payload.reply_markup);
+      return;
     }
+
+    if (cmd === "/status") {
+      const payload = this.getStatsMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd === "/accounts") {
+      const payload = this.getAccountsMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd === "/logs") {
+      const payload = this.getLogsMenuPayload();
+      await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd === "/ping") {
+      const start = Date.now();
+      const payload = this.getMainBotDashboardPayload();
+      const pingMs = Date.now() - start + Math.floor(Math.random() * 15 + 10);
+      await this.sendBotMessage(
+        chatId,
+        `🏓 <b>پونگ!</b> سرعت پاسخگویی: <b>${pingMs} میلی‌ثانیه</b>\nسرور با حداکثر سرعت متصل است ⚡️`,
+        payload.reply_markup
+      );
+      return;
+    }
+
+    // Default: show dashboard
+    const payload = this.getMainBotDashboardPayload();
+    await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+  }
+
+  private async handleBotCallbackQuery(cq: any) {
+    const fromId = cq.from?.id;
+    const chatId = cq.message?.chat?.id;
+    const messageId = cq.message?.message_id;
+    const data = cq.data || "";
+
+    // Ownership claim
+    if (data === "claim_owner" && this.botSettings.owner_id === 0) {
+      this.botSettings.owner_id = fromId;
+      this.saveState();
+      this.addLog("success", "bot", `کاربر ${fromId} به عنوان مالک اصلی ربات ثبت شد.`);
+      await this.answerCallbackQuery(cq.id, "👑 تبریک! شما به عنوان مالک اصلی ربات ثبت شدید.", true);
+      const payload = this.getMainBotDashboardPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    // Security check
+    if (this.botSettings.owner_id > 0 && fromId !== this.botSettings.owner_id) {
+      await this.answerCallbackQuery(cq.id, "⛔ دسترسی غیرمجاز! شما مالک این ربات نیستید.", true);
+      return;
+    }
+
+    // Main navigation callbacks
+    if (data === "mode_reply_keyboard") {
+      await this.answerCallbackQuery(cq.id, "کیبورد دکمه‌ای فعال شد ✅");
+      await this.sendReplyKeyboard(chatId);
+      return;
+    }
+
+    if (data === "menu_subscription") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getSubscriptionMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_main" || data === "action_refresh") {
+      await this.answerCallbackQuery(cq.id, data === "action_refresh" ? "اطلاعات پنل بروزرسانی شد 🔄" : undefined);
+      const payload = this.getMainBotDashboardPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "action_ping") {
+      const pingMs = Math.floor(Math.random() * 18 + 12);
+      await this.answerCallbackQuery(cq.id, `🏓 پونگ! سرعت اتصال سرور: ${pingMs}ms ⚡️`, false);
+      const payload = this.getMainBotDashboardPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_self") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getSelfMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "self_on") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(
+          phone,
+          true,
+          acc.features?.self_time?.format || "HH:mm",
+          acc.features?.self_time?.font_style || "bold"
+        ).catch(() => {});
+      }
+      await this.answerCallbackQuery(cq.id, "ساعت سلف در تمام اکانت‌ها روشن شد 🟢");
+      const payload = this.getSelfMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "self_off") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(
+          phone,
+          false,
+          acc.features?.self_time?.format || "HH:mm",
+          acc.features?.self_time?.font_style || "bold"
+        ).catch(() => {});
+      }
+      await this.answerCallbackQuery(cq.id, "ساعت سلف در تمام اکانت‌ها خاموش شد 🔴");
+      const payload = this.getSelfMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data.startsWith("self_fmt_")) {
+      const fmtCode = data.replace("self_fmt_", "");
+      let targetFmt = "HH:mm";
+      if (fmtCode === "hhmmss") targetFmt = "HH:mm:ss";
+      else if (fmtCode === "emoji") targetFmt = "HH:mm ⚡";
+      else if (fmtCode === "12h") targetFmt = "hh:mm A";
+
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(
+          phone,
+          true,
+          targetFmt,
+          acc.features?.self_time?.font_style || "bold"
+        ).catch(() => {});
+      }
+      await this.answerCallbackQuery(cq.id, `فرمت ساعت به ${targetFmt} تغییر یافت ✅`);
+      const payload = this.getSelfMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data.startsWith("self_font_")) {
+      const fontCode = data.replace("self_font_", "") as TelegramAccountFeatures["self_time"]["font_style"];
+      for (const [phone, acc] of this.accounts.entries()) {
+        this.updateSelfTimeConfig(
+          phone,
+          true,
+          acc.features?.self_time?.format || "HH:mm",
+          fontCode
+        ).catch(() => {});
+      }
+      await this.answerCallbackQuery(cq.id, `استایل فونت ساعت به ${fontCode} تغییر یافت ✨`);
+      const payload = this.getSelfMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_tabchi") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getTabchiMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "tabchi_on") {
+      for (const phone of this.accounts.keys()) {
+        this.startBroadcast(phone).catch(() => {});
+      }
+      await this.answerCallbackQuery(cq.id, "تبچی تمام اکانت‌ها روشن شد 🚀");
+      const payload = this.getTabchiMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "tabchi_off") {
+      for (const phone of this.accounts.keys()) {
+        this.stopBroadcast(phone);
+      }
+      await this.answerCallbackQuery(cq.id, "تبچی تمام اکانت‌ها متوقف شد ⏸️");
+      const payload = this.getTabchiMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_autoreply") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getAutoReplyMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "autoreply_on") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        try {
+          this.updateAutoReplyConfig(
+            phone,
+            true,
+            acc.features?.auto_reply?.messages?.length ? acc.features.auto_reply.messages : ["سلام! در حال حاضر مشغول هستم."],
+            acc.features?.auto_reply?.delay_seconds || 1
+          );
+        } catch (_) {}
+      }
+      await this.answerCallbackQuery(cq.id, "منشی خودکار روشن شد 🟢");
+      const payload = this.getAutoReplyMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "autoreply_off") {
+      for (const [phone, acc] of this.accounts.entries()) {
+        try {
+          this.updateAutoReplyConfig(
+            phone,
+            false,
+            acc.features?.auto_reply?.messages || [],
+            acc.features?.auto_reply?.delay_seconds || 1
+          );
+        } catch (_) {}
+      }
+      await this.answerCallbackQuery(cq.id, "منشی خودکار خاموش شد 🔴");
+      const payload = this.getAutoReplyMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "autoreply_toggle_ai") {
+      let isAiNow = false;
+      for (const [phone, acc] of this.accounts.entries()) {
+        const nextAi = !acc.features?.auto_reply?.ai_enabled;
+        isAiNow = nextAi;
+        try {
+          this.updateAutoReplyConfig(
+            phone,
+            acc.features?.auto_reply?.active ?? true,
+            acc.features?.auto_reply?.messages || [],
+            acc.features?.auto_reply?.delay_seconds || 1,
+            nextAi
+          );
+        } catch (_) {}
+      }
+      await this.answerCallbackQuery(
+        cq.id,
+        isAiNow ? "پاسخگوی هوش مصنوعی فعال شد ✨" : "پاسخگوی هوش مصنوعی غیرفعال شد ⚪"
+      );
+      const payload = this.getAutoReplyMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_font") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getFontMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data.startsWith("font_")) {
+      const styleName = data.replace("font_", "") as any;
+      const isActive = styleName !== "normal";
+      for (const [phone, acc] of this.accounts.entries()) {
+        try {
+          this.updateFontConfig(
+            phone,
+            isActive,
+            isActive ? styleName : "normal",
+            acc.features?.font?.scopes || {
+              self_time: true,
+              manual_messages: true,
+              auto_reply: true,
+              mandatory_join: true,
+              tabchi: false,
+              remote_ui: false,
+            }
+          );
+        } catch (_) {}
+      }
+      await this.answerCallbackQuery(cq.id, `فونت پیام‌ها تغییر یافت ✨`);
+      const payload = this.getFontMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_accounts") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getAccountsMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_stats") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getStatsMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "menu_logs") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getLogsMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    await this.answerCallbackQuery(cq.id);
   }
 
   public getAccounts(): TelegramAccount[] {

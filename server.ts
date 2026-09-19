@@ -10,6 +10,7 @@ import {
   DEFAULT_API_HASH,
   getMarketQuote,
 } from "./server/telegramManager.js";
+import { testAiApiKey } from "./server/aiSecretary.js";
 
 const startTime = Date.now();
 
@@ -167,6 +168,29 @@ async function startServer() {
     }
   });
 
+  // Account Subscription Management
+  app.post("/api/accounts/:phone/subscription", async (req, res) => {
+    try {
+      const { phone } = req.params;
+      const { is_unlimited, days_to_add, days_total, notes } = req.body;
+      const sub = telegramManager.updateAccountSubscription(phone, {
+        is_unlimited: Boolean(is_unlimited),
+        days_to_add: days_to_add ? Number(days_to_add) : undefined,
+        days_total: days_total ? Number(days_total) : undefined,
+        notes: notes ? String(notes) : undefined,
+      });
+      return res.json({
+        success: true,
+        message: is_unlimited
+          ? "اشتراک حساب به وضعیت نامحدود (دائمی) ارتقا یافت."
+          : `اشتراک حساب با موفقیت تمدید شد.`,
+        subscription: sub,
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
   // Self Module: Self-Time Clock
   app.post("/api/accounts/:phone/self-time", async (req, res) => {
     try {
@@ -183,14 +207,40 @@ async function startServer() {
   app.post("/api/accounts/:phone/auto-reply", async (req, res) => {
     try {
       const { phone } = req.params;
-      const { active, messages, delaySeconds } = req.body;
+      const {
+        active,
+        messages,
+        delaySeconds,
+        aiEnabled,
+        aiApiKey,
+        aiPrompt,
+        aiModel,
+      } = req.body;
       const result = telegramManager.updateAutoReplyConfig(
         phone,
         Boolean(active),
         Array.isArray(messages) ? messages : [],
-        Number(delaySeconds) || 1
+        Number(delaySeconds) || 1,
+        aiEnabled !== undefined ? Boolean(aiEnabled) : undefined,
+        aiApiKey !== undefined ? String(aiApiKey) : undefined,
+        aiPrompt !== undefined ? String(aiPrompt) : undefined,
+        aiModel !== undefined ? String(aiModel) : undefined
       );
       return res.json({ success: true, auto_reply: result });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // AI Secretary Key Test Endpoint
+  app.post("/api/ai/test", async (req, res) => {
+    try {
+      const { apiKey, customPrompt } = req.body;
+      const result = await testAiApiKey(apiKey, customPrompt);
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      return res.json(result);
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }
@@ -345,6 +395,17 @@ async function startServer() {
     return res.json({ success: true, settings, bot: settings });
   };
 
+  const handlePostBotTest = async (req: any, res: any) => {
+    try {
+      const { botToken, bot_token } = req.body;
+      const token = (botToken || bot_token || "").trim();
+      const info = await telegramManager.testBotToken(token);
+      return res.json({ success: true, ...info });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  };
+
   const handlePostBotSettings = async (req: any, res: any) => {
     try {
       const {
@@ -360,20 +421,21 @@ async function startServer() {
         api_hash,
       } = req.body;
 
-      const tokenToUse = botToken !== undefined ? botToken : bot_token;
+      const tokenToUse = (botToken !== undefined ? botToken : bot_token || "").trim();
       const ownerToUse = ownerId !== undefined ? ownerId : (ownerUserId !== undefined ? ownerUserId : owner_id);
       const apiIdToUse = apiId !== undefined ? apiId : api_id;
       const apiHashToUse = apiHash !== undefined ? apiHash : api_hash;
+      const enabledToUse = enabled !== undefined ? Boolean(enabled) : Boolean(tokenToUse);
 
       const settings = await telegramManager.updateBotSettings(
-        tokenToUse || "",
+        tokenToUse,
         Number(ownerToUse) || 0,
-        Boolean(enabled),
+        enabledToUse,
         apiIdToUse ? Number(apiIdToUse) : undefined,
         apiHashToUse ? String(apiHashToUse).trim() : undefined
       );
 
-      return res.json({ success: true, settings, bot: settings, message: "تنظیمات با موفقیت ذخیره شد." });
+      return res.json({ success: true, settings, bot: settings, message: "تنظیمات ربات با موفقیت تایید و ذخیره شد." });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }
@@ -381,6 +443,8 @@ async function startServer() {
 
   app.get("/api/bot-settings", handleGetBotSettings);
   app.get("/api/bot/settings", handleGetBotSettings);
+  app.post("/api/bot/test", handlePostBotTest);
+  app.post("/api/bot-test", handlePostBotTest);
   app.post("/api/bot-settings", handlePostBotSettings);
   app.post("/api/bot/settings", handlePostBotSettings);
 

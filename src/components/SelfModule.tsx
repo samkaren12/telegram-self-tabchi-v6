@@ -22,6 +22,12 @@ import {
   StopCircle,
   Play,
   Users,
+  Bot,
+  Key,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Wand2,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import {
@@ -67,6 +73,19 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
   const [delaySeconds, setDelaySeconds] = useState(1);
   const [savingReply, setSavingReply] = useState(false);
   const [replyFeedback, setReplyFeedback] = useState<string | null>(null);
+
+  // 2b. AI Secretary state (Optional)
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiModel, setAiModel] = useState("gemini-3.8-flash");
+  const [testingAiKey, setTestingAiKey] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<{
+    success: boolean;
+    message: string;
+    sampleReply?: string;
+  } | null>(null);
 
   // 3. Mandatory Join state
   const [mandatoryActive, setMandatoryActive] = useState(false);
@@ -125,6 +144,11 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
       setAutoReplyActive(Boolean(account.features.auto_reply?.active));
       setMessages(account.features.auto_reply?.messages || []);
       setDelaySeconds(account.features.auto_reply?.delay_seconds ?? 1);
+      setAiEnabled(Boolean(account.features.auto_reply?.ai_enabled));
+      setAiApiKey(account.features.auto_reply?.ai_api_key || "");
+      setAiPrompt(account.features.auto_reply?.ai_prompt || "");
+      setAiModel(account.features.auto_reply?.ai_model || "gemini-3.8-flash");
+      setAiTestResult(null);
 
       // Mandatory Join
       setMandatoryActive(Boolean(account.features.mandatory_join?.active));
@@ -225,6 +249,10 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
           active: autoReplyActive,
           messages,
           delaySeconds,
+          aiEnabled,
+          aiApiKey,
+          aiPrompt,
+          aiModel,
         }),
       });
       const data = await res.json();
@@ -234,13 +262,52 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
       account.features.auto_reply = data.auto_reply;
       onUpdateAccount({ ...account });
       setReplyFeedback(
-        lang === "fa" ? "تنظیمات منشی خودکار ذخیره شد." : "Auto-reply updated successfully!"
+        lang === "fa" ? "تنظیمات منشی خودکار و هوش مصنوعی با موفقیت ذخیره شد." : "Auto-reply and AI settings updated successfully!"
       );
       setTimeout(() => setReplyFeedback(null), 3000);
     } catch (err: any) {
       setReplyFeedback(err.message || "Error updating auto-reply");
     } finally {
       setSavingReply(false);
+    }
+  };
+
+  // Test AI Key
+  const handleTestAiKey = async () => {
+    if (!aiApiKey.trim()) {
+      setAiTestResult({
+        success: false,
+        message: lang === "fa" ? "لطفاً ابتدا کلید API هوش مصنوعی را وارد فرمایید." : "Please enter an AI API key first.",
+      });
+      return;
+    }
+    setTestingAiKey(true);
+    setAiTestResult(null);
+    try {
+      const res = await fetch("/api/ai/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey: aiApiKey.trim(),
+          customPrompt: aiPrompt.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || (lang === "fa" ? "ارتباط با هوش مصنوعی ناموفق بود." : "AI test failed."));
+      }
+      setAiTestResult({
+        success: true,
+        message: lang === "fa" ? "کلید معتبر است و ارتباط با مدل Gemini برقرار شد ✅" : "AI key is valid! Model responded successfully ✅",
+        sampleReply: data.reply,
+      });
+    } catch (err: any) {
+      setAiTestResult({
+        success: false,
+        message: err.message || (lang === "fa" ? "خطا در تست کلید هوش مصنوعی" : "AI key test failed"),
+      });
+    } finally {
+      setTestingAiKey(false);
     }
   };
 
@@ -717,6 +784,229 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
                 {delaySeconds}s
               </span>
             </div>
+          </div>
+
+          {/* AI SMART SECRETARY (OPTIONAL) */}
+          <div className="rounded-xl bg-gradient-to-b from-slate-950/90 to-slate-950/60 border border-violet-500/25 p-4 sm:p-5 space-y-4 shadow-inner">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 shadow-sm shadow-violet-500/10">
+                  <Bot className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-slate-100 text-xs sm:text-sm">
+                      {lang === "fa" ? "منشی هوش مصنوعی (AI Smart Auto-Reply)" : "AI Smart Secretary"}
+                    </h4>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                      {lang === "fa" ? "اختیاری" : "Optional"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                    {lang === "fa"
+                      ? "پاسخگویی زنده و هوشمند به پیام‌های پی‌وی با استفاده از مدل زبانی Gemini متناسب با متن دریافتی."
+                      : "Generate dynamic, human-like contextual responses to incoming private messages via Gemini."}
+                  </p>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={aiEnabled}
+                  onChange={(e) => setAiEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500"></div>
+              </label>
+            </div>
+
+            {aiEnabled && (
+              <div className="space-y-4 pt-2 border-t border-slate-800/80">
+                {/* API KEY INPUT */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-violet-400" />
+                      <span>{lang === "fa" ? "کلید اختصاصی هوش مصنوعی (Gemini API Key):" : "Gemini API Key:"}</span>
+                    </label>
+                    <span className="text-[10px] text-slate-500 font-mono">Google AI Studio</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={aiApiKey}
+                        onChange={(e) => setAiApiKey(e.target.value)}
+                        placeholder={
+                          lang === "fa"
+                            ? "کلید API خود را وارد کنید (اختیاری)..."
+                            : "Enter your Gemini API key (optional)..."
+                        }
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 font-mono focus:outline-none focus:border-violet-500 pr-9"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                        title={showApiKey ? "مخفی کردن" : "نمایش کلید"}
+                      >
+                        {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestAiKey}
+                      disabled={testingAiKey}
+                      className="px-3 py-2 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/40 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {testingAiKey ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>{lang === "fa" ? "تست..." : "Testing..."}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                          <span>{lang === "fa" ? "تست اتصال" : "Test Key"}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <p className="text-[10px] text-slate-500 leading-normal">
+                    {lang === "fa"
+                      ? "نکته: در صورت خالی گذاشتن، اگر کلید سیستمی در سرور ست شده باشد از آن استفاده خواهد شد."
+                      : "Note: If left blank, the server's default GEMINI_API_KEY will be used if configured."}
+                  </p>
+                </div>
+
+                {/* TEST RESULT FEEDBACK */}
+                {aiTestResult && (
+                  <div
+                    className={`p-3 rounded-xl text-xs border ${
+                      aiTestResult.success
+                        ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300"
+                        : "bg-rose-950/40 border-rose-500/40 text-rose-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-medium">
+                      {aiTestResult.success ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                      )}
+                      <span>{aiTestResult.message}</span>
+                    </div>
+                    {aiTestResult.sampleReply && (
+                      <div className="mt-2 pt-2 border-t border-emerald-500/20 text-[11px] text-slate-300 bg-slate-900/60 p-2.5 rounded-lg">
+                        <span className="text-emerald-400 font-semibold block mb-1">
+                          {lang === "fa" ? "نمونه پاسخ تولید شده:" : "Sample Generated Response:"}
+                        </span>
+                        <p className="italic font-sans leading-relaxed">«{aiTestResult.sampleReply}»</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* CUSTOM PROMPT & PERSONA */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Wand2 className="w-3.5 h-3.5 text-violet-400" />
+                      {lang === "fa" ? "دستورالعمل و لحن منشی هوش مصنوعی (پرامپت اختیاری):" : "Custom Secretary Prompt & Tone:"}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      {lang === "fa" ? "پیش‌فرض خودکار فعال است" : "Default prompt active"}
+                    </span>
+                  </label>
+
+                  <textarea
+                    rows={3}
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder={
+                      lang === "fa"
+                        ? "مثال: شما یک منشی بسیار رسمی و باادب هستید. به پیام‌ها کوتاه، به فارسی سلیس و محترمانه پاسخ دهید و بگویید در اولین فرصت پاسخ خواهم داد..."
+                        : "Example: You are a friendly, concise assistant. Acknowledge the message and politely let them know I will reply soon..."
+                    }
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 leading-relaxed resize-y"
+                  />
+
+                  {/* PRESET PROMPTS */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-500">
+                      {lang === "fa" ? "الگوهای آماده لحن:" : "Quick tone presets:"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAiPrompt(
+                          "شما منشی رسمی و کاری من هستید. بسیار محترمانه و به فارسی اداری به پیام‌ها پاسخ دهید و اعلام کنید پیام جهت بررسی ثبت گردید و به زودی پاسخ داده می‌شود."
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[10px] transition-colors"
+                    >
+                      {lang === "fa" ? "👔 رسمی و اداری" : "Official"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAiPrompt(
+                          "شما دستیار صمیمی و دوستانه من هستید. خیلی گرم، کوتاه و خودمانی سلام کن و بگو فعلاً آنلاین نیستم ولی پیامتو دیدم و زود میام جوابتو میدم!"
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[10px] transition-colors"
+                    >
+                      {lang === "fa" ? "☕ دوستانه و صمیمی" : "Casual & Warm"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAiPrompt(
+                          "شما کارشناس پشتیبانی و فروش هستید. با احترام فراوان سلام کنید، اعلام کنید پیام به بخش پشتیبانی ارجاع داده شده و کارشناسان در اسرع وقت پاسخ خواهند داد."
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[10px] transition-colors"
+                    >
+                      {lang === "fa" ? "💼 پشتیبانی و فروش" : "Support"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAiPrompt(
+                          "اعلام کنید صاحب اکانت در مرخصی و سفر کاری است و تا پایان هفته دسترسی محدودی به تلگرام دارد. در صورت فوریت پیام خود را ارسال نمایند."
+                        )
+                      }
+                      className="px-2 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 text-[10px] transition-colors"
+                    >
+                      {lang === "fa" ? "✈️ در سفر و مرخصی" : "Away / Vacation"}
+                    </button>
+                    {aiPrompt && (
+                      <button
+                        type="button"
+                        onClick={() => setAiPrompt("")}
+                        className="px-2 py-0.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] transition-colors"
+                      >
+                        {lang === "fa" ? "پاک کردن پرامپت" : "Clear"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse"></span>
+                    {lang === "fa" ? "موتور پردازش: Gemini 3.8 Flash (سریع و بهینه)" : "Engine: Gemini 3.8 Flash"}
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    {lang === "fa" ? "تضمین پاسخ با پیام‌های قالب در صورت قطعی" : "Auto fallback to templates"}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

@@ -19,6 +19,10 @@ export interface TelegramAccountFeatures {
     messages: string[];
     delay_seconds: number;
     last_replied_at?: string;
+    ai_enabled?: boolean;
+    ai_api_key?: string;
+    ai_prompt?: string;
+    ai_model?: string;
   };
   mandatory_join: {
     active: boolean;
@@ -66,6 +70,16 @@ export interface TelegramAccountFeatures {
   keep_alive: boolean;
 }
 
+export interface AccountSubscription {
+  is_unlimited: boolean;
+  days_total?: number;
+  expires_at?: string | null; // ISO date timestamp, null if unlimited
+  status: "active" | "expired";
+  created_at: string;
+  extended_at?: string;
+  notes?: string;
+}
+
 export interface TelegramAccount {
   phone: string;
   userId: string;
@@ -78,6 +92,7 @@ export interface TelegramAccount {
   features: TelegramAccountFeatures;
   apiId?: number;
   apiHash?: string;
+  subscription?: AccountSubscription;
 }
 
 export interface BotSettings {
@@ -85,8 +100,12 @@ export interface BotSettings {
   owner_id: number;
   enabled: boolean;
   bot_username?: string;
+  bot_first_name?: string;
   api_id?: number;
   api_hash?: string;
+  status?: "connected" | "disconnected" | "error";
+  last_error?: string;
+  last_active?: string;
 }
 
 export interface MarketQuote {

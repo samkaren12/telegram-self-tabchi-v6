@@ -1,6 +1,6 @@
 {
   "name": "Telegram Self & Tabchi Web Panel",
-  "description": "Telegram Self & Tabchi automation panel with real MTProto phone login, SMS/app verification code, 2FA password support, profile clock, auto-reply, and broadcast manager.",
+  "description": "Telegram Self & Tabchi automation panel with real MTProto phone login, SMS/app verification code, 2FA password support, profile clock, AI auto-reply, broadcast manager, subscription & expiry controls, and color-coded Telegram management bot.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

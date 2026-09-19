@@ -9,6 +9,10 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
+  Calendar,
+  Infinity as InfinityIcon,
+  Code2,
+  ExternalLink,
 } from "lucide-react";
 import { Language, translations } from "./utils/i18n";
 import { TelegramAccount, SystemHealth } from "./types";
@@ -20,6 +24,7 @@ import { LiveLogs } from "./components/LiveLogs";
 import { SystemStatus } from "./components/SystemStatus";
 import { ConnectAccountModal } from "./components/ConnectAccountModal";
 import { StartupLockModal } from "./components/StartupLockModal";
+import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
 
 export default function App() {
   const [lang, setLang] = useState<Language>("fa");
@@ -35,6 +40,7 @@ export default function App() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [extendModalAccount, setExtendModalAccount] = useState<TelegramAccount | null>(null);
   const [loading, setLoading] = useState(true);
 
   const t = translations[lang];
@@ -154,6 +160,32 @@ export default function App() {
                 {selectedAccount.isOnline ? t.status.online : t.status.offline}
               </span>
 
+              {/* Subscription Status Tag */}
+              {selectedAccount.subscription?.is_unlimited ? (
+                <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <InfinityIcon className="w-3.5 h-3.5" />
+                  <span>{lang === "fa" ? "اشتراک نامحدود" : "Unlimited"}</span>
+                </span>
+              ) : selectedAccount.subscription?.expires_at &&
+                new Date(selectedAccount.subscription.expires_at).getTime() <= Date.now() ? (
+                <button
+                  onClick={() => setExtendModalAccount(selectedAccount)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50 flex items-center gap-1 animate-pulse hover:bg-rose-500/30 transition-colors"
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{lang === "fa" ? "⛔ اشتراک منقضی! تمدید" : "Expired! Extend"}</span>
+                </button>
+              ) : selectedAccount.subscription?.expires_at ? (
+                <button
+                  onClick={() => setExtendModalAccount(selectedAccount)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 hover:bg-cyan-500/20 transition-colors"
+                  title="Click to extend"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{lang === "fa" ? "تمدید اشتراک" : "Extend Sub"}</span>
+                </button>
+              ) : null}
+
               {selectedAccount.features?.self_time?.active && (
                 <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5" />
@@ -246,10 +278,25 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Telegram Self & Tabchi Automation Engine • 24/7 Permanent Daemon</span>
-          <span className="font-mono text-slate-600">MTProto Gateway v2.0 • GramJS / Telethon Session</span>
+      <footer className="border-t border-slate-800/80 py-5 text-center text-xs text-slate-400 bg-slate-950/90 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span>Telegram Self & Tabchi Automation Engine • 24/7 Permanent Daemon</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-slate-500">سازنده پنل:</span>
+            <a
+              href="https://github.com/samkaren12"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-cyan-400 hover:text-cyan-300 font-mono text-xs transition-all shadow-sm group"
+            >
+              <Code2 className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+              <span>github.com/samkaren12</span>
+              <ExternalLink className="w-3 h-3 text-slate-500" />
+            </a>
+          </div>
         </div>
       </footer>
 
@@ -267,6 +314,15 @@ export default function App() {
         onClose={() => setIsConnectModalOpen(false)}
         lang={lang}
         onAccountConnected={handleAccountConnected}
+      />
+
+      {/* Extend Subscription Modal */}
+      <ExtendSubscriptionModal
+        isOpen={Boolean(extendModalAccount)}
+        onClose={() => setExtendModalAccount(null)}
+        account={extendModalAccount}
+        onSuccess={fetchData}
+        lang={lang}
       />
     </div>
   );
