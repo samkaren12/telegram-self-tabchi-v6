@@ -80,6 +80,33 @@ export interface AccountSubscription {
   notes?: string;
 }
 
+export interface ClientCredentials {
+  username: string;
+  password: string;
+  created_at?: string;
+  last_login?: string;
+}
+
+export interface AccountBotConfig {
+  bot_token: string;
+  enabled: boolean;
+  owner_id?: number;
+  bot_username?: string;
+  bot_first_name?: string;
+  status?: "connected" | "disconnected" | "error";
+  last_error?: string;
+  last_active?: string;
+}
+
+export type UserRole = "owner" | "customer";
+
+export interface AuthSession {
+  role: UserRole;
+  username: string;
+  customerPhone?: string;
+  accountName?: string;
+}
+
 export interface TelegramAccount {
   phone: string;
   userId: string;
@@ -93,6 +120,8 @@ export interface TelegramAccount {
   apiId?: number;
   apiHash?: string;
   subscription?: AccountSubscription;
+  client_credentials?: ClientCredentials;
+  bot?: AccountBotConfig;
 }
 
 export interface BotSettings {
@@ -110,6 +139,9 @@ export interface BotSettings {
 
 export interface MarketQuote {
   asset: string;
+  symbol: string;
+  name_fa?: string;
+  category: "fiat" | "crypto" | "gold";
   amount: number;
   unit_usd: number;
   total_usd: number;
@@ -117,7 +149,17 @@ export interface MarketQuote {
   total_toman: number;
   unit_irr: number;
   total_irr: number;
+  change_24h_percent?: number;
+  high_24h_toman?: number;
+  low_24h_toman?: number;
+  high_24h_usd?: number;
+  low_24h_usd?: number;
+  trend?: "up" | "down" | "neutral";
+  chart_url?: string;
+  chart_svg?: string;
+  history?: Array<{ time: string; price_usd: number; price_toman: number }>;
   updated_at: string;
+  profitLossText?: string;
 }
 
 export interface SendCodeResponse {

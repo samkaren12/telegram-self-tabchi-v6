@@ -3,12 +3,14 @@ process.env.TZ = "Asia/Tehran";
 import express from "express";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import {
   telegramManager,
   DEFAULT_API_ID,
   DEFAULT_API_HASH,
   getMarketQuote,
+  getFeaturedMarketList,
 } from "./server/telegramManager.js";
 import { testAiApiKey } from "./server/aiSecretary.js";
 
@@ -19,6 +21,18 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Normalize and clean phone route parameter across all endpoints
+  app.param("phone", (req, _res, next, phone) => {
+    if (phone) {
+      let cleaned = decodeURIComponent(phone).trim();
+      if (!cleaned.startsWith("+")) {
+        cleaned = "+" + cleaned.replace(/^[\s]+/, "");
+      }
+      req.params.phone = cleaned;
+    }
+    next();
+  });
 
   // Initialize all stored accounts on server startup
   telegramManager.initAllAccounts().catch((err) => {
@@ -60,6 +74,122 @@ async function startServer() {
   app.get("/api/accounts", (req, res) => {
     const accounts = telegramManager.getAccounts();
     res.json({ accounts });
+  });
+
+  // Web Panel Authentication: Owner & Customer Logins
+  app.post("/api/auth/login", (req, res) => {
+    try {
+      const { role, username, password } = req.body;
+      const cleanUser = (username || "").trim();
+      const cleanPass = (password || "").trim();
+
+      if (!cleanPass) {
+        return res.status(400).json({ success: false, message: "رمز عبور الزامی است." });
+      }
+
+      if (role === "owner" || (!role && (cleanUser === "samkaren12" || cleanPass === "samkaren12" || cleanPass === "selfsamkaren12"))) {
+        // Owner verification (samkaren12 / samkaren12 or legacy selfsamkaren12)
+        if (
+          (cleanUser === "samkaren12" && cleanPass === "samkaren12") ||
+          cleanPass === "samkaren12" ||
+          cleanPass === "selfsamkaren12"
+        ) {
+          return res.json({
+            success: true,
+            session: {
+              role: "owner",
+              username: "samkaren12",
+              token: crypto.randomUUID(),
+            },
+          });
+        }
+        return res.status(401).json({
+          success: false,
+          message: "نام کاربری یا رمز عبور مالک نادرست است. نام کاربری و رمز پیش‌فرض: samkaren12",
+        });
+      }
+
+      // Customer Login verification
+      if (!cleanUser) {
+        return res.status(400).json({ success: false, message: "شماره تلفن یا نام کاربری مشتری الزامی است." });
+      }
+
+      const acc = telegramManager.findAccountByCredentials(cleanUser, cleanPass);
+      if (acc) {
+        return res.json({
+          success: true,
+          session: {
+            role: "customer",
+            username: acc.client_credentials?.username || acc.phone,
+            customerPhone: acc.phone,
+            token: crypto.randomUUID(),
+          },
+        });
+      }
+
+      return res.status(401).json({
+        success: false,
+        message: "مشخصات ورود مشتری نامعتبر است! رمز عبور را با ارسال دستور /login در ربات تلگرام اختصاصی شماره خود یا بخش Saved Messages دریافت کنید.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Account Customer Credentials Management
+  app.get("/api/accounts/:phone/credentials", (req, res) => {
+    try {
+      const { phone } = req.params;
+      const credentials = telegramManager.getAccountCredentials(phone);
+      if (!credentials) return res.status(404).json({ success: false, message: "حساب یافت نشد." });
+      return res.json({ success: true, credentials });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/accounts/:phone/credentials", (req, res) => {
+    try {
+      const { phone } = req.params;
+      const { username, password } = req.body;
+      const credentials = telegramManager.updateAccountCredentials(phone, username, password);
+      return res.json({ success: true, credentials });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Dedicated Per-Account Bot endpoints
+  app.get("/api/accounts/:phone/bot", (req, res) => {
+    try {
+      const { phone } = req.params;
+      const acc = telegramManager.getAccount(phone);
+      if (!acc) return res.status(404).json({ success: false, message: "حساب یافت نشد." });
+      return res.json({ success: true, bot: acc.bot || { bot_token: "", enabled: false, status: "disconnected" } });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/accounts/:phone/bot", async (req, res) => {
+    try {
+      const { phone } = req.params;
+      const { botToken, enabled } = req.body;
+      const bot = await telegramManager.updateAccountBot(phone, botToken, Boolean(enabled));
+      return res.json({ success: true, bot, message: "تنظیمات ربات اختصاصی شماره با موفقیت ذخیره شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/accounts/:phone/bot/test", async (req, res) => {
+    try {
+      const { token } = req.body;
+      const info = await telegramManager.testAccountBotToken(token);
+      return res.json({ success: true, ...info });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
   });
 
   // Telegram Auth: Step 1 - Send Code to Phone Number
@@ -386,6 +516,27 @@ async function startServer() {
       return res.json({ success: true, quote });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Featured market items list for quick exploration
+  app.get("/api/market/featured", (_req, res) => {
+    return res.json({ success: true, items: getFeaturedMarketList() });
+  });
+
+  // Direct chart image generation (SVG format)
+  app.get("/api/market/chart/:asset", async (req, res) => {
+    try {
+      const asset = String(req.params.asset || "usd");
+      const quote = await getMarketQuote(asset);
+      if (req.query.format === "png" && quote.chart_url) {
+        return res.redirect(quote.chart_url);
+      }
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(quote.chart_svg);
+    } catch (err: any) {
+      return res.status(400).send(`<svg><text>Error generating chart</text></svg>`);
     }
   });
 

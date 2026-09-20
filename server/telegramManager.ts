@@ -14,6 +14,8 @@ import {
   LogEntry,
   BotSettings,
   MarketQuote,
+  ClientCredentials,
+  AccountBotConfig,
 } from "../src/types.js";
 import { transformFont } from "../src/utils/fontStyler.js";
 import {
@@ -201,153 +203,17 @@ export function evaluateMath(expression: string): number {
 }
 
 // =============================================================
-// MARKET & CRYPTO QUOTE ENGINE
+// MARKET & CRYPTO QUOTE ENGINE (POWERED BY MARKETSERVICE)
 // =============================================================
 
-let cachedUsdIrrRate = 925000; // fallback IRR per USD (~92,500 Tomans)
-let lastUsdIrrFetch = 0;
+import {
+  getMarketQuote,
+  formatTelegramMarketCaption,
+  getFeaturedMarketList,
+  DetailedMarketQuote,
+} from "./marketService";
 
-async function fetchUsdIrrRate(): Promise<number> {
-  const now = Date.now();
-  if (now - lastUsdIrrFetch < 10 * 60 * 1000 && cachedUsdIrrRate > 0) {
-    return cachedUsdIrrRate;
-  }
-
-  // Try Nobitex USDT-IRT
-  try {
-    const res = await fetch("https://api.nobitex.ir/market/stats", {
-      headers: { "User-Agent": "TelegramSelfTabchi/6.0" },
-    });
-    if (res.ok) {
-      const data: any = await res.json();
-      const usdt = data?.stats?.["USDT-IRT"] || data?.stats?.["usdt-irt"];
-      const toman = Number(usdt?.latest || usdt?.bestSell || usdt?.bestBuy);
-      if (toman && toman > 10000) {
-        cachedUsdIrrRate = toman * 10;
-        lastUsdIrrFetch = now;
-        return cachedUsdIrrRate;
-      }
-    }
-  } catch (_) {}
-
-  // Fallback to open.er-api.com
-  try {
-    const res = await fetch("https://open.er-api.com/v6/latest/USD");
-    if (res.ok) {
-      const data: any = await res.json();
-      const irr = Number(data?.rates?.IRR);
-      if (irr && irr > 400000) {
-        cachedUsdIrrRate = irr;
-        lastUsdIrrFetch = now;
-        return cachedUsdIrrRate;
-      }
-    }
-  } catch (_) {}
-
-  return cachedUsdIrrRate;
-}
-
-export async function getMarketQuote(
-  rawAsset: string,
-  amount: number = 1.0,
-  buyPriceUsd?: number
-): Promise<MarketQuote & { profitLossText?: string }> {
-  const key = normalizeDigits(rawAsset).trim().toLowerCase().replace("$", "");
-  const aliases: Record<string, string> = {
-    دلار: "usd",
-    دالر: "usd",
-    usd: "usd",
-    dollar: "usd",
-    usdt: "usd",
-    تتر: "usd",
-    طلا: "gold",
-    gold: "gold",
-    xau: "gold",
-    بیتکوین: "bitcoin",
-    "بیت کوین": "bitcoin",
-    btc: "bitcoin",
-    اتریوم: "ethereum",
-    eth: "ethereum",
-    ترون: "tron",
-    trx: "tron",
-    sol: "solana",
-    سولانا: "solana",
-  };
-
-  const assetId = aliases[key] || key;
-  const irrRate = await fetchUsdIrrRate();
-  let unitUsd = 1.0;
-  let label = assetId.toUpperCase();
-
-  if (assetId === "usd") {
-    unitUsd = 1.0;
-    label = "USD (دلار)";
-  } else if (assetId === "gold") {
-    unitUsd = 94.5; // fallback gram USD (~$2940/oz)
-    try {
-      const res = await fetch("https://api.metals.live/v1/spot/gold");
-      if (res.ok) {
-        const data: any = await res.json();
-        const ounce = Number(Array.isArray(data) ? data[data.length - 1]?.gold : data?.gold);
-        if (ounce > 1000) {
-          unitUsd = ounce / 31.1034768;
-        }
-      }
-    } catch (_) {}
-    label = "Gold (گرم طلا)";
-  } else {
-    // Crypto via CoinGecko or fallback
-    const fallbackPrices: Record<string, number> = {
-      bitcoin: 65400,
-      ethereum: 3450,
-      tron: 0.16,
-      solana: 155,
-    };
-    unitUsd = fallbackPrices[assetId] || 1.0;
-
-    try {
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(
-          assetId
-        )}&vs_currencies=usd`
-      );
-      if (res.ok) {
-        const data: any = await res.json();
-        if (data[assetId]?.usd) {
-          unitUsd = Number(data[assetId].usd);
-        }
-      }
-    } catch (_) {}
-  }
-
-  const unitIrr = unitUsd * irrRate;
-  const totalUsd = unitUsd * amount;
-  const totalIrr = unitIrr * amount;
-  const unitToman = Math.round(unitIrr / 10);
-  const totalToman = Math.round(totalIrr / 10);
-
-  let profitLossText: string | undefined;
-  if (buyPriceUsd && buyPriceUsd > 0) {
-    const diff = totalUsd - buyPriceUsd;
-    const sign = diff >= 0 ? "+" : "";
-    profitLossText = `سود/ضرر نسبت به خرید ${buyPriceUsd}$: ${sign}${diff.toFixed(
-      2
-    )}$`;
-  }
-
-  return {
-    asset: label,
-    amount,
-    unit_usd: unitUsd,
-    total_usd: totalUsd,
-    unit_toman: unitToman,
-    total_toman: totalToman,
-    unit_irr: Math.round(unitIrr),
-    total_irr: Math.round(totalIrr),
-    updated_at: new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" }),
-    profitLossText,
-  };
-}
+export { getMarketQuote, formatTelegramMarketCaption, getFeaturedMarketList };
 
 export { formatTehranTime, getTehranTimeParts };
 
@@ -370,6 +236,7 @@ export class TelegramManager {
   };
   private botPollingActive = false;
   private botLastUpdateId = 0;
+  private accountBots: Map<string, { polling: boolean; lastUpdateId: number }> = new Map();
 
   constructor() {
     this.loadState();
@@ -467,6 +334,20 @@ export class TelegramManager {
                 typedAcc.subscription.status = "active";
               }
             }
+            if (!typedAcc.client_credentials) {
+              typedAcc.client_credentials = {
+                username: typedAcc.phone,
+                password: `SK-${Math.floor(100000 + Math.random() * 900000)}`,
+                created_at: typedAcc.connectedAt || new Date().toISOString(),
+              };
+            }
+            if (!typedAcc.bot) {
+              typedAcc.bot = {
+                bot_token: "",
+                enabled: false,
+                status: "disconnected",
+              };
+            }
             this.accounts.set(phone, typedAcc);
           }
           this.addLog("info", "system", `Loaded ${this.accounts.size} accounts from storage.`);
@@ -508,6 +389,11 @@ export class TelegramManager {
       if (acc.sessionString && acc.features.keep_alive !== false) {
         this.startAccountWorker(phone).catch((err) => {
           this.addLog("error", "system", `Failed to auto-start account ${phone}: ${err?.message}`, phone);
+        });
+      }
+      if (acc.bot?.enabled && acc.bot?.bot_token) {
+        this.startAccountBot(phone).catch((err) => {
+          this.addLog("error", "bot", `Failed to auto-start dedicated bot for ${phone}: ${err?.message}`, phone);
         });
       }
     }
@@ -896,12 +782,37 @@ export class TelegramManager {
           status: "active",
           created_at: new Date().toISOString(),
         },
+        client_credentials: this.accounts.get(phone)?.client_credentials || {
+          username: phone,
+          password: `SK-${Math.floor(100000 + Math.random() * 900000)}`,
+          created_at: new Date().toISOString(),
+        },
+        bot: this.accounts.get(phone)?.bot || {
+          bot_token: "",
+          enabled: false,
+          status: "disconnected",
+        },
       };
 
       this.accounts.set(phone, account);
       this.saveState();
 
       await this.startAccountWorkerWithClient(phone, client);
+
+      try {
+        await client.sendMessage("me", {
+          message:
+            `🎉 <b>اتصال موفق حساب تلگرام به پنل مستر سلف و تبچی v6</b>\n\n` +
+            `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب:</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `📱 <b>شماره:</b> <code>${account.phone}</code>\n` +
+            `👤 <b>نام کاربری:</b> <code>${account.client_credentials?.username}</code>\n` +
+            `🔑 <b>رمز عبور:</b> <code>${account.client_credentials?.password}</code>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `💡 در صفحه ورود پنل وب، وارد بخش «ورود مشتری» شوید و مشخصات فوق را وارد کنید. همچنین در هر زمان با ارسال دستور <code>/login</code> می‌توانید این پیام را دریافت کنید.`,
+          parseMode: "html",
+        });
+      } catch (_) {}
 
       this.addLog(
         "success",
@@ -953,6 +864,16 @@ export class TelegramManager {
         status: "active",
         created_at: new Date().toISOString(),
       },
+      client_credentials: this.accounts.get(phone)?.client_credentials || {
+        username: phone,
+        password: `SK-${Math.floor(100000 + Math.random() * 900000)}`,
+        created_at: new Date().toISOString(),
+      },
+      bot: this.accounts.get(phone)?.bot || {
+        bot_token: "",
+        enabled: false,
+        status: "disconnected",
+      },
     };
 
     this.accounts.set(phone, account);
@@ -960,6 +881,21 @@ export class TelegramManager {
     this.loginSessions.delete(sessionId);
 
     await this.startAccountWorkerWithClient(phone, session.client);
+
+    try {
+      await session.client.sendMessage("me", {
+        message:
+          `🎉 <b>اتصال موفق حساب تلگرام به پنل مستر سلف و تبچی v6</b>\n\n` +
+          `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب:</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📱 <b>شماره:</b> <code>${account.phone}</code>\n` +
+          `👤 <b>نام کاربری:</b> <code>${account.client_credentials?.username}</code>\n` +
+          `🔑 <b>رمز عبور:</b> <code>${account.client_credentials?.password}</code>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `💡 در صفحه ورود پنل وب، وارد بخش «ورود مشتری» شوید و مشخصات فوق را وارد کنید. همچنین در هر زمان با ارسال دستور <code>/login</code> می‌توانید این پیام را دریافت کنید.`,
+        parseMode: "html",
+      });
+    } catch (_) {}
 
     this.addLog(
       "success",
@@ -1117,14 +1053,20 @@ export class TelegramManager {
         }
       }
 
-      // 1B. SMART CHAT TOOLS: LIVE MARKET & CRYPTO QUOTE
+      // 1B. SMART CHAT TOOLS: ADVANCED WORLD MARKET, CURRENCY & GOLD QUOTE WITH CHART
       if (account.features.tools?.market_active && incomingText) {
-        const lower = incomingText.toLowerCase();
-        const assetMatch = lower.match(
-          /(usd|usdt|dollar|دلار|دالر|تتر|طلا|gold|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا)/
-        );
+        const lower = incomingText.toLowerCase().trim();
+        const isTriggerCommand = lower.startsWith(".price") || lower.startsWith("/price") ||
+          lower.startsWith(".quote") || lower.startsWith(".قیمت") || lower.startsWith("قیمت") ||
+          lower.startsWith("نرخ") || lower.startsWith(".ارز") || lower.startsWith("ارز");
+
+        const assetMatch = isTriggerCommand
+          ? lower.replace(/^(\.price|\/price|\.quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").trim()
+          : lower.match(
+              /(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
+            )?.[1];
+
         if (assetMatch) {
-          const asset = assetMatch[1];
           const amountMatch = lower.match(/(?<![a-z])\d+(?:\.\d+)?/);
           const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
 
@@ -1132,20 +1074,35 @@ export class TelegramManager {
           const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
           const buyPrice = buyMatch ? parseFloat(buyMatch[1]) : undefined;
 
+          // Clean asset query
+          const rawAsset = (typeof assetMatch === "string" ? assetMatch : "")
+            .replace(/\b(buy|خرید|\d+(\.\d+)?)\b/g, "")
+            .trim() || "usd";
+
           try {
-            const quote = await getMarketQuote(asset, amount, buyPrice);
-            const quoteMsg =
-              `💹 استعلام قیمت زنده:\n` +
-              `• دارایی: ${quote.amount} ${quote.asset}\n` +
-              `• معادل دلار: $${quote.total_usd.toLocaleString("en-US", { minimumFractionDigits: 2 })}\n` +
-              `• معادل تومان: ${quote.total_toman.toLocaleString("fa-IR")} تومان\n` +
-              `• معادل ریال: ${quote.total_irr.toLocaleString("fa-IR")} ریال\n` +
-              `• به‌روزرسانی: ${quote.updated_at}` +
-              (quote.profitLossText ? `\n• ${quote.profitLossText}` : "");
+            const quote = await getMarketQuote(rawAsset, amount, buyPrice);
+            const quoteCaption = formatTelegramMarketCaption(quote);
+
+            // Send chart image as photo with rich caption
+            if (quote.chart_url) {
+              try {
+                await client.sendMessage(message.chatId!, {
+                  message: quoteCaption,
+                  file: quote.chart_url,
+                  replyTo: message.id,
+                  parseMode: "html",
+                });
+                this.addLog("info", "tools", `استعلام قیمت و نمودار ارسال شد: ${quote.asset}`, phone);
+                return;
+              } catch (photoErr) {
+                // If photo sending failed, fallback to text message
+              }
+            }
 
             await client.sendMessage(message.chatId!, {
-              message: quoteMsg,
+              message: quoteCaption,
               replyTo: message.id,
+              parseMode: "html",
             });
             this.addLog("info", "tools", `استعلام قیمت ارسال شد: ${quote.asset}`, phone);
             return;
@@ -1413,6 +1370,23 @@ export class TelegramManager {
       await worker.client.sendMessage("me", { message: tabchiMsg });
       return;
     }
+
+    if (cmd === "/login" || cmd === "/creds" || cmd === "/panel" || cmd === "/pass" || cmd === "/credentials") {
+      const creds = account.client_credentials;
+      const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+      const loginMsg =
+        `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
+        `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
+        `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
+        `🌐 <b>آدرس پنل وب:</b> <a href="${webAppUrl}">${webAppUrl}</a>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 در صفحه ورود پنل، تب <b>«ورود مشتری»</b> را انتخاب کنید و با اطلاعات فوق وارد شوید.`;
+
+      await worker.client.sendMessage("me", { message: loginMsg, parseMode: "html" });
+      return;
+    }
   }
 
   // -------------------------------------------------------------
@@ -1475,7 +1449,7 @@ export class TelegramManager {
     format: string,
     fontStyle: TelegramAccountFeatures["self_time"]["font_style"]
   ) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
     account.features.self_time.active = active;
@@ -1483,7 +1457,7 @@ export class TelegramManager {
     account.features.self_time.font_style = fontStyle;
     this.saveState();
 
-    const worker = this.workers.get(phone);
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
     if (worker && worker.client.connected) {
       if (!active && account.features.self_time.original_last_name !== null) {
         try {
@@ -1492,13 +1466,13 @@ export class TelegramManager {
               lastName: account.features.self_time.original_last_name,
             })
           );
-          this.addLog("info", "self_time", `ساعت پروفایل خاموش شد و نام قبلی بازگردانی گردید.`, phone);
+          this.addLog("info", "self_time", `ساعت پروفایل خاموش شد و نام قبلی بازگردانی گردید.`, account.phone);
         } catch (err: any) {
-          this.addLog("warn", "self_time", `Could not restore last name: ${err?.message}`, phone);
+          this.addLog("warn", "self_time", `Could not restore last name: ${err?.message}`, account.phone);
         }
       } else if (active) {
-        this.setupSelfTimeLoop(phone, worker);
-        this.addLog("success", "self_time", `ساعت پروفایل با فرمت ${format} فعال گردید.`, phone);
+        this.setupSelfTimeLoop(account.phone, worker);
+        this.addLog("success", "self_time", `ساعت پروفایل با فرمت ${format} فعال گردید.`, account.phone);
       }
     }
 
@@ -1519,7 +1493,7 @@ export class TelegramManager {
     aiPrompt?: string,
     aiModel?: string
   ) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
     account.features.auto_reply.active = active;
@@ -1536,7 +1510,7 @@ export class TelegramManager {
       account.features.auto_reply.ai_prompt = aiPrompt.trim();
     }
     if (aiModel !== undefined) {
-      account.features.auto_reply.ai_model = aiModel.trim() || "gemini-3.8-flash";
+      account.features.auto_reply.ai_model = aiModel.trim() || "gemini-2.5-flash";
     }
 
     this.saveState();
@@ -1546,7 +1520,7 @@ export class TelegramManager {
       "info",
       "auto_reply",
       `تنظیمات منشی خودکار بروز شد (وضعیت: ${active ? "فعال" : "غیرفعال"} | هوش مصنوعی: ${isAiActive ? "فعال 🤖" : "غیرفعال"}).`,
-      phone
+      account.phone
     );
     return account.features.auto_reply;
   }
@@ -1560,7 +1534,7 @@ export class TelegramManager {
     active: boolean,
     channels: Array<{ name: string; ref: string }>
   ) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
     account.features.mandatory_join.active = active;
@@ -1573,7 +1547,7 @@ export class TelegramManager {
       "info",
       "mandatory_join",
       `تنظیمات عضویت اجباری بروز شد (${channels.length} کانال).`,
-      phone
+      account.phone
     );
     return account.features.mandatory_join;
   }
@@ -1587,7 +1561,7 @@ export class TelegramManager {
     calculatorActive: boolean,
     marketActive: boolean
   ) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
     account.features.tools.calculator_active = calculatorActive;
@@ -1600,7 +1574,7 @@ export class TelegramManager {
       `ابزارهای چت بروز شدند (ماشین‌حساب: ${calculatorActive ? "فعال" : "خاموش"} | قیمت‌ها: ${
         marketActive ? "فعال" : "خاموش"
       })`,
-      phone
+      account.phone
     );
     return account.features.tools;
   }
@@ -1615,7 +1589,7 @@ export class TelegramManager {
     style: TelegramAccountFeatures["font"]["style"],
     scopes: TelegramAccountFeatures["font"]["scopes"]
   ) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
     account.features.font.active = active;
@@ -1623,7 +1597,7 @@ export class TelegramManager {
     account.features.font.scopes = scopes;
     this.saveState();
 
-    this.addLog("info", "system", `استایل فونت (${style}) و اسکوپ‌های اعمال بروز شد.`, phone);
+    this.addLog("info", "system", `استایل فونت (${style}) و اسکوپ‌های اعمال بروز شد.`, account.phone);
     return account.features.font;
   }
 
@@ -1632,10 +1606,10 @@ export class TelegramManager {
   // -------------------------------------------------------------
 
   public async startPmBroadcast(phone: string) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
-    const worker = this.workers.get(phone);
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
     if (!worker || !worker.client.connected) {
       throw new Error("Telegram client is not connected for this account.");
     }
@@ -1664,7 +1638,7 @@ export class TelegramManager {
     const targetRecipients = recipients.slice(0, maxLimit);
     const intervalMs = Math.max(5, account.features.broadcast.interval_seconds || 20) * 1000;
 
-    this.addLog("info", "broadcast", `شروع ارسال پیام همگانی به ${targetRecipients.length} مخاطب پی‌وی...`, phone);
+    this.addLog("info", "broadcast", `شروع ارسال پیام همگانی به ${targetRecipients.length} مخاطب پی‌وی...`, account.phone);
 
     (async () => {
       let sentCount = 0;
@@ -1683,10 +1657,10 @@ export class TelegramManager {
           await worker.client.sendMessage(recId, { message: text });
           sentCount++;
           account.features.broadcast.total_sent = (account.features.broadcast.total_sent || 0) + 1;
-          this.addLog("success", "broadcast", `پیام به مخاطب ${recId} ارسال شد.`, phone);
+          this.addLog("success", "broadcast", `پیام به مخاطب ${recId} ارسال شد.`, account.phone);
         } catch (err: any) {
           const errMsg = String(err?.errorMessage || err?.message || "");
-          this.addLog("warn", "broadcast", `ارسال به ${recId} ناموفق بود: ${errMsg}`, phone);
+          this.addLog("warn", "broadcast", `ارسال به ${recId} ناموفق بود: ${errMsg}`, account.phone);
         }
 
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -1695,9 +1669,9 @@ export class TelegramManager {
       account.features.broadcast.status = "stopped";
       worker.isPmBroadcasting = false;
       this.saveState();
-      this.addLog("success", "broadcast", `پایان ارسال پیام همگانی. تعداد کل ارسال: ${sentCount}`, phone);
+      this.addLog("success", "broadcast", `پایان ارسال پیام همگانی. تعداد کل ارسال: ${sentCount}`, account.phone);
     })().catch((err) => {
-      this.addLog("error", "broadcast", `خطای کلی در پیام همگانی: ${err?.message}`, phone);
+      this.addLog("error", "broadcast", `خطای کلی در پیام همگانی: ${err?.message}`, account.phone);
       account.features.broadcast.status = "stopped";
       worker.isPmBroadcasting = false;
       this.saveState();
@@ -1707,8 +1681,8 @@ export class TelegramManager {
   }
 
   public stopPmBroadcast(phone: string) {
-    const account = this.accounts.get(phone);
-    const worker = this.workers.get(phone);
+    const account = this.getAccount(phone);
+    const worker = account ? (this.workers.get(account.phone) || this.workers.get(phone)) : this.workers.get(phone);
     if (worker) {
       if (worker.pmBroadcastAbortController) {
         worker.pmBroadcastAbortController.abort();
@@ -1719,7 +1693,7 @@ export class TelegramManager {
       account.features.broadcast.status = "stopped";
       this.saveState();
     }
-    this.addLog("info", "broadcast", "ارسال پیام همگانی متوقف شد.", phone);
+    this.addLog("info", "broadcast", "ارسال پیام همگانی متوقف شد.", account ? account.phone : phone);
     return account?.features.broadcast;
   }
 
@@ -1729,7 +1703,7 @@ export class TelegramManager {
     intervalSeconds: number,
     maxRecipients: number
   ) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
     account.features.broadcast.message = message;
@@ -1737,7 +1711,7 @@ export class TelegramManager {
     account.features.broadcast.max_recipients = maxRecipients;
     this.saveState();
 
-    this.addLog("info", "broadcast", "تنظیمات پیام همگانی پی‌وی ذخیره گردید.", phone);
+    this.addLog("info", "broadcast", "تنظیمات پیام همگانی پی‌وی ذخیره گردید.", account.phone);
     return account.features.broadcast;
   }
 
@@ -1746,10 +1720,10 @@ export class TelegramManager {
   // -------------------------------------------------------------
 
   public async startBroadcast(phone: string) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
-    const worker = this.workers.get(phone);
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
     if (!worker || !worker.client.connected) {
       throw new Error("Telegram client is not connected for this account.");
     }
@@ -1769,7 +1743,7 @@ export class TelegramManager {
     account.features.tabchi.status = "broadcasting";
     this.saveState();
 
-    this.addLog("info", "tabchi", `شروع ارسال هوشمند تبچی...`, phone);
+    this.addLog("info", "tabchi", `شروع ارسال هوشمند تبچی...`, account.phone);
 
     (async () => {
       try {
@@ -1783,7 +1757,7 @@ export class TelegramManager {
               const entity = await worker.client.getEntity(clean);
               targets.push(entity);
             } catch (err: any) {
-              this.addLog("warn", "tabchi", `مقصد ${ref} یافت نشد: ${err?.message}`, phone);
+              this.addLog("warn", "tabchi", `مقصد ${ref} یافت نشد: ${err?.message}`, account.phone);
             }
           }
         } else {
@@ -1792,10 +1766,10 @@ export class TelegramManager {
           targets = dialogs.filter((d) => d.isGroup || (d.entity as any)?.megagroup);
         }
 
-        this.addLog("info", "tabchi", `تعداد ${targets.length} گروه مقصد شناسایی شد.`, phone);
+        this.addLog("info", "tabchi", `تعداد ${targets.length} گروه مقصد شناسایی شد.`, account.phone);
 
         if (targets.length === 0) {
-          this.addLog("warn", "tabchi", "هیچ گروهی برای ارسال پیدا نشد.", phone);
+          this.addLog("warn", "tabchi", "هیچ گروهی برای ارسال پیدا نشد.", account.phone);
           account.features.tabchi.status = "stopped";
           worker.isBroadcasting = false;
           this.saveState();
@@ -1815,7 +1789,7 @@ export class TelegramManager {
         for (let round = 1; round <= maxRounds; round++) {
           if (abortController.signal.aborted) break;
 
-          this.addLog("info", "tabchi", `درحال اجرای دور ${round} از ارسال تبچی...`, phone);
+          this.addLog("info", "tabchi", `درحال اجرای دور ${round} از ارسال تبچی...`, account.phone);
 
           for (const chat of targets) {
             if (abortController.signal.aborted) break;
@@ -1824,16 +1798,16 @@ export class TelegramManager {
               const entity = chat.inputEntity || chat;
               await worker.client.sendMessage(entity, { message: outgoing });
               account.features.tabchi.total_sent++;
-              this.addLog("success", "tabchi", `ارسال موفق به ${chat.title || chat.id || "گروه"}`, phone);
+              this.addLog("success", "tabchi", `ارسال موفق به ${chat.title || chat.id || "گروه"}`, account.phone);
             } catch (err: any) {
               account.features.tabchi.total_failed++;
               const msg = err?.errorMessage || err?.message || String(err);
               if (msg.includes("FLOOD_WAIT")) {
                 const waitSec = Number(msg.match(/\d+/)?.[0] || 30);
-                this.addLog("warn", "tabchi", `FloodWait تلگرام: ${waitSec} ثانیه توقف...`, phone);
+                this.addLog("warn", "tabchi", `FloodWait تلگرام: ${waitSec} ثانیه توقف...`, account.phone);
                 await new Promise((r) => setTimeout(r, waitSec * 1000));
               } else {
-                this.addLog("warn", "tabchi", `خطا در ارسال به ${chat.title || chat.id}: ${msg}`, phone);
+                this.addLog("warn", "tabchi", `خطا در ارسال به ${chat.title || chat.id}: ${msg}`, account.phone);
               }
             }
 
@@ -1847,12 +1821,12 @@ export class TelegramManager {
         account.features.tabchi.status = "stopped";
         worker.isBroadcasting = false;
         this.saveState();
-        this.addLog("success", "tabchi", "ارسال پیام‌های تبچی به پایان رسید.", phone);
+        this.addLog("success", "tabchi", "ارسال پیام‌های تبچی به پایان رسید.", account.phone);
       } catch (err: any) {
         account.features.tabchi.status = "error";
         worker.isBroadcasting = false;
         this.saveState();
-        this.addLog("error", "tabchi", `خطا در فرآیند ارسال تبچی: ${err?.message}`, phone);
+        this.addLog("error", "tabchi", `خطا در فرآیند ارسال تبچی: ${err?.message}`, account.phone);
       }
     })();
 
@@ -1860,8 +1834,8 @@ export class TelegramManager {
   }
 
   public stopBroadcast(phone: string) {
-    const account = this.accounts.get(phone);
-    const worker = this.workers.get(phone);
+    const account = this.getAccount(phone);
+    const worker = account ? (this.workers.get(account.phone) || this.workers.get(phone)) : this.workers.get(phone);
     if (worker) {
       if (worker.tabchiAbortController) {
         worker.tabchiAbortController.abort();
@@ -1872,7 +1846,7 @@ export class TelegramManager {
       account.features.tabchi.status = "stopped";
       this.saveState();
     }
-    this.addLog("info", "tabchi", `ارسال تبچی توسط کاربر متوقف شد.`, phone);
+    this.addLog("info", "tabchi", `ارسال تبچی توسط کاربر متوقف شد.`, account ? account.phone : phone);
     return account?.features.tabchi;
   }
 
@@ -1885,7 +1859,7 @@ export class TelegramManager {
     targetMode?: "all" | "selected",
     targets?: string[]
   ) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
 
     account.features.tabchi.message = message;
@@ -1900,12 +1874,13 @@ export class TelegramManager {
     }
     this.saveState();
 
-    this.addLog("info", "tabchi", "تنظیمات ماژول تبچی بروز شد.", phone);
+    this.addLog("info", "tabchi", "تنظیمات ماژول تبچی بروز شد.", account.phone);
     return account.features.tabchi;
   }
 
   public async getAccountDialogsCount(phone: string) {
-    const worker = this.workers.get(phone);
+    const account = this.getAccount(phone);
+    const worker = account ? (this.workers.get(account.phone) || this.workers.get(phone)) : this.workers.get(phone);
     if (!worker || !worker.client.connected) {
       return { total: 0, groups: 0, users: 0, channels: 0 };
     }
@@ -2224,7 +2199,14 @@ export class TelegramManager {
           callback_data: "menu_logs",
         },
       ],
-      // Row 4: 3-column (Web Panel link, Keyboard Mode Switch, Refresh)
+      // Row 4: Customer Credentials list for owner
+      [
+        {
+          text: `👥 دریافت رمز عبور مشتریان 🔑`,
+          callback_data: "menu_client_creds",
+        },
+      ],
+      // Row 5: 3-column (Web Panel link, Keyboard Mode Switch, Refresh)
       [
         {
           text: `🌐 ورود به پنل وب`,
@@ -3106,7 +3088,592 @@ export class TelegramManager {
       return;
     }
 
+    if (data === "menu_client_creds") {
+      await this.answerCallbackQuery(cq.id);
+      const accounts = Array.from(this.accounts.values());
+      let text =
+        `👥 <b>مشخصات ورود مشتریان به پنل تحت وب:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n\n`;
+      if (accounts.length === 0) {
+        text += `<i>هیچ اکانتی ثبت نشده است.</i>`;
+      } else {
+        for (const acc of accounts) {
+          text += `📱 <b>${acc.firstName || "کاربر"}</b> (<code>${acc.phone}</code>):\n`;
+          text += `   👤 نام کاربری: <code>${acc.client_credentials?.username || acc.phone}</code>\n`;
+          text += `   🔑 رمز عبور: <code>${acc.client_credentials?.password || "---"}</code>\n\n`;
+        }
+      }
+      text +=
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `👑 <b>ورود مالک اسکریپت:</b>\nنام‌کاربری: <code>samkaren12</code> | رمز: <code>samkaren12</code>`;
+      await this.editBotMessage(chatId, messageId, text, {
+        inline_keyboard: [[{ text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" }]],
+      });
+      return;
+    }
+
     await this.answerCallbackQuery(cq.id);
+  }
+
+  // -------------------------------------------------------------
+  // DEDICATED PER-ACCOUNT BOT & CUSTOMER AUTHENTICATION ENGINE
+  // -------------------------------------------------------------
+
+  public getAccountCredentials(phone: string): ClientCredentials | undefined {
+    const account = this.accounts.get(phone);
+    if (!account) return undefined;
+    if (!account.client_credentials) {
+      account.client_credentials = {
+        username: account.phone,
+        password: `SK-${Math.floor(100000 + Math.random() * 900000)}`,
+        created_at: new Date().toISOString(),
+      };
+      this.saveState();
+    }
+    return account.client_credentials;
+  }
+
+  public updateAccountCredentials(phone: string, username?: string, password?: string): ClientCredentials {
+    const account = this.accounts.get(phone);
+    if (!account) throw new Error("حساب یافت نشد.");
+
+    if (!account.client_credentials) {
+      account.client_credentials = {
+        username: account.phone,
+        password: `SK-${Math.floor(100000 + Math.random() * 900000)}`,
+        created_at: new Date().toISOString(),
+      };
+    }
+
+    if (username && username.trim()) {
+      account.client_credentials.username = username.trim();
+    }
+    if (password && password.trim()) {
+      account.client_credentials.password = password.trim();
+    }
+    this.saveState();
+    this.addLog("info", "system", `مشخصات ورود وب مشتری برای شماره ${phone} بروزرسانی شد.`, phone);
+    return account.client_credentials;
+  }
+
+  public findAccountByCredentials(username: string, pass: string): TelegramAccount | undefined {
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPass = pass.trim();
+
+    for (const acc of this.accounts.values()) {
+      const accUser = (acc.client_credentials?.username || acc.phone).trim().toLowerCase();
+      const accPhone = acc.phone.trim().toLowerCase();
+      const accPass = (acc.client_credentials?.password || "").trim();
+
+      if ((cleanUser === accUser || cleanUser === accPhone) && cleanPass === accPass) {
+        return acc;
+      }
+    }
+    return undefined;
+  }
+
+  public async testAccountBotToken(token: string): Promise<{ bot_username: string; bot_first_name: string }> {
+    const cleanToken = token.trim();
+    if (!cleanToken) throw new Error("لطفاً توکن ربات تلگرام را وارد کنید.");
+    const res = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
+    const data: any = await res.json();
+    if (!data.ok || !data.result) {
+      throw new Error(data.description || "توکن ربات تلگرام نامعتبر است.");
+    }
+    return {
+      bot_username: data.result.username || "",
+      bot_first_name: data.result.first_name || "",
+    };
+  }
+
+  public async updateAccountBot(phone: string, botToken: string, enabled: boolean): Promise<AccountBotConfig> {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("حساب مورد نظر یافت نشد.");
+
+    const cleanToken = (botToken || "").trim();
+    let botUsername = account.bot?.bot_username;
+    let botFirstName = account.bot?.bot_first_name;
+
+    if (cleanToken && cleanToken !== account.bot?.bot_token) {
+      const test = await this.testAccountBotToken(cleanToken);
+      botUsername = test.bot_username;
+      botFirstName = test.bot_first_name;
+    }
+
+    account.bot = {
+      bot_token: cleanToken,
+      enabled: Boolean(enabled),
+      bot_username: botUsername,
+      bot_first_name: botFirstName,
+      status: cleanToken && enabled ? "connected" : "disconnected",
+      owner_id: account.bot?.owner_id,
+    };
+    this.saveState();
+
+    if (cleanToken && enabled) {
+      await this.startAccountBot(account.phone);
+    } else {
+      this.stopAccountBot(account.phone);
+    }
+
+    this.addLog("info", "bot", `تنظیمات ربات اختصاصی شماره ${account.phone} با موفقیت ذخیره شد.`, account.phone);
+    return account.bot;
+  }
+
+  public async startAccountBot(phone: string): Promise<AccountBotConfig> {
+    const account = this.getAccount(phone);
+    if (!account || !account.bot?.bot_token) throw new Error("توکن ربات اختصاصی تنظیم نشده است.");
+
+    this.stopAccountBot(account.phone);
+
+    try {
+      await fetch(`https://api.telegram.org/bot${account.bot.bot_token}/deleteWebhook?drop_pending_updates=false`).catch(() => {});
+    } catch (_) {}
+
+    const botWorker = {
+      polling: true,
+      lastUpdateId: 0,
+    };
+    this.accountBots.set(account.phone, botWorker);
+    account.bot.status = "connected";
+    account.bot.last_active = new Date().toISOString();
+    this.saveState();
+
+    this.addLog("info", "bot", `ربات تلگرام اختصاصی شماره ${account.phone} فعال و آماده کار شد.`, account.phone);
+    this.pollAccountBot(account.phone);
+    return account.bot;
+  }
+
+  public stopAccountBot(phone: string) {
+    const account = this.getAccount(phone);
+    const key = account ? account.phone : phone;
+    const worker = this.accountBots.get(key) || this.accountBots.get(phone);
+    if (worker) {
+      worker.polling = false;
+      this.accountBots.delete(key);
+      this.accountBots.delete(phone);
+    }
+    if (account?.bot) {
+      account.bot.status = "disconnected";
+      this.saveState();
+    }
+  }
+
+  private async pollAccountBot(phone: string) {
+    const account = this.getAccount(phone);
+    const key = account ? account.phone : phone;
+    const worker = this.accountBots.get(key) || this.accountBots.get(phone);
+    if (!worker || !worker.polling || !account?.bot?.bot_token) return;
+
+    try {
+      const allowed = encodeURIComponent(JSON.stringify(["message", "callback_query"]));
+      const url = `https://api.telegram.org/bot${account.bot.bot_token}/getUpdates?offset=${worker.lastUpdateId + 1}&timeout=10&allowed_updates=${allowed}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.ok && Array.isArray(data.result)) {
+          for (const update of data.result) {
+            worker.lastUpdateId = Math.max(worker.lastUpdateId, update.update_id);
+            if (update.message) {
+              await this.handleAccountBotMessage(key, update.message);
+            } else if (update.callback_query) {
+              await this.handleAccountBotCallbackQuery(key, update.callback_query);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (worker.polling && (this.accountBots.has(key) || this.accountBots.has(phone))) {
+      setTimeout(() => this.pollAccountBot(key), 1200);
+    }
+  }
+
+  private getAccountBotDashboardPayload(phone: string) {
+    const account = this.getAccount(phone);
+    if (!account) return { text: "اکانت یافت نشد", reply_markup: { inline_keyboard: [] } };
+
+    const isSelfOn = Boolean(account.features?.self_time?.active);
+    const isTabchiOn = account.features?.tabchi?.status === "broadcasting";
+    const isAutoReplyOn = Boolean(account.features?.auto_reply?.active);
+    const tehranTime = formatTehranTime("HH:mm:ss");
+    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+
+    const sub = account.subscription;
+    let subStr = "نامحدود ♾️";
+    if (sub && !sub.is_unlimited && sub.expires_at) {
+      const diffMs = new Date(sub.expires_at).getTime() - Date.now();
+      if (diffMs <= 0) subStr = "منقضی شده ⛔ (نیازمند تمدید توسط مالک)";
+      else {
+        const days = Math.floor(diffMs / (24 * 3600 * 1000));
+        subStr = `${days} روز باقی‌مانده ⏳`;
+      }
+    }
+
+    const text =
+      `🤖 <b>ربات اختصاصی تلگرام برای شماره:</b> <code>${account.phone}</code>\n` +
+      `👤 <b>مالک شماره:</b> ${account.firstName || "کاربر"} ${account.lastName || ""}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⏱️ <b>ساعت رسمی تهران:</b> <code>${tehranTime}</code>\n` +
+      `🔘 <b>ساعت روی پروفایل (سلف):</b> ${isSelfOn ? "🟢 روشن" : "🔴 خاموش"}\n` +
+      `🚀 <b>تبچی خودکار:</b> ${isTabchiOn ? "🟢 فعال (درحال ارسال)" : "⚪ متوقف"}\n` +
+      `💬 <b>منشی پاسخگوی هوشمند:</b> ${isAutoReplyOn ? "🟢 روشن" : "⚪ خاموش"}\n` +
+      `📅 <b>اعتبار اشتراک:</b> ${subStr}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `برای کنترل امکانات یا دریافت مشخصات ورود به پنل تحت وب، کلیدهای رنگی زیر را لمس نمایید:`;
+
+    // Aiogram-styled color-coded buttons
+    const inline_keyboard = [
+      [
+        {
+          text: isSelfOn ? "🔴 خاموش کردن ساعت سلف" : "🟢 روشن کردن ساعت سلف",
+          callback_data: "acc_self_toggle",
+        },
+        {
+          text: isTabchiOn ? "🔴 توقف ارسال تبچی" : "🟣 شروع ارسال تبچی",
+          callback_data: "acc_tabchi_toggle",
+        },
+      ],
+      [
+        {
+          text: isAutoReplyOn ? "🔴 خاموش کردن منشی" : "🟢 روشن کردن منشی",
+          callback_data: "acc_autoreply_toggle",
+        },
+        {
+          text: "🟡 روزشمار اشتراک 📅",
+          callback_data: "acc_sub_status",
+        },
+      ],
+      [
+        {
+          text: "🔑 دریافت مشخصات ورود به پنل وب 🔐",
+          callback_data: "acc_get_creds",
+        },
+      ],
+      [
+        {
+          text: "📊 استعلام زنده دلار، طلا و رمزارز با نمودار 📈",
+          callback_data: "acc_market_quick",
+        },
+      ],
+      [
+        {
+          text: "🌐 باز کردن پنل تحت وب",
+          url: webAppUrl,
+        },
+        {
+          text: "🔄 بروزرسانی وضعیت",
+          callback_data: "acc_refresh",
+        },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private async handleAccountBotMessage(phone: string, msg: any) {
+    const account = this.accounts.get(phone);
+    if (!account || !account.bot?.bot_token) return;
+
+    const chatId = msg.chat?.id;
+    const fromId = msg.from?.id;
+    const text = (msg.text || "").trim();
+    const lower = text.toLowerCase();
+
+    if (!account.bot.owner_id && fromId) {
+      account.bot.owner_id = fromId;
+      this.saveState();
+    }
+
+    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const creds = account.client_credentials;
+
+    if (lower === "/login" || lower === "/creds" || lower === "/panel" || lower === "/pass" || text === "🔑 ورود به پنل") {
+      const credsMsg =
+        `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
+        `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
+        `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
+        `🌐 <b>آدرس پنل وب:</b> <a href="${webAppUrl}">${webAppUrl}</a>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 در صفحه ورود پنل، تب <b>«ورود مشتری»</b> را انتخاب نموده و مشخصات بالا را وارد کنید.`;
+
+      await this.sendDirectBotMessage(account.bot.bot_token, chatId, credsMsg, {
+        inline_keyboard: [
+          [{ text: "🌐 ورود مستقیم به پنل وب", url: webAppUrl }],
+          [{ text: "🔙 بازگشت به منوی ربات", callback_data: "acc_refresh" }],
+        ],
+      });
+      return;
+    }
+
+    // Market & Currency Query in Bot
+    if (
+      lower.startsWith("/price") ||
+      lower.startsWith(".price") ||
+      lower.startsWith("قیمت") ||
+      lower.startsWith("/dollar") ||
+      lower.startsWith("/crypto") ||
+      lower.startsWith("/gold") ||
+      lower === "دلار" ||
+      lower === "طلا" ||
+      lower === "سکه" ||
+      lower === "تتر"
+    ) {
+      const clean = lower
+        .replace(/^(\/price|\.price|قیمت|\/dollar|\/crypto|\/gold)\s*/, "")
+        .trim() || "usd";
+
+      try {
+        const quote = await getMarketQuote(clean);
+        const caption = formatTelegramMarketCaption(quote);
+        const kb = {
+          inline_keyboard: [
+            [
+              { text: "💵 دلار", callback_data: "acc_market_usd" },
+              { text: "🪙 طلا ۱۸", callback_data: "acc_market_gold18" },
+              { text: "🪙 سکه امامی", callback_data: "acc_market_emami" },
+            ],
+            [
+              { text: "💎 بیت‌کوین", callback_data: "acc_market_btc" },
+              { text: "⚡ تتر", callback_data: "acc_market_usdt" },
+              { text: "🔙 منوی اصلی", callback_data: "acc_refresh" },
+            ],
+          ],
+        };
+
+        if (quote.chart_url) {
+          await this.sendDirectBotPhoto(account.bot.bot_token, chatId, quote.chart_url, caption, kb);
+        } else {
+          await this.sendDirectBotMessage(account.bot.bot_token, chatId, caption, kb);
+        }
+        return;
+      } catch (_) {}
+    }
+
+    const payload = this.getAccountBotDashboardPayload(phone);
+    await this.sendDirectBotMessage(account.bot.bot_token, chatId, payload.text, payload.reply_markup);
+  }
+
+  private async handleAccountBotCallbackQuery(phone: string, cq: any) {
+    const account = this.accounts.get(phone);
+    if (!account || !account.bot?.bot_token) return;
+
+    const botToken = account.bot.bot_token;
+    const chatId = cq.message?.chat?.id;
+    const messageId = cq.message?.message_id;
+    const data = cq.data || "";
+
+    if (data === "acc_get_creds") {
+      const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+      const creds = account.client_credentials;
+      const credsMsg =
+        `🔐 <b>مشخصات اختصاصی ورود به پنل تحت وب:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
+        `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
+        `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
+        `🌐 <b>آدرس پنل وب:</b> <a href="${webAppUrl}">${webAppUrl}</a>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `در صفحه لاگین پنل وب، وارد تب <b>«ورود مشتری»</b> شده و مشخصات فوق را وارد کنید.`;
+
+      await this.answerDirectBotCallback(botToken, cq.id, "اطلاعات ورود ارسال شد 🔑");
+      await this.sendDirectBotMessage(botToken, chatId, credsMsg, {
+        inline_keyboard: [
+          [{ text: "🌐 ورود به پنل وب", url: webAppUrl }],
+          [{ text: "🔙 بازگشت به منو", callback_data: "acc_refresh" }],
+        ],
+      });
+      return;
+    }
+
+    if (data === "acc_self_toggle") {
+      const nextActive = !account.features.self_time.active;
+      await this.updateSelfTimeConfig(
+        phone,
+        nextActive,
+        account.features.self_time.format || "HH:mm",
+        account.features.self_time.font_style || "bold"
+      );
+      await this.answerDirectBotCallback(
+        botToken,
+        cq.id,
+        nextActive ? "ساعت سلف فعال شد 🟢" : "ساعت سلف خاموش شد 🔴"
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "acc_tabchi_toggle") {
+      const isBroadcasting = account.features.tabchi.status === "broadcasting";
+      if (isBroadcasting) {
+        this.stopBroadcast(phone);
+        await this.answerDirectBotCallback(botToken, cq.id, "ارسال تبچی متوقف شد 🛑");
+      } else {
+        this.startBroadcast(phone).catch(() => {});
+        await this.answerDirectBotCallback(botToken, cq.id, "ارسال تبچی شروع شد 🚀");
+      }
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "acc_autoreply_toggle") {
+      const nextActive = !account.features.auto_reply.active;
+      this.updateAutoReplyConfig(
+        phone,
+        nextActive,
+        account.features.auto_reply.messages?.length ? account.features.auto_reply.messages : ["سلام! در حال حاضر مشغول هستم."],
+        account.features.auto_reply.delay_seconds || 1
+      );
+      await this.answerDirectBotCallback(
+        botToken,
+        cq.id,
+        nextActive ? "منشی خودکار روشن شد 🟢" : "منشی خودکار خاموش شد 🔴"
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "acc_sub_status") {
+      const sub = account.subscription;
+      let statusStr = "♾️ اشتراک شما نامحدود و دائمی است.";
+      if (sub && !sub.is_unlimited && sub.expires_at) {
+        const diffMs = new Date(sub.expires_at).getTime() - Date.now();
+        if (diffMs <= 0) {
+          statusStr = "⛔ اشتراک شما منقضی شده است! لطفاً جهت تمدید با مالک اسکریپت هماهنگ فرمایید.";
+        } else {
+          const days = Math.floor(diffMs / (24 * 3600 * 1000));
+          const hours = Math.floor((diffMs % (24 * 3600 * 1000)) / (3600 * 1000));
+          statusStr = `⏳ اعتبار باقی‌مانده: ${days} روز و ${hours} ساعت`;
+        }
+      }
+      await this.answerDirectBotCallback(botToken, cq.id, statusStr, true);
+      return;
+    }
+
+    if (data === "acc_refresh") {
+      await this.answerDirectBotCallback(botToken, cq.id, "اطلاعات بروزرسانی شد 🔄");
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "acc_market_quick" || data.startsWith("acc_market_")) {
+      const assetKey = data === "acc_market_quick" ? "usd" : data.replace("acc_market_", "");
+      await this.answerDirectBotCallback(botToken, cq.id, "درحال دریافت استعلام زنده بازار... ⏳");
+      try {
+        const quote = await getMarketQuote(assetKey);
+        const caption = formatTelegramMarketCaption(quote);
+        const kb = {
+          inline_keyboard: [
+            [
+              { text: "💵 دلار", callback_data: "acc_market_usd" },
+              { text: "🪙 طلا ۱۸", callback_data: "acc_market_gold18" },
+              { text: "🪙 سکه امامی", callback_data: "acc_market_emami" },
+            ],
+            [
+              { text: "💎 بیت‌کوین", callback_data: "acc_market_btc" },
+              { text: "⚡ تتر", callback_data: "acc_market_usdt" },
+              { text: "🔙 منوی اصلی", callback_data: "acc_refresh" },
+            ],
+          ],
+        };
+
+        if (quote.chart_url) {
+          await this.sendDirectBotPhoto(botToken, chatId, quote.chart_url, caption, kb);
+        } else {
+          await this.sendDirectBotMessage(botToken, chatId, caption, kb);
+        }
+        return;
+      } catch (_) {
+        await this.answerDirectBotCallback(botToken, cq.id, "خطا در استعلام قیمت", true);
+        return;
+      }
+    }
+
+    await this.answerDirectBotCallback(botToken, cq.id);
+  }
+
+  private async sendDirectBotPhoto(
+    token: string,
+    chatId: number | string,
+    photoUrl: string,
+    caption?: string,
+    replyMarkup?: any
+  ) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: photoUrl,
+          caption: caption || "",
+          parse_mode: "HTML",
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
+      });
+      return await res.json();
+    } catch (_) {
+      return await this.sendDirectBotMessage(token, chatId, caption || "", replyMarkup);
+    }
+  }
+
+  private async sendDirectBotMessage(token: string, chatId: number | string, text: string, replyMarkup?: any) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
+      });
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  private async editDirectBotMessage(token: string, chatId: number | string, messageId: number, text: string, replyMarkup?: any) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          text,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
+      });
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  private async answerDirectBotCallback(token: string, callbackQueryId: string, text?: string, showAlert = false) {
+    try {
+      await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          callback_query_id: callbackQueryId,
+          text: text || "",
+          show_alert: showAlert,
+        }),
+      });
+    } catch (_) {}
   }
 
   public getAccounts(): TelegramAccount[] {
@@ -3114,7 +3681,27 @@ export class TelegramManager {
   }
 
   public getAccount(phone: string): TelegramAccount | undefined {
-    return this.accounts.get(phone);
+    if (!phone) return undefined;
+    if (this.accounts.has(phone)) return this.accounts.get(phone);
+
+    const trimmed = phone.trim();
+    if (this.accounts.has(trimmed)) return this.accounts.get(trimmed);
+
+    // Handle space replaced plus or URL decoded plus
+    const cleanWithPlus = trimmed.startsWith("+") ? trimmed : "+" + trimmed.replace(/^[\s]+/, "");
+    if (this.accounts.has(cleanWithPlus)) return this.accounts.get(cleanWithPlus);
+
+    // Digits only matching fallback
+    const digitsOnly = phone.replace(/[^0-9]/g, "");
+    if (digitsOnly.length >= 7) {
+      for (const [k, v] of this.accounts.entries()) {
+        if (k.replace(/[^0-9]/g, "") === digitsOnly) {
+          return v;
+        }
+      }
+    }
+
+    return undefined;
   }
 }
 

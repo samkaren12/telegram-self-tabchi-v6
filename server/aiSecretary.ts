@@ -23,41 +23,59 @@ const DEFAULT_SECRETARY_PROMPT = `شما یک منشی و دستیار هوشم�
 export async function generateAiSecretaryReply(
   options: GenerateSecretaryOptions
 ): Promise<string> {
-  const { incomingText, accountName, apiKey, customPrompt, model } = options;
+  const { incomingText, senderName, accountName, apiKey, customPrompt, model } = options;
 
   const resolvedApiKey = (apiKey || process.env.GEMINI_API_KEY || "").trim();
   if (!resolvedApiKey) {
     throw new Error("کلید هوش مصنوعی (API Key) یافت نشد.");
   }
 
-  const selectedModel = (model || "gemini-3.8-flash").trim();
-
-  const systemInstruction = customPrompt?.trim()
-    ? `${customPrompt.trim()}\n\nنام صاحب اکانت: ${accountName || "کاربر"}. لطفاً پاسخ نهایی را کوتاه و مستقیم بنویسید.`
-    : DEFAULT_SECRETARY_PROMPT.replace("{accountName}", accountName || "صاحب حساب");
-
   const ai = new GoogleGenAI({ apiKey: resolvedApiKey });
 
-  const promptText = `پیام جدید دریافت شده در پی‌وی تلگرام از مخاطب:\n"${incomingText.slice(0, 1000)}"\n\nلطفاً پاسخ مناسب بنویسید:`;
+  const systemInstruction = customPrompt?.trim() || DEFAULT_SECRETARY_PROMPT;
+  const promptText = `نام فرستنده: ${senderName || "کاربر ناشناس"}\nنام صاحب اکانت: ${accountName || "مدیر"}\nمتن پیام دریافتی:\n«${incomingText}»\n\nلطفاً به عنوان منشی یک پاسخ کوتاه و محترمانه برای ارسال به این پیام بنویسید:`;
 
-  const response = await ai.models.generateContent({
-    model: selectedModel,
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: promptText }],
-      },
-    ],
-    config: {
-      systemInstruction,
-      temperature: 0.7,
-      maxOutputTokens: 300,
-    },
-  });
+  const candidateModels = [
+    (model || "gemini-2.5-flash").trim(),
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+  ];
+  // Deduplicate
+  const modelsToTry = Array.from(new Set(candidateModels));
 
-  const reply = response.text?.trim() || "";
-  // Strip enclosing quotes if any
-  return reply.replace(/^["'«]+|["'»]+$/g, "").trim();
+  let lastError: any = null;
+  for (const targetModel of modelsToTry) {
+    try {
+      const response = await ai.models.generateContent({
+        model: targetModel,
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: promptText }],
+          },
+        ],
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+          maxOutputTokens: 300,
+        },
+      });
+
+      const reply = response.text?.trim() || "";
+      if (reply) {
+        return reply.replace(/^["'«]+|["'»]+$/g, "").trim();
+      }
+    } catch (err: any) {
+      lastError = err;
+      // If error is about API key being invalid, don't keep retrying other models
+      if (err?.message?.includes("API_KEY_INVALID") || err?.message?.includes("API key not valid")) {
+        throw new Error("کلید API نامعتبر است. لطفاً کلید معتبر از Google AI Studio وارد کنید.");
+      }
+    }
+  }
+
+  throw lastError || new Error("خطا در تولید پاسخ توسط مدل هوش مصنوعی");
 }
 
 /**
@@ -83,14 +101,14 @@ export async function testAiApiKey(apiKey: string, customPrompt?: string): Promi
       accountName: "مدیر",
       apiKey: cleanKey,
       customPrompt,
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
     });
 
     return {
       success: true,
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       reply: testReply,
-      message: "کلید هوش مصنوعی با موفقیت تایید شد و پاسخ نمونه دریافت گردید.",
+      message: "کلید هوش مصنوعی با موفقیت تایید شد و پاسخ نمونه دریافت گردید ✅",
     };
   } catch (err: any) {
     return {

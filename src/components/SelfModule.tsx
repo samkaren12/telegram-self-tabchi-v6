@@ -37,6 +37,7 @@ import {
 } from "../types";
 import { transformFont } from "../utils/fontStyler";
 import { formatTehranTime } from "../utils/tehranTime";
+import { MarketEngineCard } from "./MarketEngineCard";
 
 interface SelfModuleProps {
   account: TelegramAccount | null;
@@ -53,7 +54,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
 
   // Active sub-tab
   const [activeSubTab, setActiveSubTab] = useState<
-    "clock" | "autoReply" | "mandatoryJoin" | "tools" | "pmBroadcast" | "fonts"
+    "clock" | "autoReply" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
   >("clock");
 
   // 1. Self Time state
@@ -274,13 +275,6 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
 
   // Test AI Key
   const handleTestAiKey = async () => {
-    if (!aiApiKey.trim()) {
-      setAiTestResult({
-        success: false,
-        message: lang === "fa" ? "لطفاً ابتدا کلید API هوش مصنوعی را وارد فرمایید." : "Please enter an AI API key first.",
-      });
-      return;
-    }
     setTestingAiKey(true);
     setAiTestResult(null);
     try {
@@ -288,7 +282,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiKey: aiApiKey.trim(),
+          apiKey: aiApiKey.trim() || undefined,
           customPrompt: aiPrompt.trim() || undefined,
         }),
       });
@@ -574,6 +568,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
           { id: "clock", label: t.self.tabs.clock, icon: Clock, color: "text-cyan-400" },
           { id: "autoReply", label: t.self.tabs.autoReply, icon: MessageSquare, color: "text-emerald-400" },
           { id: "mandatoryJoin", label: t.self.tabs.mandatoryJoin, icon: Lock, color: "text-amber-400" },
+          { id: "market", label: lang === "fa" ? "نرخ زنده ارز، طلا و نمودار" : "Live Market & Charts", icon: TrendingUp, color: "text-emerald-400" },
           { id: "tools", label: t.self.tabs.tools, icon: Calculator, color: "text-blue-400" },
           { id: "pmBroadcast", label: t.self.tabs.pmBroadcast, icon: Radio, color: "text-rose-400" },
           { id: "fonts", label: t.self.tabs.fonts, icon: Type, color: "text-purple-400" },
@@ -1272,55 +1267,9 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
             )}
           </div>
 
-          {/* Interactive Market Rates Sandbox */}
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4" />
-              <span>{lang === "fa" ? "آزمایش استعلام نرخ زنده:" : "Test Live Market Quote:"}</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="sm:col-span-2">
-                <input
-                  type="text"
-                  value={testAssetQuery}
-                  onChange={(e) => setTestAssetQuery(e.target.value)}
-                  placeholder="usd, gold, bitcoin, eth, trx..."
-                  dir="ltr"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min={0.01}
-                  step="any"
-                  value={testAmount}
-                  onChange={(e) => setTestAmount(Number(e.target.value))}
-                  placeholder="Amount"
-                  dir="ltr"
-                  className="w-20 bg-slate-900 border border-slate-700 rounded-xl px-2 py-2 text-xs font-mono text-slate-100 text-center"
-                />
-                <button
-                  type="button"
-                  onClick={handleFetchTestQuote}
-                  disabled={fetchingQuote}
-                  className="flex-1 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors disabled:opacity-50 flex-shrink-0"
-                >
-                  {fetchingQuote ? "..." : (lang === "fa" ? "استعلام" : "Fetch")}
-                </button>
-              </div>
-            </div>
-
-            {marketQuoteResult && (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-200 font-mono space-y-1">
-                <div className="font-bold text-emerald-300">
-                  💹 {marketQuoteResult.amount} {marketQuoteResult.asset}
-                </div>
-                <div>USD: ${marketQuoteResult.total_usd.toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
-                <div>تومان: {marketQuoteResult.total_toman.toLocaleString("fa-IR")} تومان</div>
-                <div>ریال: {marketQuoteResult.total_irr.toLocaleString("fa-IR")} IRR</div>
-              </div>
-            )}
+          {/* Interactive Market Rates Sandbox & Visual Charts */}
+          <div className="pt-2">
+            <MarketEngineCard lang={lang} accountPhone={account.phone} />
           </div>
 
           {toolsFeedback && (
@@ -1340,6 +1289,13 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <span>{savingTools ? (lang === "fa" ? "درحال ذخیره..." : "Saving...") : t.self.saveChanges}</span>
             </button>
           </div>
+        </div>
+      )}
+
+      {/* 4b. SUB-TAB: LIVE MARKET & CHARTS */}
+      {activeSubTab === "market" && (
+        <div className="space-y-6">
+          <MarketEngineCard lang={lang} accountPhone={account.phone} />
         </div>
       )}
 

@@ -1,7 +1,7 @@
 import React from "react";
-import { Send, Globe, Server, Plus, ShieldCheck, UserCheck, ExternalLink, Code2 } from "lucide-react";
+import { Send, Globe, Server, Plus, ShieldCheck, UserCheck, ExternalLink, Code2, Crown, User, LogOut } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
-import { TelegramAccount, SystemHealth } from "../types";
+import { TelegramAccount, SystemHealth, AuthSession } from "../types";
 
 interface NavbarProps {
   lang: Language;
@@ -11,6 +11,8 @@ interface NavbarProps {
   onSelectAccount: (phone: string) => void;
   onOpenConnectModal: () => void;
   systemHealth: SystemHealth | null;
+  authSession?: AuthSession | null;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -21,6 +23,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectAccount,
   onOpenConnectModal,
   systemHealth,
+  authSession,
+  onLogout,
 }) => {
   const t = translations[lang];
   const activeCount = accounts.filter((a) => a.isOnline).length;
@@ -102,14 +106,50 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{lang === "fa" ? "EN" : "فارسی"}</span>
           </button>
 
-          {/* Connect Account Primary CTA */}
-          <button
-            onClick={onOpenConnectModal}
-            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-semibold text-xs sm:text-sm shadow-md shadow-cyan-500/20 hover:shadow-cyan-500/30 transition-all transform active:scale-95"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span className="whitespace-nowrap">{t.connectAccount}</span>
-          </button>
+          {/* User Session Role Badge */}
+          {authSession && (
+            <div
+              className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold ${
+                authSession.role === "owner"
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                  : "bg-cyan-500/10 border-cyan-500/30 text-cyan-300"
+              }`}
+            >
+              {authSession.role === "owner" ? (
+                <>
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{lang === "fa" ? "مالک: samkaren12" : "Owner"}</span>
+                </>
+              ) : (
+                <>
+                  <User className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="font-mono">{authSession.customerPhone || authSession.username}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Logout Button */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30 border border-slate-700 text-slate-300 transition-all text-xs"
+              title={lang === "fa" ? "خروج از پنل" : "Logout"}
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Connect Account Primary CTA (Owner Only) */}
+          {(!authSession || authSession.role === "owner") && (
+            <button
+              onClick={onOpenConnectModal}
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-semibold text-xs sm:text-sm shadow-md shadow-cyan-500/20 hover:shadow-cyan-500/30 transition-all transform active:scale-95"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span className="whitespace-nowrap">{t.connectAccount}</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

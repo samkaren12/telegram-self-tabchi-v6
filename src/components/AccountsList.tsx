@@ -14,10 +14,14 @@ import {
   Calendar,
   Infinity as InfinityIcon,
   Sparkles,
+  Bot,
+  KeyRound,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
 import { ExtendSubscriptionModal } from "./ExtendSubscriptionModal";
+import { AccountBotModal } from "./AccountBotModal";
+import { CustomerCredentialsModal } from "./CustomerCredentialsModal";
 
 interface AccountsListProps {
   accounts: TelegramAccount[];
@@ -40,6 +44,8 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [subscriptionTargetAccount, setSubscriptionTargetAccount] = useState<TelegramAccount | null>(null);
+  const [botTargetAccount, setBotTargetAccount] = useState<TelegramAccount | null>(null);
+  const [credentialsTargetAccount, setCredentialsTargetAccount] = useState<TelegramAccount | null>(null);
 
   const handleCopySession = (phone: string, sessionString: string) => {
     navigator.clipboard.writeText(sessionString);
@@ -249,11 +255,42 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 
                 <button
                   onClick={() => setSubscriptionTargetAccount(acc)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-semibold transition-all"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-semibold transition-all shadow-sm"
                   title="Extend or change subscription"
                 >
-                  <Calendar className="w-3.5 h-3.5" />
+                  <Calendar className="w-3.5 h-3.5 text-purple-400" />
                   <span>{lang === "fa" ? "تمدید اشتراک 📅" : "Extend"}</span>
+                </button>
+              </div>
+
+              {/* Aiogram-Style Color-Coded Control Buttons */}
+              <div className="grid grid-cols-2 gap-2 my-3">
+                <button
+                  onClick={() => setBotTargetAccount(acc)}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm transform active:scale-95 ${
+                    acc.bot?.enabled && acc.bot?.bot_token
+                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-emerald-500/10"
+                      : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                  title={lang === "fa" ? "ربات تلگرام اختصاصی این شماره" : "Dedicated Telegram Bot"}
+                >
+                  <Bot className={`w-4 h-4 ${acc.bot?.enabled ? "text-emerald-400 animate-pulse" : "text-slate-400"}`} />
+                  <span className="truncate">
+                    {acc.bot?.enabled && acc.bot?.bot_token
+                      ? (lang === "fa" ? "🟢 ربات تلگرام شماره" : "🟢 Account Bot")
+                      : (lang === "fa" ? "🤖 تنظیم ربات شماره" : "🤖 Setup Bot")}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setCredentialsTargetAccount(acc)}
+                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 transition-all shadow-sm shadow-amber-500/10 transform active:scale-95"
+                  title={lang === "fa" ? "مشخصات ورود مشتری به پنل وب" : "Customer Panel Credentials"}
+                >
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span className="truncate">
+                    {lang === "fa" ? "🔑 ورود مشتری به پنل" : "🔑 Customer Login"}
+                  </span>
                 </button>
               </div>
 
@@ -351,6 +388,24 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         isOpen={Boolean(subscriptionTargetAccount)}
         onClose={() => setSubscriptionTargetAccount(null)}
         account={subscriptionTargetAccount}
+        onSuccess={onRefresh}
+        lang={lang}
+      />
+
+      {/* Account Dedicated Bot Modal */}
+      <AccountBotModal
+        isOpen={Boolean(botTargetAccount)}
+        onClose={() => setBotTargetAccount(null)}
+        account={botTargetAccount}
+        onSuccess={onRefresh}
+        lang={lang}
+      />
+
+      {/* Customer Web Panel Credentials Modal */}
+      <CustomerCredentialsModal
+        isOpen={Boolean(credentialsTargetAccount)}
+        onClose={() => setCredentialsTargetAccount(null)}
+        account={credentialsTargetAccount}
         onSuccess={onRefresh}
         lang={lang}
       />

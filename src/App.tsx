@@ -15,7 +15,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Language, translations } from "./utils/i18n";
-import { TelegramAccount, SystemHealth } from "./types";
+import { TelegramAccount, SystemHealth, AuthSession } from "./types";
 import { Navbar } from "./components/Navbar";
 import { AccountsList } from "./components/AccountsList";
 import { SelfModule } from "./components/SelfModule";
@@ -36,6 +36,15 @@ export default function App() {
     return sessionStorage.getItem("hacker_v6_authenticated") === "true";
   });
 
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
+    try {
+      const raw = sessionStorage.getItem("hacker_v6_session");
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  });
+
   const [accounts, setAccounts] = useState<TelegramAccount[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
@@ -44,6 +53,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   const t = translations[lang];
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("hacker_v6_authenticated");
+    sessionStorage.removeItem("hacker_v6_session");
+    setAuthSession(null);
+    setIsUnlocked(false);
+  };
 
   // Fetch accounts and system health
   const fetchData = async () => {
@@ -79,8 +95,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  const visibleAccounts =
+    authSession?.role === "customer" && authSession.customerPhone
+      ? accounts.filter((a) => a.phone === authSession.customerPhone)
+      : accounts;
+
   const selectedAccount =
-    accounts.find((a) => a.phone === selectedPhone) || accounts[0] || null;
+    visibleAccounts.find((a) => a.phone === selectedPhone) || visibleAccounts[0] || null;
 
   const handleAccountConnected = (newAccount: TelegramAccount) => {
     setAccounts((prev) => {
@@ -102,6 +123,15 @@ export default function App() {
     );
   };
 
+  const isCustomer = authSession?.role === "customer";
+  const tabs = [
+    { id: "accounts", label: t.tabs.accounts, icon: Users, badge: visibleAccounts.length },
+    { id: "self", label: t.tabs.self, icon: Clock },
+    { id: "tabchi", label: t.tabs.tabchi, icon: Radio },
+    { id: "logs", label: t.tabs.logs, icon: Terminal },
+    ...(!isCustomer ? [{ id: "system", label: t.tabs.system, icon: Server }] : []),
+  ];
+
   return (
     <div
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-300"
@@ -111,11 +141,13 @@ export default function App() {
       <Navbar
         lang={lang}
         onToggleLang={() => setLang(lang === "fa" ? "en" : "fa")}
-        accounts={accounts}
+        accounts={visibleAccounts}
         selectedPhone={selectedPhone}
         onSelectAccount={setSelectedPhone}
         onOpenConnectModal={() => setIsConnectModalOpen(true)}
         systemHealth={systemHealth}
+        authSession={authSession}
+        onLogout={handleLogout}
       />
 
       {/* Main Container */}
@@ -205,13 +237,7 @@ export default function App() {
 
         {/* Tab Navigation Menu */}
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 border-b border-slate-800 scrollbar-none">
-          {[
-            { id: "accounts", label: t.tabs.accounts, icon: Users, badge: accounts.length },
-            { id: "self", label: t.tabs.self, icon: Clock },
-            { id: "tabchi", label: t.tabs.tabchi, icon: Radio },
-            { id: "logs", label: t.tabs.logs, icon: Terminal },
-            { id: "system", label: t.tabs.system, icon: Server },
-          ].map((tab) => {
+          {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -244,7 +270,7 @@ export default function App() {
         <div className="pt-2">
           {activeTab === "accounts" && (
             <AccountsList
-              accounts={accounts}
+              accounts={visibleAccounts}
               selectedPhone={selectedPhone}
               onSelectAccount={setSelectedPhone}
               onOpenConnectModal={() => setIsConnectModalOpen(true)}
@@ -271,7 +297,7 @@ export default function App() {
 
           {activeTab === "logs" && <LiveLogs lang={lang} />}
 
-          {activeTab === "system" && (
+          {activeTab === "system" && !isCustomer && (
             <SystemStatus health={systemHealth} lang={lang} />
           )}
         </div>
@@ -304,7 +330,13 @@ export default function App() {
       {!isUnlocked && (
         <StartupLockModal
           lang={lang}
-          onUnlocked={() => setIsUnlocked(true)}
+          onUnlocked={(session) => {
+            setAuthSession(session);
+            setIsUnlocked(true);
+            if (session.customerPhone) {
+              setSelectedPhone(session.customerPhone);
+            }
+          }}
         />
       )}
 
