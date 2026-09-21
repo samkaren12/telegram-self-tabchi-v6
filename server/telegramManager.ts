@@ -16,6 +16,7 @@ import {
   MarketQuote,
   ClientCredentials,
   AccountBotConfig,
+  OwnerCredentials,
 } from "../src/types.js";
 import { transformFont } from "../src/utils/fontStyler.js";
 import {
@@ -244,6 +245,11 @@ export class TelegramManager {
   private botLastUpdateId = 0;
   private accountBots: Map<string, { polling: boolean; lastUpdateId: number }> = new Map();
   private detectedAppUrl: string = "";
+  private ownerCredentials: { username: string; passwordHash: string; updatedAt: string } = {
+    username: "samkaren12",
+    passwordHash: "samkaren12", // supports both plaintext match & updated values
+    updatedAt: new Date().toISOString(),
+  };
 
   constructor() {
     this.loadState();
@@ -381,6 +387,13 @@ export class TelegramManager {
         if (parsed.botSettings) {
           this.botSettings = parsed.botSettings;
         }
+        if (parsed.ownerCredentials && typeof parsed.ownerCredentials === "object") {
+          this.ownerCredentials = {
+            username: parsed.ownerCredentials.username || "samkaren12",
+            passwordHash: parsed.ownerCredentials.passwordHash || "samkaren12",
+            updatedAt: parsed.ownerCredentials.updatedAt || new Date().toISOString(),
+          };
+        }
       }
     } catch (err: any) {
       this.addLog("error", "system", `Failed to load state: ${err?.message}`);
@@ -399,6 +412,7 @@ export class TelegramManager {
           {
             accounts: accountsObj,
             botSettings: this.botSettings,
+            ownerCredentials: this.ownerCredentials,
           },
           null,
           2
@@ -408,6 +422,50 @@ export class TelegramManager {
     } catch (err: any) {
       this.addLog("error", "system", `Failed to save state: ${err?.message}`);
     }
+  }
+
+  public getOwnerCredentials(): { username: string; updatedAt: string } {
+    return {
+      username: this.ownerCredentials.username,
+      updatedAt: this.ownerCredentials.updatedAt,
+    };
+  }
+
+  public verifyOwnerPassword(password: string): boolean {
+    const clean = (password || "").trim();
+    if (!clean) return false;
+    return (
+      clean === this.ownerCredentials.passwordHash ||
+      // If still default, also allow legacy selfsamkaren12
+      (this.ownerCredentials.passwordHash === "samkaren12" && clean === "selfsamkaren12")
+    );
+  }
+
+  public verifyOwnerCredentials(username: string, password: string): boolean {
+    const cleanUser = (username || "").trim();
+    const cleanPass = (password || "").trim();
+    if (!cleanPass) return false;
+    const isUserMatch =
+      cleanUser.toLowerCase() === this.ownerCredentials.username.toLowerCase() ||
+      (!cleanUser && cleanPass === this.ownerCredentials.passwordHash);
+    const isPassMatch = this.verifyOwnerPassword(cleanPass);
+    return isUserMatch && isPassMatch;
+  }
+
+  public updateOwnerCredentials(newUsername?: string, newPassword?: string): { success: boolean; username: string } {
+    if (newUsername && newUsername.trim()) {
+      this.ownerCredentials.username = newUsername.trim();
+    }
+    if (newPassword && newPassword.trim()) {
+      this.ownerCredentials.passwordHash = newPassword.trim();
+    }
+    this.ownerCredentials.updatedAt = new Date().toISOString();
+    this.saveState();
+    this.addLog("info", "system", `مشخصات ورود مالک سرور به نام کاربری "${this.ownerCredentials.username}" بروزرسانی شد.`);
+    return {
+      success: true,
+      username: this.ownerCredentials.username,
+    };
   }
 
   public async initAllAccounts() {
@@ -2911,6 +2969,61 @@ export class TelegramManager {
     if (cmd === "/logs") {
       const payload = this.getLogsMenuPayload();
       await this.sendBotMessage(chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (cmd.startsWith("/owner_pass") || cmd.startsWith("/setowner") || cmd.startsWith("/changepass")) {
+      const parts = text.split(/\s+/);
+      const newPass = parts[1]?.trim();
+      const newUsername = parts[2]?.trim();
+      if (!newPass || newPass.length < 5) {
+        await this.sendBotMessage(
+          chatId,
+          `⚠️ <b>دستور تغییر مشخصات مالک:</b>\n\n` +
+          `فرمت دستور:\n` +
+          `<code>/owner_pass [رمز_جدید] [نام_کاربری_اختیاری]</code>\n\n` +
+          `مثال:\n` +
+          `<code>/owner_pass secret1234</code>\n` +
+          `<code>/owner_pass secret1234 admin_sam</code>\n\n` +
+          `<i>حداقل طول رمز جدید باید ۵ کاراکتر باشد.</i>`
+        );
+        return;
+      }
+      this.updateOwnerCredentials(newUsername, newPass);
+      const owner = this.getOwnerCredentials();
+      await this.sendBotMessage(
+        chatId,
+        `✅ <b>مشخصات ورود مالک سرور با موفقیت بروزرسانی شد!</b>\n\n` +
+        `👤 <b>نام کاربری جدید:</b> <code>${owner.username}</code>\n` +
+        `🔑 <b>رمز عبور جدید:</b> <code>${newPass}</code>\n` +
+        `🌐 <b>آدرس پنل مالک:</b> <code>${this.getEffectiveAppUrl()}/admin</code>\n\n` +
+        `<i>اکنون سایر افراد به پنل دسترسی نخواهند داشت.</i>`
+      );
+      return;
+    }
+
+    if (cmd === "/owner" || cmd === "/owner_creds" || cmd === "/admin") {
+      const owner = this.getOwnerCredentials();
+      const adminUrl = `${this.getEffectiveAppUrl()}/admin`;
+      await this.sendBotMessage(
+        chatId,
+        `👑 <b>اطلاعات ورود به پنل مالک سرور:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 <b>نام کاربری:</b> <code>${owner.username}</code>\n` +
+        `🌐 <b>آدرس پنل مدیریت:</b> <a href="${adminUrl}">${adminUrl}</a>\n` +
+        `🔗 <code>${adminUrl}</code>\n` +
+        `🕒 <b>آخرین بروزرسانی:</b> <code>${new Date(owner.updatedAt).toLocaleString("fa-IR")}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 جهت تغییر رمز عبور یا نام کاربری از طریق تلگرام:\n` +
+        `<code>/owner_pass [رمز_جدید] [نام_کاربری_جدید]</code>\n\n` +
+        `یا در وب‌پنل روی دکمه طلایی «تغییر رمز و کاربری» کلیک کنید.`,
+        {
+          inline_keyboard: [
+            [{ text: "🚀 ورود به پنل مدیریت مالک", url: adminUrl }],
+            [{ text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" }],
+          ],
+        }
+      );
       return;
     }
 

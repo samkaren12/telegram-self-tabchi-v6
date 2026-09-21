@@ -31,9 +31,10 @@ import { SystemHealth } from "../types";
 interface SystemStatusProps {
   health: SystemHealth | null;
   lang: Language;
+  onOpenOwnerPasswordModal?: () => void;
 }
 
-export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
+export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang, onOpenOwnerPasswordModal }) => {
   const t = translations[lang];
 
   // BotFather Controller & MTProto API State
@@ -606,9 +607,9 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">{lang === "fa" ? "رمز ورود پیش‌فرض:" : "Default Startup Password:"}</span>
+              <span className="text-slate-400">{lang === "fa" ? "رمز ورود اولیه سرور:" : "Initial Startup Password:"}</span>
               <span className="text-cyan-400 font-mono font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20" dir="ltr">
-                selfsamkaren12
+                samkaren12
               </span>
             </div>
 
@@ -617,6 +618,17 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang }) => {
               <span className="text-slate-200 font-mono">GramJS MTProto v2.0 Native</span>
             </div>
           </div>
+
+          {onOpenOwnerPasswordModal && (
+            <button
+              type="button"
+              onClick={onOpenOwnerPasswordModal}
+              className="w-full py-2.5 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <Key className="w-4 h-4 text-amber-400" />
+              <span>{lang === "fa" ? "تغییر نام‌کاربری و رمز عبور اختصاصی مالک" : "Change Owner Username & Password"}</span>
+            </button>
+          )}
 
           <p className="text-[11px] text-slate-400 leading-relaxed">
             {lang === "fa"

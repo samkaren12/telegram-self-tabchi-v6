@@ -42,6 +42,17 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
     setRole(portalMode === "admin" ? "owner" : "customer");
   }, [portalMode]);
 
+  useEffect(() => {
+    fetch("/api/auth/owner-credentials")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.credentials?.username) {
+          setOwnerUsername(data.credentials.username);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const t = translations[lang];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,7 +60,7 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
     setVerifying(true);
     setError(null);
 
-    const activeRole = portalMode === "admin" ? "owner" : "customer";
+    const activeRole = role;
     const username = activeRole === "owner" ? ownerUsername.trim() : customerUsername.trim();
     const password = activeRole === "owner" ? ownerPassword.trim() : customerPassword.trim();
 
@@ -88,7 +99,7 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
     }
   };
 
-  const isOwnerPortal = portalMode === "admin";
+  const isOwnerPortal = role === "owner";
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4">
@@ -145,6 +156,46 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                   ? "کنترل ساعت روی پروفایل (سلف)، منشی هوشمند و ارسال خودکار تبچی"
                   : "Manage your Self-time clock, Auto-reply and Tabchi features")}
           </p>
+        </div>
+
+        {/* Role Selector Tabs */}
+        <div className="grid grid-cols-2 p-1 bg-slate-950/80 border border-slate-800 rounded-2xl gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setRole("owner");
+              setError(null);
+              try {
+                window.history.pushState({}, "", "/admin");
+              } catch (_) {}
+            }}
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+              isOwnerPortal
+                ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+            }`}
+          >
+            <Crown className="w-3.5 h-3.5" />
+            <span>{lang === "fa" ? "👑 پنل مالک سرور" : "Owner Portal"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setRole("customer");
+              setError(null);
+              try {
+                window.history.pushState({}, "", "/client");
+              } catch (_) {}
+            }}
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+              !isOwnerPortal
+                ? "bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span>{lang === "fa" ? "👤 پنل مشتری" : "Client Portal"}</span>
+          </button>
         </div>
 
         {/* Form */}
@@ -275,8 +326,8 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
           <p className="text-[11px] text-slate-400 font-mono">
             {isOwnerPortal ? (
               <>
-                👑 {lang === "fa" ? "شناسه مالک سیستم:" : "System Owner:"}{" "}
-                <span className="text-amber-400 font-bold">samkaren12</span>
+                👑 {lang === "fa" ? "شناسه کاربری مالک سیستم:" : "System Owner:"}{" "}
+                <span className="text-amber-400 font-bold">{ownerUsername || "samkaren12"}</span>
               </>
             ) : (
               <>

@@ -97,25 +97,25 @@ async function startServer() {
         return res.status(400).json({ success: false, message: "رمز عبور الزامی است." });
       }
 
-      if (role === "owner" || (!role && (cleanUser === "samkaren12" || cleanPass === "samkaren12" || cleanPass === "selfsamkaren12"))) {
-        // Owner verification (samkaren12 / samkaren12 or legacy selfsamkaren12)
-        if (
-          (cleanUser === "samkaren12" && cleanPass === "samkaren12") ||
-          cleanPass === "samkaren12" ||
-          cleanPass === "selfsamkaren12"
-        ) {
+      const isOwnerAttempt =
+        role === "owner" ||
+        (!role && (cleanUser === "samkaren12" || telegramManager.verifyOwnerCredentials(cleanUser, cleanPass)));
+
+      if (isOwnerAttempt) {
+        if (telegramManager.verifyOwnerCredentials(cleanUser, cleanPass)) {
+          const ownerInfo = telegramManager.getOwnerCredentials();
           return res.json({
             success: true,
             session: {
               role: "owner",
-              username: "samkaren12",
+              username: ownerInfo.username,
               token: crypto.randomUUID(),
             },
           });
         }
         return res.status(401).json({
           success: false,
-          message: "نام کاربری یا رمز عبور مالک نادرست است. نام کاربری و رمز پیش‌فرض: samkaren12",
+          message: "نام کاربری یا رمز عبور مالک نادرست است.",
         });
       }
 
@@ -140,6 +140,48 @@ async function startServer() {
       return res.status(401).json({
         success: false,
         message: "مشخصات ورود مشتری نامعتبر است! رمز عبور را با ارسال دستور /login در ربات تلگرام اختصاصی شماره خود یا بخش Saved Messages دریافت کنید.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Owner Credentials APIs (GET current username & PUT to change username/password)
+  app.get("/api/auth/owner-credentials", (req, res) => {
+    const creds = telegramManager.getOwnerCredentials();
+    res.json({ success: true, credentials: creds });
+  });
+
+  app.put("/api/auth/owner-credentials", (req, res) => {
+    try {
+      const { currentPassword, newUsername, newPassword } = req.body;
+
+      if (!currentPassword || !telegramManager.verifyOwnerPassword(currentPassword)) {
+        return res.status(403).json({
+          success: false,
+          message: "رمز عبور فعلی مالک نادرست است. جهت تغییر مشخصات باید رمز فعلی را صحیح وارد کنید.",
+        });
+      }
+
+      if (newUsername && newUsername.trim().length < 3) {
+        return res.status(400).json({
+          success: false,
+          message: "نام کاربری جدید باید حداقل ۳ کاراکتر باشد.",
+        });
+      }
+
+      if (newPassword && newPassword.trim().length < 5) {
+        return res.status(400).json({
+          success: false,
+          message: "رمز عبور جدید باید حداقل ۵ کاراکتر باشد.",
+        });
+      }
+
+      const result = telegramManager.updateOwnerCredentials(newUsername, newPassword);
+      return res.json({
+        success: true,
+        message: "مشخصات ورود مالک سرور با موفقیت بروزرسانی و ذخیره شد.",
+        username: result.username,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });

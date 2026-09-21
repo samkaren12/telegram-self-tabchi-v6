@@ -124,6 +124,12 @@ export interface TelegramAccount {
   bot?: AccountBotConfig;
 }
 
+export interface OwnerCredentials {
+  username: string;
+  password?: string;
+  updated_at?: string;
+}
+
 export interface BotSettings {
   bot_token: string;
   owner_id: number;

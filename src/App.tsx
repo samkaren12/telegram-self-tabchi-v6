@@ -25,6 +25,7 @@ import { SystemStatus } from "./components/SystemStatus";
 import { ConnectAccountModal } from "./components/ConnectAccountModal";
 import { StartupLockModal } from "./components/StartupLockModal";
 import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
+import { OwnerPasswordModal } from "./components/OwnerPasswordModal";
 
 const getInitialPortal = (): "admin" | "client" => {
   if (typeof window === "undefined") return "client";
@@ -63,6 +64,7 @@ export default function App() {
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [extendModalAccount, setExtendModalAccount] = useState<TelegramAccount | null>(null);
+  const [isOwnerPasswordModalOpen, setIsOwnerPasswordModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Sync portal from URL / history changes
@@ -191,6 +193,7 @@ export default function App() {
         systemHealth={systemHealth}
         authSession={authSession}
         onLogout={handleLogout}
+        onOpenOwnerPasswordModal={() => setIsOwnerPasswordModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -419,7 +422,11 @@ export default function App() {
           {activeTab === "logs" && <LiveLogs lang={lang} />}
 
           {activeTab === "system" && !isCustomer && (
-            <SystemStatus health={systemHealth} lang={lang} />
+            <SystemStatus
+              health={systemHealth}
+              lang={lang}
+              onOpenOwnerPasswordModal={() => setIsOwnerPasswordModalOpen(true)}
+            />
           )}
         </div>
       </main>
@@ -480,6 +487,21 @@ export default function App() {
         account={extendModalAccount}
         onSuccess={fetchData}
         lang={lang}
+      />
+
+      {/* Owner Password & Username Rotation Modal */}
+      <OwnerPasswordModal
+        isOpen={isOwnerPasswordModalOpen}
+        onClose={() => setIsOwnerPasswordModalOpen(false)}
+        lang={lang}
+        onCredentialsUpdated={(newUsername) => {
+          if (authSession) {
+            setAuthSession({
+              ...authSession,
+              username: newUsername,
+            });
+          }
+        }}
       />
     </div>
   );

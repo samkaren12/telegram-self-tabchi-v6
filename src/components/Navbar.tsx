@@ -1,5 +1,5 @@
 import React from "react";
-import { Send, Globe, Server, Plus, ShieldCheck, UserCheck, ExternalLink, Code2, Crown, User, LogOut } from "lucide-react";
+import { Send, Globe, Server, Plus, ShieldCheck, UserCheck, ExternalLink, Code2, Crown, User, LogOut, KeyRound } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount, SystemHealth, AuthSession } from "../types";
 
@@ -13,6 +13,7 @@ interface NavbarProps {
   systemHealth: SystemHealth | null;
   authSession?: AuthSession | null;
   onLogout?: () => void;
+  onOpenOwnerPasswordModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -25,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   systemHealth,
   authSession,
   onLogout,
+  onOpenOwnerPasswordModal,
 }) => {
   const t = translations[lang];
   const activeCount = accounts.filter((a) => a.isOnline).length;
@@ -118,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {authSession.role === "owner" ? (
                 <>
                   <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{lang === "fa" ? "مالک: samkaren12" : "Owner"}</span>
+                  <span>{lang === "fa" ? `مالک: ${authSession.username || "samkaren12"}` : `Owner: ${authSession.username}`}</span>
                 </>
               ) : (
                 <>
@@ -127,6 +129,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </>
               )}
             </div>
+          )}
+
+          {/* Owner Change Password/Username Button */}
+          {authSession?.role === "owner" && onOpenOwnerPasswordModal && (
+            <button
+              onClick={onOpenOwnerPasswordModal}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold transition-all shadow-sm"
+              title={lang === "fa" ? "تغییر نام‌کاربری و رمز عبور مالک" : "Change Owner Credentials"}
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden md:inline">{lang === "fa" ? "تغییر رمز و کاربری" : "Change Login"}</span>
+            </button>
           )}
 
           {/* Logout Button */}
