@@ -284,32 +284,65 @@ const ALIASES: Record<string, string> = {
 // CACHED RATES ENGINE
 // -------------------------------------------------------------
 
-let cachedUsdIrr = 1475000; // 147,500 Tomans
+// Real-world free-market benchmark in Iran (USDT / Free Market USD to Toman)
+// Default baseline rate is 228,600 Tomans (2,286,000 IRR)
+let cachedUsdIrr = 2286000; // 228,600 Tomans
+let customUsdRateToman: number | null = null; // Owner manual override if desired
 let lastRatesFetch = 0;
 let cachedFiatRates: Record<string, number> = {}; // Relative to USD (1 USD = X Currency)
 let cachedCryptoPrices: Record<string, { usd: number; change24h: number }> = {};
 let cachedGoldOunceUsd = 4365.0;
 
+export function setCustomUsdRate(toman: number | null) {
+  customUsdRateToman = toman && toman > 1000 ? Math.round(toman) : null;
+  if (customUsdRateToman) {
+    cachedUsdIrr = customUsdRateToman * 10;
+  }
+}
+
 /**
- * Refreshes live market rates from global APIs
+ * Refreshes live market rates from global APIs:
+ * - Free market USD/Toman live rate from Wallex orderbook (Tehran live market)
+ * - 160+ world fiat currencies from Open Exchange Rates
+ * - Binance PAXG (Gold Ounce backed 1:1)
+ * - CoinGecko / Binance Crypto
  */
 async function refreshMarketRates(): Promise<void> {
   const now = Date.now();
-  if (now - lastRatesFetch < 60 * 1000 && Object.keys(cachedFiatRates).length > 0) {
+  if (now - lastRatesFetch < 45 * 1000 && Object.keys(cachedFiatRates).length > 0) {
     return;
   }
 
-  // 1. Fetch Fiat Rates from open.er-api.com
+  // 1. Fetch REAL-TIME Free Market USD / USDT rate in Tomans from Wallex
+  if (!customUsdRateToman) {
+    try {
+      const wallexRes = await fetch("https://api.wallex.ir/v1/markets", {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (wallexRes.ok) {
+        const wallexData: any = await wallexRes.json();
+        const usdtSymbol = wallexData?.result?.symbols?.USDTTMN;
+        const livePrice = parseFloat(usdtSymbol?.stats?.lastPrice || usdtSymbol?.stats?.askPrice || "0");
+        if (livePrice && livePrice > 30000 && livePrice < 1000000) {
+          cachedUsdIrr = Math.round(livePrice * 10);
+        }
+      }
+    } catch (_) {
+      // Fallback: keep cached rate (228,600 Tomans baseline)
+    }
+  }
+
+  // 2. Fetch Fiat Rates from open.er-api.com for 160+ world currencies
   try {
-    const res = await fetch("https://open.er-api.com/v6/latest/USD");
+    const res = await fetch("https://open.er-api.com/v6/latest/USD", {
+      signal: AbortSignal.timeout(6000),
+    });
     if (res.ok) {
       const data: any = await res.json();
       if (data?.rates) {
         cachedFiatRates = data.rates;
-        const rawIrr = Number(data.rates.IRR);
-        if (rawIrr && rawIrr > 400000) {
-          cachedUsdIrr = rawIrr;
-        }
+        // Do NOT use data.rates.IRR as it is official subsidized/bank rate and doesn't match real bazaar
       }
     }
   } catch (_) {}
@@ -800,3 +833,109 @@ export function getFeaturedMarketList(): Array<{
     { id: "trx", name_fa: "ترون", symbol: "TRX", category: "crypto" },
   ];
 }
+
+function normalizeDigits(str: string): string {
+  const faDigits = "۰۱۲۳۴۵۶۷۸۹";
+  const enDigits = "0123456789";
+  return str.replace(/[۰-۹]/g, (char) => {
+    const idx = faDigits.indexOf(char);
+    return idx >= 0 ? enDigits[idx] : char;
+  });
+}
+
+/**
+ * Evaluates mathematical expressions with support for real-time currency rates
+ * Example: "500 * dollar", "100 usd + 50 eur", "250000 + 480000", "500 * دلار"
+ */
+export async function evaluateMathWithMarketRates(
+  text: string
+): Promise<{
+  success: boolean;
+  result: number;
+  originalExpr: string;
+  resolvedExpr: string;
+  formattedResult: string;
+  currencyBreakdown?: string[];
+} | null> {
+  const normalized = normalizeDigits(text).trim();
+  if (!normalized) return null;
+
+  const hasMathOp = /[+\-*/×÷^]/.test(normalized);
+  const currencyMatch = normalized.match(
+    /(دلار|یورو|درهم|پوند|لیر|طلا|سکه|بیت ?کوین|تتر|اتریوم|dollar|usd|eur|aed|gbp|try|usdt|btc|eth|gold)/i
+  );
+
+  if (!hasMathOp && !currencyMatch) {
+    return null;
+  }
+
+  await refreshMarketRates();
+
+  let resolved = normalized
+    .replace(/^(=|calc\s*|حساب\s*:?\s*)/i, "")
+    .replace(/×/g, "*")
+    .replace(/÷/g, "/")
+    .replace(/−/g, "-")
+    .replace(/[,٬]/g, "");
+
+  const breakdowns: string[] = [];
+
+  const currencyReplacements: Array<{ regex: RegExp; key: string; nameFa: string }> = [
+    { regex: /(?:دلار آمریکا|دلار|dollar|usd)/gi, key: "usd", nameFa: "دلار" },
+    { regex: /(?:تتر|usdt)/gi, key: "usdt", nameFa: "تتر" },
+    { regex: /(?:یورو|euro|eur)/gi, key: "eur", nameFa: "یورو" },
+    { regex: /(?:درهم امارات|درهم|dirham|aed)/gi, key: "aed", nameFa: "درهم" },
+    { regex: /(?:پوند انگلیس|پوند|pound|gbp)/gi, key: "gbp", nameFa: "پوند" },
+    { regex: /(?:لیر ترکیه|لیر|lira|try)/gi, key: "try", nameFa: "لیر" },
+    { regex: /(?:سکه امامی|سکه|emami)/gi, key: "emami", nameFa: "سکه امامی" },
+    { regex: /(?:گرم طلا|طلا ۱۸|طلا|gold18|gold)/gi, key: "gold18", nameFa: "گرم طلا ۱۸" },
+    { regex: /(?:بیت ?کوین|بیتکوین|btc|bitcoin)/gi, key: "btc", nameFa: "بیت‌کوین" },
+    { regex: /(?:اتریوم|eth|ethereum)/gi, key: "eth", nameFa: "اتریوم" },
+    { regex: /(?:تون کوین|تون|ton)/gi, key: "ton", nameFa: "تون" },
+    { regex: /(?:سولانا|sol|solana)/gi, key: "sol", nameFa: "سولانا" },
+    { regex: /(?:ترون|trx|tron)/gi, key: "trx", nameFa: "ترون" },
+  ];
+
+  let hasCurrency = false;
+  for (const cr of currencyReplacements) {
+    if (cr.regex.test(resolved)) {
+      hasCurrency = true;
+      try {
+        const quote = await getMarketQuote(cr.key);
+        const rate = quote.unit_toman;
+        breakdowns.push(`۱ ${cr.nameFa} = ${rate.toLocaleString("fa-IR")} تومان`);
+        resolved = resolved.replace(
+          new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${cr.regex.source}`, "gi"),
+          `$1 * ${rate}`
+        );
+        resolved = resolved.replace(cr.regex, ` ${rate} `);
+      } catch (_) {}
+    }
+  }
+
+  const evalReady = resolved.replace(/\s+/g, "").replace(/\^/g, "**");
+
+  if (!/^[\d+\-*/%().**]+$/.test(evalReady)) {
+    return null;
+  }
+
+  try {
+    const fn = new Function(`"use strict"; return (${evalReady});`);
+    const val = Number(fn());
+    if (isNaN(val) || !isFinite(val)) return null;
+
+    return {
+      success: true,
+      result: val,
+      originalExpr: text,
+      resolvedExpr: resolved.trim(),
+      formattedResult: hasCurrency
+        ? `${Math.round(val).toLocaleString("fa-IR")} تومان`
+        : val.toLocaleString("fa-IR"),
+      currencyBreakdown: breakdowns.length > 0 ? breakdowns : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+

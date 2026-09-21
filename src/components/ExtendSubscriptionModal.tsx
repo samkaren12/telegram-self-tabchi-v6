@@ -59,6 +59,9 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
     setError(null);
 
     try {
+      const sessionRaw = sessionStorage.getItem("hacker_v6_session");
+      const role = sessionRaw ? JSON.parse(sessionRaw).role : "owner";
+
       const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/subscription`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -66,6 +69,7 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
           is_unlimited: isUnlimited,
           days_to_add: isUnlimited ? undefined : Number(daysToAdd),
           notes,
+          requester_role: role,
         }),
       });
 

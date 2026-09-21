@@ -82,7 +82,6 @@ if [ ! -f "package.json" ]; then
       echo -e "${YELLOW}⚡ GitHub clone unavailable, retrieving cloud release bundle...${NC}"
       mkdir -p "$REPO_DIR"
       cd "$REPO_DIR"
-      curl -fsSL "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app/api/download-bundle" -o bundle.tar.gz || \
       curl -fsSL "https://ais-dev-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app/api/download-bundle" -o bundle.tar.gz
       tar -xzf bundle.tar.gz --overwrite
       rm -f bundle.tar.gz

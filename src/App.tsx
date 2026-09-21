@@ -26,11 +26,24 @@ import { ConnectAccountModal } from "./components/ConnectAccountModal";
 import { StartupLockModal } from "./components/StartupLockModal";
 import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
 
+const getInitialPortal = (): "admin" | "client" => {
+  if (typeof window === "undefined") return "client";
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  const search = new URLSearchParams(window.location.search).get("portal");
+
+  if (path.includes("admin") || path.includes("owner") || hash.includes("admin") || search === "admin") {
+    return "admin";
+  }
+  return "client";
+};
+
 export default function App() {
   const [lang, setLang] = useState<Language>("fa");
+  const [portalMode, setPortalMode] = useState<"admin" | "client">(getInitialPortal);
   const [activeTab, setActiveTab] = useState<
     "accounts" | "self" | "tabchi" | "logs" | "system"
-  >("accounts");
+  >(() => (getInitialPortal() === "client" ? "self" : "accounts"));
 
   const [isUnlocked, setIsUnlocked] = useState(() => {
     return sessionStorage.getItem("hacker_v6_authenticated") === "true";
@@ -51,6 +64,23 @@ export default function App() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [extendModalAccount, setExtendModalAccount] = useState<TelegramAccount | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Sync portal from URL / history changes
+  useEffect(() => {
+    const handlePortalChange = () => {
+      const mode = getInitialPortal();
+      setPortalMode(mode);
+      if (mode === "client") {
+        setActiveTab("self");
+      }
+    };
+    window.addEventListener("popstate", handlePortalChange);
+    window.addEventListener("hashchange", handlePortalChange);
+    return () => {
+      window.removeEventListener("popstate", handlePortalChange);
+      window.removeEventListener("hashchange", handlePortalChange);
+    };
+  }, []);
 
   const t = translations[lang];
 
@@ -124,13 +154,26 @@ export default function App() {
   };
 
   const isCustomer = authSession?.role === "customer";
-  const tabs = [
-    { id: "accounts", label: t.tabs.accounts, icon: Users, badge: visibleAccounts.length },
-    { id: "self", label: t.tabs.self, icon: Clock },
-    { id: "tabchi", label: t.tabs.tabchi, icon: Radio },
-    { id: "logs", label: t.tabs.logs, icon: Terminal },
-    ...(!isCustomer ? [{ id: "system", label: t.tabs.system, icon: Server }] : []),
-  ];
+  const tabs = isCustomer
+    ? [
+        { id: "self", label: t.tabs.self, icon: Clock },
+        { id: "tabchi", label: t.tabs.tabchi, icon: Radio },
+        { id: "logs", label: t.tabs.logs, icon: Terminal },
+      ]
+    : [
+        { id: "accounts", label: t.tabs.accounts, icon: Users, badge: visibleAccounts.length },
+        { id: "self", label: t.tabs.self, icon: Clock },
+        { id: "tabchi", label: t.tabs.tabchi, icon: Radio },
+        { id: "logs", label: t.tabs.logs, icon: Terminal },
+        { id: "system", label: t.tabs.system, icon: Server },
+      ];
+
+  // Auto-switch away from accounts tab if customer
+  useEffect(() => {
+    if (isCustomer && (activeTab === "accounts" || activeTab === "system")) {
+      setActiveTab("self");
+    }
+  }, [isCustomer, activeTab]);
 
   return (
     <div
@@ -152,6 +195,63 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* Customer Access Alert if on admin URL */}
+        {isUnlocked && isCustomer && portalMode === "admin" && (
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 text-center space-y-3">
+            <p className="text-sm font-bold text-rose-300">
+              ⚠️ دسترسی غیرمجاز: این بخش منحصراً متعلق به پنل مدیریت مالک سرور است.
+            </p>
+            <button
+              onClick={() => {
+                window.history.pushState({}, "", "/client");
+                setPortalMode("client");
+                setActiveTab("self");
+              }}
+              className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 text-xs font-bold shadow-md hover:bg-cyan-400 transition-all"
+            >
+              انتقال به پنل اختصاصی مشتریان
+            </button>
+          </div>
+        )}
+
+        {/* Customer Welcome & Subscription Info Banner */}
+        {isCustomer && selectedAccount && (
+          <div className="bg-gradient-to-r from-cyan-950/40 via-slate-900 to-slate-900 border border-cyan-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 flex items-center justify-center flex-shrink-0">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">
+                  پنل اختصاصی کاربر تلگرام ({selectedAccount.phone})
+                </h3>
+                <p className="text-xs text-slate-400">
+                  مدیریت ساعت زنده روی پروفایل، تبچی و منشی اختصاصی اکانت شما
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs font-mono text-cyan-300 bg-cyan-950/60 border border-cyan-500/20 px-3.5 py-2 rounded-xl flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-cyan-400" />
+              <span>
+                {selectedAccount.subscription?.is_unlimited ? (
+                  "اعتبار اشتراک: دائمی و نامحدود ♾️"
+                ) : selectedAccount.subscription?.expires_at ? (
+                  (() => {
+                    const diffMs = new Date(selectedAccount.subscription.expires_at).getTime() - Date.now();
+                    if (diffMs <= 0) return "⛔ وضعیت اشتراک: منقضی شده (جهت تمدید به مالک پیام دهید)";
+                    const days = Math.floor(diffMs / (24 * 3600 * 1000));
+                    const hours = Math.floor((diffMs % (24 * 3600 * 1000)) / (3600 * 1000));
+                    return `⏳ روزشمار اعتبار: ${days} روز و ${hours} ساعت باقی‌مانده`;
+                  })()
+                ) : (
+                  "اعتبار اشتراک: نامحدود"
+                )}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Active Account Quick Banner */}
         {selectedAccount && (
           <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
@@ -200,22 +300,43 @@ export default function App() {
                 </span>
               ) : selectedAccount.subscription?.expires_at &&
                 new Date(selectedAccount.subscription.expires_at).getTime() <= Date.now() ? (
-                <button
-                  onClick={() => setExtendModalAccount(selectedAccount)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50 flex items-center gap-1 animate-pulse hover:bg-rose-500/30 transition-colors"
-                >
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>{lang === "fa" ? "⛔ اشتراک منقضی! تمدید" : "Expired! Extend"}</span>
-                </button>
+                isCustomer ? (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{lang === "fa" ? "⛔ اشتراک منقضی شده" : "Expired"}</span>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setExtendModalAccount(selectedAccount)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50 flex items-center gap-1 animate-pulse hover:bg-rose-500/30 transition-colors"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{lang === "fa" ? "⛔ اشتراک منقضی! تمدید" : "Expired! Extend"}</span>
+                  </button>
+                )
               ) : selectedAccount.subscription?.expires_at ? (
-                <button
-                  onClick={() => setExtendModalAccount(selectedAccount)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 hover:bg-cyan-500/20 transition-colors"
-                  title="Click to extend"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>{lang === "fa" ? "تمدید اشتراک" : "Extend Sub"}</span>
-                </button>
+                isCustomer ? (
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>
+                      {(() => {
+                        const diffMs = new Date(selectedAccount.subscription.expires_at).getTime() - Date.now();
+                        const days = Math.max(0, Math.floor(diffMs / (24 * 3600 * 1000)));
+                        const hours = Math.max(0, Math.floor((diffMs % (24 * 3600 * 1000)) / (3600 * 1000)));
+                        return `${days} روز و ${hours} ساعت باقی‌مانده`;
+                      })()}
+                    </span>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setExtendModalAccount(selectedAccount)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 hover:bg-cyan-500/20 transition-colors"
+                    title="Click to extend"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>{lang === "fa" ? "تمدید اشتراک" : "Extend Sub"}</span>
+                  </button>
+                )
               ) : null}
 
               {selectedAccount.features?.self_time?.active && (
@@ -329,12 +450,16 @@ export default function App() {
       {/* Startup Lock Modal for Hacker Edition v6 */}
       {!isUnlocked && (
         <StartupLockModal
+          portalMode={portalMode}
           lang={lang}
           onUnlocked={(session) => {
             setAuthSession(session);
             setIsUnlocked(true);
-            if (session.customerPhone) {
-              setSelectedPhone(session.customerPhone);
+            if (session.role === "customer") {
+              setActiveTab("self");
+              if (session.customerPhone) {
+                setSelectedPhone(session.customerPhone);
+              }
             }
           }}
         />

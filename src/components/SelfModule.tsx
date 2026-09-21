@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Clock,
   MessageSquare,
@@ -133,54 +133,58 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
   const [savingFont, setSavingFont] = useState(false);
   const [fontFeedback, setFontFeedback] = useState<string | null>(null);
 
-  // Sync state when account changes
+  const loadedPhoneRef = useRef<string | null>(null);
+
+  // Sync state when account changes (Only on switching accounts, preventing 4s poll resets)
   useEffect(() => {
-    if (account?.features) {
-      // Self Time
-      setTimeActive(Boolean(account.features.self_time?.active));
-      setTimeFormat(account.features.self_time?.format || "HH:mm");
-      setTimeStyle(account.features.self_time?.font_style || "bold");
+    if (!account?.features) return;
+    if (loadedPhoneRef.current === account.phone) return;
+    loadedPhoneRef.current = account.phone;
 
-      // Auto Reply
-      setAutoReplyActive(Boolean(account.features.auto_reply?.active));
-      setMessages(account.features.auto_reply?.messages || []);
-      setDelaySeconds(account.features.auto_reply?.delay_seconds ?? 1);
-      setAiEnabled(Boolean(account.features.auto_reply?.ai_enabled));
-      setAiApiKey(account.features.auto_reply?.ai_api_key || "");
-      setAiPrompt(account.features.auto_reply?.ai_prompt || "");
-      setAiModel(account.features.auto_reply?.ai_model || "gemini-3.8-flash");
-      setAiTestResult(null);
+    // Self Time
+    setTimeActive(Boolean(account.features.self_time?.active));
+    setTimeFormat(account.features.self_time?.format || "HH:mm");
+    setTimeStyle(account.features.self_time?.font_style || "bold");
 
-      // Mandatory Join
-      setMandatoryActive(Boolean(account.features.mandatory_join?.active));
-      setChannels(account.features.mandatory_join?.channels || []);
+    // Auto Reply
+    setAutoReplyActive(Boolean(account.features.auto_reply?.active));
+    setMessages(account.features.auto_reply?.messages || []);
+    setDelaySeconds(account.features.auto_reply?.delay_seconds ?? 1);
+    setAiEnabled(Boolean(account.features.auto_reply?.ai_enabled));
+    setAiApiKey(account.features.auto_reply?.ai_api_key || "");
+    setAiPrompt(account.features.auto_reply?.ai_prompt || "");
+    setAiModel(account.features.auto_reply?.ai_model || "gemini-3.8-flash");
+    setAiTestResult(null);
 
-      // Tools
-      setCalcActive(account.features.tools?.calculator_active ?? true);
-      setMarketActive(account.features.tools?.market_active ?? true);
+    // Mandatory Join
+    setMandatoryActive(Boolean(account.features.mandatory_join?.active));
+    setChannels(account.features.mandatory_join?.channels || []);
 
-      // Broadcast
-      setPmMessage(account.features.broadcast?.message || "");
-      setPmInterval(account.features.broadcast?.interval_seconds || 20);
-      setPmMaxRecipients(account.features.broadcast?.max_recipients || 50);
-      setPmStatus(account.features.broadcast?.status || "idle");
-      setPmTotalSent(account.features.broadcast?.total_sent || 0);
+    // Tools
+    setCalcActive(account.features.tools?.calculator_active ?? true);
+    setMarketActive(account.features.tools?.market_active ?? true);
 
-      // Fonts
-      setFontActive(Boolean(account.features.font?.active));
-      setFontStyle(account.features.font?.style || "bold");
-      if (account.features.font?.scopes) {
-        setFontScopes({
-          self_time: account.features.font.scopes.self_time ?? true,
-          manual_messages: account.features.font.scopes.manual_messages ?? true,
-          auto_reply: account.features.font.scopes.auto_reply ?? true,
-          mandatory_join: account.features.font.scopes.mandatory_join ?? true,
-          tabchi: account.features.font.scopes.tabchi ?? true,
-          remote_ui: account.features.font.scopes.remote_ui ?? false,
-        });
-      }
+    // Broadcast
+    setPmMessage(account.features.broadcast?.message || "");
+    setPmInterval(account.features.broadcast?.interval_seconds || 20);
+    setPmMaxRecipients(account.features.broadcast?.max_recipients || 50);
+    setPmStatus(account.features.broadcast?.status || "idle");
+    setPmTotalSent(account.features.broadcast?.total_sent || 0);
+
+    // Fonts
+    setFontActive(Boolean(account.features.font?.active));
+    setFontStyle(account.features.font?.style || "bold");
+    if (account.features.font?.scopes) {
+      setFontScopes({
+        self_time: account.features.font.scopes.self_time ?? true,
+        manual_messages: account.features.font.scopes.manual_messages ?? true,
+        auto_reply: account.features.font.scopes.auto_reply ?? true,
+        mandatory_join: account.features.font.scopes.mandatory_join ?? true,
+        tabchi: account.features.font.scopes.tabchi ?? true,
+        remote_ui: account.features.font.scopes.remote_ui ?? false,
+      });
     }
-  }, [account]);
+  }, [account?.phone]);
 
   // Live preview clock updater (Iran Standard Time - Asia/Tehran UTC+03:30)
   useEffect(() => {

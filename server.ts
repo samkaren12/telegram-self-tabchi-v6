@@ -34,6 +34,16 @@ async function startServer() {
     next();
   });
 
+  // Automatically detect public container/tunnel URL for Telegram Bots
+  app.use((req, res, next) => {
+    const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+    const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
+    if (host && !host.includes("localhost") && !host.includes("127.0.0.1") && !host.includes("0.0.0.0")) {
+      telegramManager.setDetectedAppUrl(`${proto}://${host}`);
+    }
+    next();
+  });
+
   // Initialize all stored accounts on server startup
   telegramManager.initAllAccounts().catch((err) => {
     console.error("Error initializing accounts:", err);
@@ -302,7 +312,15 @@ async function startServer() {
   app.post("/api/accounts/:phone/subscription", async (req, res) => {
     try {
       const { phone } = req.params;
-      const { is_unlimited, days_to_add, days_total, notes } = req.body;
+      const { is_unlimited, days_to_add, days_total, notes, requester_role } = req.body;
+
+      if (requester_role === "customer") {
+        return res.status(403).json({
+          success: false,
+          message: "دسترسی غیرمجاز: تغییر یا تمدید اشتراک فقط توسط مالک سیستم امکان‌پذیر است.",
+        });
+      }
+
       const sub = telegramManager.updateAccountSubscription(phone, {
         is_unlimited: Boolean(is_unlimited),
         days_to_add: days_to_add ? Number(days_to_add) : undefined,
@@ -617,7 +635,7 @@ async function startServer() {
   });
 
   app.get("/api/deploy.sh", (req, res) => {
-    const host = req.get("host") || "ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const host = (req.headers["x-forwarded-host"] as string) || req.get("host") || (process.env.APP_URL ? new URL(process.env.APP_URL).host : "localhost:3000");
     const protocol = req.protocol === "https" || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
     const baseUrl = `${protocol}://${host}`;
 

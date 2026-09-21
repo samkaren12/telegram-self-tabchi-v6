@@ -211,9 +211,15 @@ import {
   formatTelegramMarketCaption,
   getFeaturedMarketList,
   DetailedMarketQuote,
+  evaluateMathWithMarketRates,
 } from "./marketService";
 
-export { getMarketQuote, formatTelegramMarketCaption, getFeaturedMarketList };
+export {
+  getMarketQuote,
+  formatTelegramMarketCaption,
+  getFeaturedMarketList,
+  evaluateMathWithMarketRates,
+};
 
 export { formatTehranTime, getTehranTimeParts };
 
@@ -237,6 +243,7 @@ export class TelegramManager {
   private botPollingActive = false;
   private botLastUpdateId = 0;
   private accountBots: Map<string, { polling: boolean; lastUpdateId: number }> = new Map();
+  private detectedAppUrl: string = "";
 
   constructor() {
     this.loadState();
@@ -245,6 +252,25 @@ export class TelegramManager {
     if (this.botSettings.enabled && this.botSettings.bot_token) {
       setTimeout(() => this.startBotController(), 2000);
     }
+  }
+
+  public setDetectedAppUrl(url: string) {
+    if (url && url.startsWith("http")) {
+      this.detectedAppUrl = url.replace(/\/$/, "");
+    }
+  }
+
+  public getEffectiveAppUrl(): string {
+    if (this.botSettings.web_app_url && this.botSettings.web_app_url.startsWith("http")) {
+      return this.botSettings.web_app_url.replace(/\/$/, "");
+    }
+    if (this.detectedAppUrl && this.detectedAppUrl.startsWith("http")) {
+      return this.detectedAppUrl.replace(/\/$/, "");
+    }
+    if (process.env.APP_URL && process.env.APP_URL.startsWith("http")) {
+      return process.env.APP_URL.replace(/\/$/, "");
+    }
+    return "http://localhost:3000";
   }
 
   public addLog(
@@ -1011,20 +1037,159 @@ export class TelegramManager {
   private setupMessageListeners(phone: string, worker: AccountWorker) {
     const client = worker.client;
 
-    // 1. Incoming Messages Handler
+    // 1. Incoming & Outgoing Messages Handler
     client.addEventHandler(async (event: any) => {
       const account = this.accounts.get(phone);
       if (!account || !account.isOnline) return;
 
       const message = event.message;
-      if (!message || message.out) return;
+      if (!message) return;
 
+      const incomingText = (message.text || message.message || "").trim();
+
+      // ==============================================================
+      // OWNER COMMANDS (message.out === true): Executed ONLY by the account owner
+      // ==============================================================
+      if (message.out) {
+        // 1A. OWNER SMART CHAT TOOL: CALCULATOR & REAL-TIME CURRENCY MATH
+        if (account.features.tools?.calculator_active && incomingText) {
+          try {
+            const mathResult = await evaluateMathWithMarketRates(incomingText);
+            if (mathResult) {
+              const breakdownText =
+                mathResult.currencyBreakdown && mathResult.currencyBreakdown.length > 0
+                  ? `\n📊 <b>نرخ واقعی بازار:</b>\n${mathResult.currencyBreakdown.map((b) => `• ${b}`).join("\n")}\n`
+                  : "";
+              const replyText =
+                `🧮 <b>نتیجه محاسبه (نرخ لحظه‌ای بازار جهانی):</b>\n` +
+                `━━━━━━━━━━━━━━━━━━━━\n` +
+                `🔢 <b>عملیات:</b> <code>${mathResult.originalExpr}</code>\n` +
+                breakdownText +
+                `✅ <b>حاصل نهایی:</b> <b>${mathResult.formattedResult}</b>\n` +
+                `━━━━━━━━━━━━━━━━━━━━\n` +
+                `⚡ <i>محاسبه با قیمت زنده و رسمی بازار</i>`;
+
+              try {
+                await message.edit({
+                  text: replyText,
+                  parseMode: "html",
+                });
+              } catch (_) {
+                await client.sendMessage(message.chatId!, {
+                  message: replyText,
+                  replyTo: message.id,
+                  parseMode: "html",
+                });
+              }
+              this.addLog(
+                "info",
+                "tools",
+                `محاسبه زنده بازار برای صاحب شماره انجام شد: ${incomingText} = ${mathResult.formattedResult}`,
+                phone
+              );
+              return;
+            }
+          } catch (_) {}
+
+          const mathExpr = extractMathCalculation(incomingText);
+          if (mathExpr) {
+            try {
+              const calcResult = evaluateMath(mathExpr);
+              // In-place edit for super slick self-bot experience, or reply
+              try {
+                await message.edit({
+                  text: `🧮 ${incomingText} = <b>${calcResult.toLocaleString("fa-IR")}</b>`,
+                  parseMode: "html",
+                });
+              } catch (_) {
+                await client.sendMessage(message.chatId!, {
+                  message: `🧮 نتیجه محاسبه:\n<code>${mathExpr}</code> = <b>${calcResult.toLocaleString("fa-IR")}</b>`,
+                  replyTo: message.id,
+                  parseMode: "html",
+                });
+              }
+              this.addLog(
+                "info",
+                "tools",
+                `محاسبه ریاضی برای صاحب شماره انجام شد: ${mathExpr} = ${calcResult}`,
+                phone
+              );
+              return;
+            } catch (_) {}
+          }
+        }
+
+        // 1B. OWNER SMART CHAT TOOL: REAL WORLD MARKET, CURRENCY & GOLD QUOTE WITH CHART
+        if (account.features.tools?.market_active && incomingText) {
+          const lower = incomingText.toLowerCase().trim();
+          const isTriggerCommand =
+            lower.startsWith(".price") || lower.startsWith("/price") ||
+            lower.startsWith(".quote") || lower.startsWith(".قیمت") || lower.startsWith("قیمت") ||
+            lower.startsWith("نرخ") || lower.startsWith(".ارز") || lower.startsWith("ارز");
+
+          const assetMatch = isTriggerCommand
+            ? lower.replace(/^(\.price|\/price|\.quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").trim()
+            : lower.match(
+                /(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
+              )?.[1];
+
+          if (assetMatch) {
+            const amountMatch = lower.match(/(?<![a-z])\d+(?:\.\d+)?/);
+            const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
+
+            // Check if buy price was included
+            const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
+            const buyPrice = buyMatch ? parseFloat(buyMatch[1]) : undefined;
+
+            // Clean asset query
+            const rawAsset = (typeof assetMatch === "string" ? assetMatch : "")
+              .replace(/\b(buy|خرید|\d+(\.\d+)?)\b/g, "")
+              .trim() || "usd";
+
+            try {
+              const quote = await getMarketQuote(rawAsset, amount, buyPrice);
+              const quoteCaption = formatTelegramMarketCaption(quote);
+
+              // Send chart image as photo with rich caption
+              if (quote.chart_url) {
+                try {
+                  await client.sendMessage(message.chatId!, {
+                    message: quoteCaption,
+                    file: quote.chart_url,
+                    replyTo: message.id,
+                    parseMode: "html",
+                  });
+                  this.addLog("info", "tools", `استعلام قیمت زنده و نمودار ارسال شد: ${quote.asset}`, phone);
+                  return;
+                } catch (photoErr) {
+                  // Fallback to text message
+                }
+              }
+
+              await client.sendMessage(message.chatId!, {
+                message: quoteCaption,
+                replyTo: message.id,
+                parseMode: "html",
+              });
+              this.addLog("info", "tools", `استعلام قیمت واقعی ارسال شد: ${quote.asset}`, phone);
+              return;
+            } catch (_) {}
+          }
+        }
+
+        // End of owner-sent handling (do not run auto-reply on owner's own messages)
+        return;
+      }
+
+      // ==============================================================
+      // INCOMING MESSAGES FROM OTHER USERS (!message.out)
+      // Strangers & group members CANNOT trigger calculator or market quotes
+      // ==============================================================
       const isPrivate = Boolean(event.isPrivate);
       const sender = await message.getSender();
       if (!sender || (sender as any).bot || (sender as any).isSelf) return;
 
       const senderId = String(sender.id);
-      const incomingText = (message.text || message.message || "").trim();
 
       // Collect PM Recipient for broadcast messaging
       if (isPrivate) {
@@ -1035,79 +1200,6 @@ export class TelegramManager {
           last_seen: new Date().toISOString(),
         };
         this.saveState();
-      }
-
-      // 1A. SMART CHAT TOOLS: CALCULATOR
-      if (account.features.tools?.calculator_active && incomingText) {
-        const mathExpr = extractMathCalculation(incomingText);
-        if (mathExpr) {
-          try {
-            const calcResult = evaluateMath(mathExpr);
-            await client.sendMessage(message.chatId!, {
-              message: `🧮 نتیجه: ${mathExpr} = ${calcResult}`,
-              replyTo: message.id,
-            });
-            this.addLog("info", "tools", `محاسبه ریاضی انجام شد: ${mathExpr} = ${calcResult}`, phone);
-            return;
-          } catch (_) {}
-        }
-      }
-
-      // 1B. SMART CHAT TOOLS: ADVANCED WORLD MARKET, CURRENCY & GOLD QUOTE WITH CHART
-      if (account.features.tools?.market_active && incomingText) {
-        const lower = incomingText.toLowerCase().trim();
-        const isTriggerCommand = lower.startsWith(".price") || lower.startsWith("/price") ||
-          lower.startsWith(".quote") || lower.startsWith(".قیمت") || lower.startsWith("قیمت") ||
-          lower.startsWith("نرخ") || lower.startsWith(".ارز") || lower.startsWith("ارز");
-
-        const assetMatch = isTriggerCommand
-          ? lower.replace(/^(\.price|\/price|\.quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").trim()
-          : lower.match(
-              /(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
-            )?.[1];
-
-        if (assetMatch) {
-          const amountMatch = lower.match(/(?<![a-z])\d+(?:\.\d+)?/);
-          const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
-
-          // Check if buy price was included
-          const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
-          const buyPrice = buyMatch ? parseFloat(buyMatch[1]) : undefined;
-
-          // Clean asset query
-          const rawAsset = (typeof assetMatch === "string" ? assetMatch : "")
-            .replace(/\b(buy|خرید|\d+(\.\d+)?)\b/g, "")
-            .trim() || "usd";
-
-          try {
-            const quote = await getMarketQuote(rawAsset, amount, buyPrice);
-            const quoteCaption = formatTelegramMarketCaption(quote);
-
-            // Send chart image as photo with rich caption
-            if (quote.chart_url) {
-              try {
-                await client.sendMessage(message.chatId!, {
-                  message: quoteCaption,
-                  file: quote.chart_url,
-                  replyTo: message.id,
-                  parseMode: "html",
-                });
-                this.addLog("info", "tools", `استعلام قیمت و نمودار ارسال شد: ${quote.asset}`, phone);
-                return;
-              } catch (photoErr) {
-                // If photo sending failed, fallback to text message
-              }
-            }
-
-            await client.sendMessage(message.chatId!, {
-              message: quoteCaption,
-              replyTo: message.id,
-              parseMode: "html",
-            });
-            this.addLog("info", "tools", `استعلام قیمت ارسال شد: ${quote.asset}`, phone);
-            return;
-          } catch (_) {}
-        }
       }
 
       if (!isPrivate) return;
@@ -1373,16 +1465,18 @@ export class TelegramManager {
 
     if (cmd === "/login" || cmd === "/creds" || cmd === "/panel" || cmd === "/pass" || cmd === "/credentials") {
       const creds = account.client_credentials;
-      const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+      const webAppUrl = this.getEffectiveAppUrl();
+      const clientPortalUrl = `${webAppUrl}/client`;
       const loginMsg =
-        `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب:</b>\n` +
+        `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب مشتریان:</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
         `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
         `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
-        `🌐 <b>آدرس پنل وب:</b> <a href="${webAppUrl}">${webAppUrl}</a>\n` +
+        `🌐 <b>آدرس مستقیم پنل:</b> <a href="${clientPortalUrl}">${clientPortalUrl}</a>\n` +
+        `🔗 <code>${clientPortalUrl}</code>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `💡 در صفحه ورود پنل، تب <b>«ورود مشتری»</b> را انتخاب کنید و با اطلاعات فوق وارد شوید.`;
+        `💡 جهت ورود به پنل، روی لینک بالا کلیک نمایید تا بدون دسترسی به پنل مالک، مستقیماً بخش مدیریت سلف و تبچی اکانت خود را کنترل کنید.`;
 
       await worker.client.sendMessage("me", { message: loginMsg, parseMode: "html" });
       return;
@@ -2134,7 +2228,7 @@ export class TelegramManager {
     const memMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
     const uptimeH = (process.uptime() / 3600).toFixed(1);
     const currentTimeTehran = formatTehranTime("HH:mm");
-    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const webAppUrl = this.getEffectiveAppUrl();
 
     const text =
       `⚡️ <b>پنل کنترل فوق‌پیشرفته سلف و تبچی تلگرام (TG Master Pro)</b>\n` +
@@ -2149,9 +2243,15 @@ export class TelegramManager {
       `• 💬 <b>منشی هوشمند AI:</b> ${anyAutoReplyActive ? "روشن 🟢" : "خاموش 🔴"}\n` +
       `• 🔤 <b>فونت و استایل پیام‌ها:</b> ${anyFontActive ? "فعال ✨" : "خاموش"}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
+      `👑 <b>لینک ورود به پنل مدیریت مالک سرور:</b>\n` +
+      `🌐 <a href="${this.getEffectiveAppUrl()}/admin">${this.getEffectiveAppUrl()}/admin</a>\n` +
+      `🔗 <code>${this.getEffectiveAppUrl()}/admin</code>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       `👨‍💻 <b>سازنده و گیت‌هاب:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `👇 <i>جهت مدیریت سریع، دکمه‌های ۳تایی زیر را لمس نمایید:</i>`;
+
+    const ownerPanelUrl = `${webAppUrl}/admin`;
 
     const inline_keyboard = [
       // Row 1: 3-column (🟢 Green, 🔵 Blue, 🔴 Red)
@@ -2159,14 +2259,17 @@ export class TelegramManager {
         {
           text: `🟢 سلف تایم ${anySelfActive ? "✓" : "✗"}`,
           callback_data: "menu_self",
+          style: "success",
         },
         {
           text: `🔵 تبچی خودکار ${anyTabchiActive ? "✓" : "✗"}`,
           callback_data: "menu_tabchi",
+          style: "primary",
         },
         {
           text: `🔴 منشی هوشمند ${anyAutoReplyActive ? "✓" : "✗"}`,
           callback_data: "menu_autoreply",
+          style: "danger",
         },
       ],
       // Row 2: 3-column (🟢 Green, 🔵 Blue, 🔴 Red)
@@ -2174,14 +2277,17 @@ export class TelegramManager {
         {
           text: `🟢 جوین اجباری 🔒`,
           callback_data: "menu_mandatory",
+          style: "success",
         },
         {
           text: `🔵 ابزارها و ارز 📈`,
           callback_data: "menu_tools",
+          style: "primary",
         },
         {
           text: `🔴 استایل فونت ✨`,
           callback_data: "menu_font",
+          style: "danger",
         },
       ],
       // Row 3: 3-column (🟢 Green, 🔵 Blue, 🔴 Red)
@@ -2189,14 +2295,17 @@ export class TelegramManager {
         {
           text: `🟢 اشتراک اکانت‌ها 📅`,
           callback_data: "menu_subscription",
+          style: "success",
         },
         {
           text: `🔵 آمار سیستم ⚡`,
           callback_data: "menu_stats",
+          style: "primary",
         },
         {
           text: `🔴 لاگ‌های زنده 📜`,
           callback_data: "menu_logs",
+          style: "danger",
         },
       ],
       // Row 4: Customer Credentials list for owner
@@ -2204,21 +2313,25 @@ export class TelegramManager {
         {
           text: `👥 دریافت رمز عبور مشتریان 🔑`,
           callback_data: "menu_client_creds",
+          style: "primary",
         },
       ],
       // Row 5: 3-column (Web Panel link, Keyboard Mode Switch, Refresh)
       [
         {
-          text: `🌐 ورود به پنل وب`,
-          url: webAppUrl,
+          text: `🌐 پنل مدیریت مالک`,
+          url: ownerPanelUrl,
+          style: "primary",
         },
         {
           text: `⌨️ دکمه‌های کیبورد`,
           callback_data: "mode_reply_keyboard",
+          style: "primary",
         },
         {
           text: `🔄 بروزرسانی منو`,
           callback_data: "action_refresh",
+          style: "success",
         },
       ],
     ];
@@ -2267,10 +2380,11 @@ export class TelegramManager {
       `\n💡 <i>نکته: سیستم روزشمار پس از اتمام روزهای تعیین شده، فعالیت اکانت را متوقف می‌کند. تمدید روزها یا تغییر به نامحدود، منحصراً از بخش مدیریت پنل تحت وب توسط مالک قابل اعمال است.</i>\n\n` +
       `👨‍💻 <b>سازنده:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>`;
 
-    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const webAppUrl = this.getEffectiveAppUrl();
+    const ownerPanelUrl = `${webAppUrl}/admin`;
     const inline_keyboard = [
       [
-        { text: "🌐 تمدید در پنل تحت وب", url: webAppUrl },
+        { text: "🌐 تمدید در پنل مالک سرور", url: ownerPanelUrl },
         { text: "🔄 بروزرسانی وضعیت", callback_data: "menu_subscription" },
         { text: "🔙 منوی اصلی", callback_data: "menu_main" },
       ],
@@ -2655,13 +2769,14 @@ export class TelegramManager {
     }
 
     if (text === "🌐 باز کردن پنل تحت وب" || text === "🌐 ورود به پنل تحت وب") {
-      const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+      const webAppUrl = this.getEffectiveAppUrl();
+      const ownerPanelUrl = `${webAppUrl}/admin`;
       await this.sendBotMessage(
         chatId,
-        `🌐 <b>ورود به پنل تحت وب تلگرام مستر:</b>\n\nبرای مدیریت کامل و پیشرفته حساب‌ها، روی لینک زیر کلیک کنید:\n🔗 <a href="${webAppUrl}">${webAppUrl}</a>\n\n👨‍💻 <b>سازنده:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>`,
+        `🌐 <b>ورود به پنل تحت وب تلگرام مستر (مالک سرور):</b>\n\nبرای مدیریت کامل و پیشرفته حساب‌ها، روی لینک زیر کلیک کنید:\n🔗 <a href="${ownerPanelUrl}">${ownerPanelUrl}</a>\n\n👨‍💻 <b>سازنده:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>`,
         {
           inline_keyboard: [
-            [{ text: "🚀 باز کردن پنل در مرورگر", url: webAppUrl }],
+            [{ text: "🚀 باز کردن پنل مالک در مرورگر", url: ownerPanelUrl }],
             [{ text: "👨‍💻 گیت‌هاب سازنده پنل", url: "https://github.com/samkaren12" }],
           ],
         }
@@ -3297,16 +3412,18 @@ export class TelegramManager {
     const isTabchiOn = account.features?.tabchi?.status === "broadcasting";
     const isAutoReplyOn = Boolean(account.features?.auto_reply?.active);
     const tehranTime = formatTehranTime("HH:mm:ss");
-    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const webAppUrl = this.getEffectiveAppUrl();
+    const clientPanelUrl = `${webAppUrl}/client`;
 
     const sub = account.subscription;
     let subStr = "نامحدود ♾️";
     if (sub && !sub.is_unlimited && sub.expires_at) {
       const diffMs = new Date(sub.expires_at).getTime() - Date.now();
-      if (diffMs <= 0) subStr = "منقضی شده ⛔ (نیازمند تمدید توسط مالک)";
+      if (diffMs <= 0) subStr = "منقضی شده ⛔ (جهت تمدید با مدیریت تماس بگیرید)";
       else {
         const days = Math.floor(diffMs / (24 * 3600 * 1000));
-        subStr = `${days} روز باقی‌مانده ⏳`;
+        const hours = Math.floor((diffMs % (24 * 3600 * 1000)) / (3600 * 1000));
+        subStr = `${days} روز و ${hours} ساعت باقی‌مانده ⏳`;
       }
     }
 
@@ -3320,50 +3437,62 @@ export class TelegramManager {
       `💬 <b>منشی پاسخگوی هوشمند:</b> ${isAutoReplyOn ? "🟢 روشن" : "⚪ خاموش"}\n` +
       `📅 <b>اعتبار اشتراک:</b> ${subStr}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `برای کنترل امکانات یا دریافت مشخصات ورود به پنل تحت وب، کلیدهای رنگی زیر را لمس نمایید:`;
+      `🌐 <b>لینک ورود به پنل اختصاصی مشتریان:</b>\n` +
+      `🌐 <a href="${clientPanelUrl}">${clientPanelUrl}</a>\n` +
+      `🔗 <code>${clientPanelUrl}</code>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `برای کنترل امکانات یا دریافت مشخصات ورود، کلیدهای رنگی زیر را لمس نمایید:`;
 
-    // Aiogram-styled color-coded buttons
+    // Aiogram-styled color-coded buttons (danger, success, primary)
     const inline_keyboard = [
       [
         {
           text: isSelfOn ? "🔴 خاموش کردن ساعت سلف" : "🟢 روشن کردن ساعت سلف",
           callback_data: "acc_self_toggle",
+          style: isSelfOn ? "danger" : "success",
         },
         {
-          text: isTabchiOn ? "🔴 توقف ارسال تبچی" : "🟣 شروع ارسال تبچی",
+          text: isTabchiOn ? "🔴 توقف ارسال تبچی" : "🟢 شروع ارسال تبچی",
           callback_data: "acc_tabchi_toggle",
+          style: isTabchiOn ? "danger" : "success",
         },
       ],
       [
         {
           text: isAutoReplyOn ? "🔴 خاموش کردن منشی" : "🟢 روشن کردن منشی",
           callback_data: "acc_autoreply_toggle",
+          style: isAutoReplyOn ? "danger" : "success",
         },
         {
-          text: "🟡 روزشمار اشتراک 📅",
+          text: "🟡 روزشمار اعتبار اشتراک 📅",
           callback_data: "acc_sub_status",
+          style: "primary",
         },
       ],
       [
         {
-          text: "🔑 دریافت مشخصات ورود به پنل وب 🔐",
+          text: "🔑 دریافت مشخصات ورود به پنل اختصاصی 🔐",
           callback_data: "acc_get_creds",
+          style: "primary",
         },
       ],
       [
         {
           text: "📊 استعلام زنده دلار، طلا و رمزارز با نمودار 📈",
           callback_data: "acc_market_quick",
+          style: "success",
         },
       ],
       [
         {
-          text: "🌐 باز کردن پنل تحت وب",
-          url: webAppUrl,
+          text: "🌐 ورود مستقیم به پنل وب مشتری",
+          url: clientPanelUrl,
+          style: "primary",
         },
         {
-          text: "🔄 بروزرسانی وضعیت",
+          text: "🔄 بروزرسانی وضعیت ⚡",
           callback_data: "acc_refresh",
+          style: "primary",
         },
       ],
     ];
@@ -3385,24 +3514,26 @@ export class TelegramManager {
       this.saveState();
     }
 
-    const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+    const webAppUrl = this.getEffectiveAppUrl();
+    const clientPortalUrl = `${webAppUrl}/client`;
     const creds = account.client_credentials;
 
     if (lower === "/login" || lower === "/creds" || lower === "/panel" || lower === "/pass" || text === "🔑 ورود به پنل") {
       const credsMsg =
-        `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب:</b>\n` +
+        `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب مشتریان:</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
         `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
         `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
-        `🌐 <b>آدرس پنل وب:</b> <a href="${webAppUrl}">${webAppUrl}</a>\n` +
+        `🌐 <b>آدرس مستقیم پنل مشتری:</b> <a href="${clientPortalUrl}">${clientPortalUrl}</a>\n` +
+        `🔗 <code>${clientPortalUrl}</code>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `💡 در صفحه ورود پنل، تب <b>«ورود مشتری»</b> را انتخاب نموده و مشخصات بالا را وارد کنید.`;
+        `💡 روی لینک بالا یا دکمه شیشه‌ای زیر ضربه بزنید تا مستقیماً وارد پنل مدیریت سلف و تبچی خود شوید.`;
 
       await this.sendDirectBotMessage(account.bot.bot_token, chatId, credsMsg, {
         inline_keyboard: [
-          [{ text: "🌐 ورود مستقیم به پنل وب", url: webAppUrl }],
-          [{ text: "🔙 بازگشت به منوی ربات", callback_data: "acc_refresh" }],
+          [{ text: "🌐 ورود مستقیم به پنل وب مشتری", url: clientPortalUrl, style: "primary" }],
+          [{ text: "🔙 بازگشت به منوی ربات", callback_data: "acc_refresh", style: "primary" }],
         ],
       });
       return;
@@ -3466,23 +3597,25 @@ export class TelegramManager {
     const data = cq.data || "";
 
     if (data === "acc_get_creds") {
-      const webAppUrl = process.env.APP_URL || "https://ais-pre-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app";
+      const webAppUrl = this.getEffectiveAppUrl();
+      const clientPortalUrl = `${webAppUrl}/client`;
       const creds = account.client_credentials;
       const credsMsg =
-        `🔐 <b>مشخصات اختصاصی ورود به پنل تحت وب:</b>\n` +
+        `🔐 <b>مشخصات اختصاصی ورود به پنل تحت وب مشتریان:</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
         `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
         `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
-        `🌐 <b>آدرس پنل وب:</b> <a href="${webAppUrl}">${webAppUrl}</a>\n` +
+        `🌐 <b>آدرس مستقیم پنل:</b> <a href="${clientPortalUrl}">${clientPortalUrl}</a>\n` +
+        `🔗 <code>${clientPortalUrl}</code>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `در صفحه لاگین پنل وب، وارد تب <b>«ورود مشتری»</b> شده و مشخصات فوق را وارد کنید.`;
+        `با ورود به آدرس فوق، مستقیماً وارد پنل مشتری شده و می‌توانید سلف، ساعت و تبچی خود را مدیریت نمایید.`;
 
       await this.answerDirectBotCallback(botToken, cq.id, "اطلاعات ورود ارسال شد 🔑");
       await this.sendDirectBotMessage(botToken, chatId, credsMsg, {
         inline_keyboard: [
-          [{ text: "🌐 ورود به پنل وب", url: webAppUrl }],
-          [{ text: "🔙 بازگشت به منو", callback_data: "acc_refresh" }],
+          [{ text: "🌐 ورود مستقیم به پنل وب", url: clientPortalUrl, style: "primary" }],
+          [{ text: "🔙 بازگشت به منو", callback_data: "acc_refresh", style: "primary" }],
         ],
       });
       return;

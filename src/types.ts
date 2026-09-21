@@ -135,6 +135,7 @@ export interface BotSettings {
   status?: "connected" | "disconnected" | "error";
   last_error?: string;
   last_active?: string;
+  web_app_url?: string;
 }
 
 export interface MarketQuote {

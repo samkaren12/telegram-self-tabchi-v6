@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Radio,
   Send,
@@ -53,15 +53,20 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const loadedPhoneRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (account?.features?.tabchi) {
-      setMessage(account.features.tabchi.message || "");
-      setIntervalSeconds(account.features.tabchi.interval_seconds || 4);
-      setRepeatRounds(account.features.tabchi.repeat_rounds || 3);
-      setRepeatInfinite(Boolean(account.features.tabchi.repeat_infinite));
-      setTargetMode(account.features.tabchi.target_mode === "selected" ? "selected" : "all");
-      setCustomTargetsText((account.features.tabchi.targets || []).join("\n"));
-    }
+    if (!account?.features?.tabchi) return;
+    if (loadedPhoneRef.current === account.phone) return;
+    loadedPhoneRef.current = account.phone;
+
+    setMessage(account.features.tabchi.message || "");
+    setIntervalSeconds(account.features.tabchi.interval_seconds || 4);
+    setRepeatRounds(account.features.tabchi.repeat_rounds || 3);
+    setRepeatInfinite(Boolean(account.features.tabchi.repeat_infinite));
+    setTargetMode(account.features.tabchi.target_mode === "selected" ? "selected" : "all");
+    setCustomTargetsText((account.features.tabchi.targets || []).join("\n"));
+
     if (account?.phone) {
       fetchDialogs();
     }
