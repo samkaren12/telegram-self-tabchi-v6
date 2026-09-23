@@ -1388,7 +1388,7 @@ export class TelegramManager {
           }, delay);
         }
       }
-    }, new NewMessage({ incoming: true }));
+    }, new NewMessage({}));
 
     // 2. Outgoing Messages Handler (Saved Messages commands & Font transforms)
     client.addEventHandler(async (event: any) => {
@@ -1524,7 +1524,7 @@ export class TelegramManager {
     if (cmd === "/login" || cmd === "/creds" || cmd === "/panel" || cmd === "/pass" || cmd === "/credentials") {
       const creds = account.client_credentials;
       const webAppUrl = this.getEffectiveAppUrl();
-      const clientPortalUrl = `${webAppUrl}/client`;
+      const clientPortalUrl = webAppUrl;
       const loginMsg =
         `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب مشتریان:</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -3526,7 +3526,7 @@ export class TelegramManager {
     const isAutoReplyOn = Boolean(account.features?.auto_reply?.active);
     const tehranTime = formatTehranTime("HH:mm:ss");
     const webAppUrl = this.getEffectiveAppUrl();
-    const clientPanelUrl = `${webAppUrl}/client`;
+    const clientPanelUrl = webAppUrl;
 
     const sub = account.subscription;
     let subStr = "نامحدود ♾️";
@@ -3628,7 +3628,7 @@ export class TelegramManager {
     }
 
     const webAppUrl = this.getEffectiveAppUrl();
-    const clientPortalUrl = `${webAppUrl}/client`;
+    const clientPortalUrl = webAppUrl;
     const creds = account.client_credentials;
 
     if (lower === "/login" || lower === "/creds" || lower === "/panel" || lower === "/pass" || text === "🔑 ورود به پنل") {
@@ -3711,7 +3711,7 @@ export class TelegramManager {
 
     if (data === "acc_get_creds") {
       const webAppUrl = this.getEffectiveAppUrl();
-      const clientPortalUrl = `${webAppUrl}/client`;
+      const clientPortalUrl = webAppUrl;
       const creds = account.client_credentials;
       const credsMsg =
         `🔐 <b>مشخصات اختصاصی ورود به پنل تحت وب مشتریان:</b>\n` +

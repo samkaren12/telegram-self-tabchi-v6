@@ -24,9 +24,12 @@ import {
   Send,
   Sliders,
   Check,
+  Download,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { SystemHealth } from "../types";
+import { UpdateManager } from "./UpdateManager";
+import { SslBackgroundServiceManager } from "./SslBackgroundServiceManager";
 
 interface SystemStatusProps {
   health: SystemHealth | null;
@@ -637,6 +640,12 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang, onOpen
           </p>
         </div>
       </div>
+
+      {/* DEDICATED REPOSITORY UPDATE MANAGER & CHANGELOG */}
+      <UpdateManager lang={lang} />
+
+      {/* COMPREHENSIVE SSL BACKGROUND SERVICE MONITOR & AUTO-RENEWAL DAEMON */}
+      <SslBackgroundServiceManager lang={lang} />
     </div>
   );
 };

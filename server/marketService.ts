@@ -872,7 +872,7 @@ export async function evaluateMathWithMarketRates(
   await refreshMarketRates();
 
   let resolved = normalized
-    .replace(/^(=|calc\s*|حساب\s*:?\s*)/i, "")
+    .replace(/^(=|calc\s*|حساب\s*:?\s*|قیمت\s*:?\s*|نرخ\s*:?\s*|ارزش\s*:?\s*|\.price\s*|\/price\s*)/i, "")
     .replace(/×/g, "*")
     .replace(/÷/g, "/")
     .replace(/−/g, "-")

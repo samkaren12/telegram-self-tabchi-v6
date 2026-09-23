@@ -45,7 +45,7 @@ const FEATURED_ITEMS = [
 export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
   const [selectedAsset, setSelectedAsset] = useState("usd");
   const [searchQuery, setSearchQuery] = useState("");
-  const [amount, setAmount] = useState<number>(1);
+  const [amount, setAmount] = useState<number | string>(1);
   const [buyPrice, setBuyPrice] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<"all" | "fiat" | "gold" | "crypto">("all");
   const [quote, setQuote] = useState<MarketQuote | null>(null);
@@ -84,14 +84,16 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
     setSelectedAsset(id);
     setSearchQuery(id);
     const buyNum = buyPrice ? parseFloat(buyPrice) : undefined;
-    fetchQuote(id, amount, buyNum);
+    const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
+    fetchQuote(id, numAmt, buyNum);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim() || selectedAsset;
     const buyNum = buyPrice ? parseFloat(buyPrice) : undefined;
-    fetchQuote(q, amount, buyNum);
+    const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
+    fetchQuote(q, numAmt, buyNum);
   };
 
   const handleCopyChartUrl = () => {
@@ -136,7 +138,10 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
         </div>
 
         <button
-          onClick={() => fetchQuote(searchQuery.trim() || selectedAsset, amount, buyPrice ? parseFloat(buyPrice) : undefined)}
+          onClick={() => {
+            const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
+            fetchQuote(searchQuery.trim() || selectedAsset, numAmt, buyPrice ? parseFloat(buyPrice) : undefined);
+          }}
           disabled={loading}
           className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all self-start sm:self-auto active:scale-95 disabled:opacity-50"
         >
@@ -217,11 +222,15 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
           {/* Amount Input */}
           <div className="sm:col-span-3">
             <input
-              type="number"
-              min={0.0001}
-              step="any"
+              type="text"
+              inputMode="decimal"
               value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9.]/g, "");
+                // Allow only one decimal point
+                if ((val.match(/\./g) || []).length > 1) return;
+                setAmount(val);
+              }}
               placeholder={lang === "fa" ? "تعداد / مقدار" : "Amount"}
               dir="ltr"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-emerald-500"
@@ -231,11 +240,14 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
           {/* Buy Price (Optional for Profit/Loss) */}
           <div className="sm:col-span-3">
             <input
-              type="number"
-              min={0}
-              step="any"
+              type="text"
+              inputMode="decimal"
               value={buyPrice}
-              onChange={(e) => setBuyPrice(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9.]/g, "");
+                if ((val.match(/\./g) || []).length > 1) return;
+                setBuyPrice(val);
+              }}
               placeholder={lang === "fa" ? "قیمت خرید $ (اختیاری)" : "Buy Price $"}
               dir="ltr"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-emerald-500"
