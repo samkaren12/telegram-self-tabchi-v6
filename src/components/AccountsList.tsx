@@ -201,12 +201,12 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           return (
             <div
               key={acc.phone}
-              className={`bg-slate-900 border rounded-2xl p-5 transition-all relative ${
+              className={`glass-card-interactive rounded-3xl p-5 sm:p-6 transition-all relative ${
                 isSelected
-                  ? "border-cyan-500/80 shadow-xl shadow-cyan-500/10 ring-1 ring-cyan-500/30"
+                  ? "border-cyan-500/80 shadow-2xl shadow-cyan-500/15 ring-1 ring-cyan-500/40 bg-slate-900/90"
                   : isExpired
-                  ? "border-rose-500/40 bg-rose-950/10"
-                  : "border-slate-800 hover:border-slate-700"
+                  ? "border-rose-500/50 bg-rose-950/20 shadow-lg shadow-rose-950/30"
+                  : "hover:border-cyan-500/40"
               }`}
             >
               {/* Top info */}

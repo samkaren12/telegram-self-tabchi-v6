@@ -17,7 +17,11 @@ import {
   ClientCredentials,
   AccountBotConfig,
   OwnerCredentials,
+  BatchCreationTask,
+  BatchCreationRequest,
+  BatchCreatedItem,
 } from "../src/types.js";
+import { generateBatchTitles } from "./nameGenerator.js";
 import { transformFont } from "../src/utils/fontStyler.js";
 import {
   formatTehranTime,
@@ -82,6 +86,23 @@ export function defaultFeatures(): TelegramAccountFeatures {
       calculator_active: true,
       market_active: true,
     },
+    lock_pv: {
+      active: false,
+      warning_message: "⛔ پیوی این اکانت قفل می‌باشد! لطفاً پیام ندهید.",
+      auto_block: false,
+      auto_delete: true,
+      allowed_user_ids: [],
+    },
+    media_saver: {
+      active: false,
+      save_photos: true,
+      save_videos: true,
+      save_voice: true,
+      save_self_destruct: true,
+      forward_to: "saved_messages",
+      target_channel_id: "",
+      caption_sender_info: true,
+    },
     font: {
       active: false,
       style: "bold",
@@ -124,8 +145,10 @@ interface AccountWorker {
   timeTimer?: NodeJS.Timeout;
   tabchiAbortController?: AbortController;
   pmBroadcastAbortController?: AbortController;
+  batchCreationAbortController?: AbortController;
   isBroadcasting?: boolean;
   isPmBroadcasting?: boolean;
+  isCreatingBatch?: boolean;
   meId?: string;
   scriptMessageIds?: Set<string>;
 }
@@ -245,6 +268,7 @@ export class TelegramManager {
   private botLastUpdateId = 0;
   private accountBots: Map<string, { polling: boolean; lastUpdateId: number }> = new Map();
   private detectedAppUrl: string = "";
+  private batchCreationTasks: Map<string, BatchCreationTask> = new Map();
   private ownerCredentials: { username: string; passwordHash: string; updatedAt: string } = {
     username: "samkaren12",
     passwordHash: "samkaren12", // supports both plaintext match & updated values
@@ -1262,6 +1286,139 @@ export class TelegramManager {
 
       if (!isPrivate) return;
 
+      // ==============================================================
+      // 1A. AUTOMATIC MEDIA SAVER (ذخیره‌ساز عکس، ویدیو، ویس و عکس‌های تایم‌دار)
+      // ==============================================================
+      if (account.features.media_saver?.active && message.media) {
+        try {
+          const saver = account.features.media_saver;
+          const media = message.media;
+          const isPhoto = Boolean((media as any).photo || media.className === "MessageMediaPhoto");
+          const isDocument = Boolean((media as any).document || media.className === "MessageMediaDocument");
+          
+          let isVideo = false;
+          let isVoice = false;
+          if (isDocument && (media as any).document) {
+            const mime = (media as any).document.mimeType || "";
+            if (mime.startsWith("video/")) isVideo = true;
+            if (mime.startsWith("audio/") || mime.includes("ogg")) isVoice = true;
+          }
+
+          // Check for TTL / Self-Destructing Photo or Video
+          const ttlSeconds = (media as any).ttlSeconds || (message as any).ttl;
+          const isSelfDestruct = Boolean(ttlSeconds && Number(ttlSeconds) > 0);
+
+          const shouldSave =
+            (isPhoto && saver.save_photos) ||
+            (isVideo && saver.save_videos) ||
+            (isVoice && saver.save_voice) ||
+            (isSelfDestruct && saver.save_self_destruct);
+
+          if (shouldSave) {
+            const senderName = `${(sender as any).firstName || ""} ${(sender as any).lastName || ""}`.trim() || senderId;
+            const senderUser = (sender as any).username ? `@${(sender as any).username}` : "ندارد";
+            const targetPeer = saver.forward_to === "custom_channel" && saver.target_channel_id
+              ? saver.target_channel_id
+              : "me";
+
+            const mediaTypeFa = isSelfDestruct
+              ? `🔥 رسانه زمان‌دار (تایمر ${ttlSeconds} ثانیه)`
+              : isPhoto
+              ? "📸 عکس"
+              : isVideo
+              ? "🎥 ویدیو"
+              : isVoice
+              ? "🎙️ پیام صوتی / ویس"
+              : "📁 فایل رسانه‌ای";
+
+            const captionHeader = saver.caption_sender_info
+              ? `📥 <b>رسانه ذخیره شده خودکار (${mediaTypeFa}):</b>\n` +
+                `👤 <b>فرستنده:</b> ${senderName}\n` +
+                `🆔 <b>آیدی عددی:</b> <code>${senderId}</code> | <b>یوزرنیم:</b> ${senderUser}\n` +
+                `⏰ <b>زمان دریافت:</b> ${formatTehranTime("HH:mm:ss YYYY/MM/DD")}\n` +
+                (message.message ? `💬 <b>کپشن اصلی:</b> <i>${message.message}</i>` : "")
+              : "";
+
+            // Forward or download and re-send to guarantee capturing self-destruct media before expiration
+            try {
+              if (isSelfDestruct) {
+                // Download buffer and send as permanent file to prevent disappearing
+                const buffer = await client.downloadMedia(message);
+                if (buffer) {
+                  await client.sendMessage(targetPeer, {
+                    file: buffer,
+                    message: captionHeader,
+                    parseMode: "html",
+                  });
+                }
+              } else {
+                // Forward directly or re-send with caption
+                await client.forwardMessages(targetPeer, {
+                  messages: [message.id],
+                  fromPeer: message.chatId!,
+                });
+                if (captionHeader) {
+                  await client.sendMessage(targetPeer, {
+                    message: captionHeader,
+                    parseMode: "html",
+                  });
+                }
+              }
+              this.addLog(
+                "success",
+                "self",
+                `رسانه دریافتی (${mediaTypeFa}) از ${senderName} با موفقیت در Saved Messages ذخیره شد.`,
+                phone
+              );
+            } catch (saveErr: any) {
+              this.addLog("warn", "self", `خطا در ذخیره رسانه دریافتی: ${saveErr?.message}`, phone);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // ==============================================================
+      // 1B. LOCK PV ENGINE (قفل کردن پیوی و دایرکت)
+      // ==============================================================
+      if (account.features.lock_pv?.active) {
+        const lockConfig = account.features.lock_pv;
+        const allowedIds = lockConfig.allowed_user_ids || [];
+        const isAllowed = allowedIds.includes(senderId);
+
+        if (!isAllowed) {
+          try {
+            // 1. Send warning message if configured
+            if (lockConfig.warning_message) {
+              await client.sendMessage(message.chatId!, {
+                message: lockConfig.warning_message,
+                replyTo: message.id,
+              });
+            }
+
+            // 2. Auto-delete incoming message from chat
+            if (lockConfig.auto_delete) {
+              await client.deleteMessages(message.chatId!, [message.id], { revoke: true });
+            }
+
+            // 3. Auto-block user if enabled
+            if (lockConfig.auto_block) {
+              await client.invoke(
+                new Api.contacts.Block({
+                  id: await client.getInputEntity(message.chatId!),
+                })
+              );
+              this.addLog("warn", "self", `کاربر مزاحم ${senderId} به دلیل ارسال پیام در پیوی قفل بلاک شد.`, phone);
+            } else {
+              this.addLog("info", "self", `پیام کاربر ${senderId} به دلیل فعال بودن قفل پیوی پاسخ داده و حذف شد.`, phone);
+            }
+
+            return; // Stop further processing (no auto-reply or mandatory join)
+          } catch (lockErr: any) {
+            this.addLog("warn", "self", `خطا در اجرای فرآیند قفل پیوی: ${lockErr?.message}`, phone);
+          }
+        }
+      }
+
       // 1C. MANDATORY JOIN CHECK
       if (
         account.features.mandatory_join?.active &&
@@ -1754,6 +1911,98 @@ export class TelegramManager {
   }
 
   // -------------------------------------------------------------
+  // LOCK PV CONFIGURATION (قفل کردن پیوی و دایرکت)
+  // -------------------------------------------------------------
+
+  public updateLockPvConfig(
+    phone: string,
+    active: boolean,
+    warningMessage?: string,
+    autoBlock = false,
+    autoDelete = true,
+    allowedUserIds: string[] = []
+  ) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("Account not found");
+
+    if (!account.features.lock_pv) {
+      account.features.lock_pv = {
+        active: false,
+        warning_message: "⛔ پیوی این اکانت قفل می‌باشد!",
+        auto_block: false,
+        auto_delete: true,
+        allowed_user_ids: [],
+      };
+    }
+
+    account.features.lock_pv.active = active;
+    if (warningMessage !== undefined) {
+      account.features.lock_pv.warning_message = warningMessage;
+    }
+    account.features.lock_pv.auto_block = Boolean(autoBlock);
+    account.features.lock_pv.auto_delete = Boolean(autoDelete);
+    account.features.lock_pv.allowed_user_ids = allowedUserIds;
+
+    this.saveState();
+    this.addLog(
+      "info",
+      "self",
+      `تنظیمات قفل پیوی بروزرسانی شد (وضعیت: ${active ? "فعال 🔒" : "غیرفعال 🔓"} | بلاک خودکار: ${autoBlock ? "روشن" : "خاموش"}).`,
+      account.phone
+    );
+    return account.features.lock_pv;
+  }
+
+  // -------------------------------------------------------------
+  // AUTOMATIC MEDIA SAVER CONFIGURATION (ذخیره‌ساز عکس و ویدیو)
+  // -------------------------------------------------------------
+
+  public updateMediaSaverConfig(
+    phone: string,
+    active: boolean,
+    savePhotos = true,
+    saveVideos = true,
+    saveVoice = true,
+    saveSelfDestruct = true,
+    forwardTo: "saved_messages" | "custom_channel" = "saved_messages",
+    targetChannelId?: string,
+    captionSenderInfo = true
+  ) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("Account not found");
+
+    if (!account.features.media_saver) {
+      account.features.media_saver = {
+        active: false,
+        save_photos: true,
+        save_videos: true,
+        save_voice: true,
+        save_self_destruct: true,
+        forward_to: "saved_messages",
+        caption_sender_info: true,
+      };
+    }
+
+    account.features.media_saver.active = active;
+    account.features.media_saver.save_photos = Boolean(savePhotos);
+    account.features.media_saver.save_videos = Boolean(saveVideos);
+    account.features.media_saver.save_voice = Boolean(saveVoice);
+    account.features.media_saver.save_self_destruct = Boolean(saveSelfDestruct);
+    account.features.media_saver.forward_to = forwardTo;
+    account.features.media_saver.target_channel_id = targetChannelId;
+    account.features.media_saver.caption_sender_info = Boolean(captionSenderInfo);
+
+    this.saveState();
+    this.addLog(
+      "info",
+      "self",
+      `تنظیمات ذخیره‌ساز خودکار رسانه بروز شد (وضعیت: ${active ? "روشن 📸" : "خاموش"} | رسانه زمان‌دار: ${saveSelfDestruct ? "فعال 🔥" : "غیرفعال"}).`,
+      account.phone
+    );
+    return account.features.media_saver;
+  }
+
+  // -------------------------------------------------------------
   // PM BROADCASTER (MESSAGE ALL PRIVATE CONTACTS)
   // -------------------------------------------------------------
 
@@ -2054,6 +2303,243 @@ export class TelegramManager {
       return { total: 0, groups: 0, users: 0, channels: 0 };
     }
   }
+
+  // =============================================================
+  // BATCH GROUP & CHANNEL CREATOR ENGINE (گروه‌ساز و کانال‌ساز انبوه)
+  // =============================================================
+
+  public getBatchCreationTask(phone: string): BatchCreationTask | null {
+    const account = this.getAccount(phone);
+    const key = account ? account.phone : phone;
+    return this.batchCreationTasks.get(key) || null;
+  }
+
+  public stopBatchCreation(phone: string): BatchCreationTask | null {
+    const account = this.getAccount(phone);
+    const key = account ? account.phone : phone;
+    const worker = this.workers.get(key);
+
+    if (worker?.batchCreationAbortController) {
+      worker.batchCreationAbortController.abort();
+      worker.isCreatingBatch = false;
+    }
+
+    const task = this.batchCreationTasks.get(key);
+    if (task) {
+      task.status = "stopped";
+      task.completedAt = new Date().toISOString();
+      this.addLog("warn", "system", "فرآیند ساخت انبوه توسط کاربر متوقف شد.", key);
+    }
+    return task || null;
+  }
+
+  public async startBatchCreation(phone: string, request: BatchCreationRequest): Promise<BatchCreationTask> {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت مورد نظر یافت نشد.");
+
+    const key = account.phone;
+    const worker = this.workers.get(key);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت تلگرام در وضعیت آنلاین نیست. لطفاً ابتدا از اتصال حساب اطمینان حاصل کنید.");
+    }
+
+    if (worker.isCreatingBatch) {
+      throw new Error("یک فرآیند ساخت کانال/گروه هم‌اکنون برای این اکانت در حال اجرا است.");
+    }
+
+    const count = Math.min(Math.max(1, Number(request.count) || 5), 100);
+    const delaySeconds = Math.max(2, Number(request.delaySeconds) || 5);
+    const targetType = request.targetType || "channel";
+    const language = request.language || "fa";
+    const topic = request.topic || "general";
+
+    // Generate names and descriptions based on user settings
+    const generatedList = generateBatchTitles(
+      count,
+      language,
+      topic,
+      request.customPrefix || "",
+      request.customSuffix || "",
+      request.customNamesList || []
+    );
+
+    const abortController = new AbortController();
+    worker.batchCreationAbortController = abortController;
+    worker.isCreatingBatch = true;
+
+    const task: BatchCreationTask = {
+      id: `task-batch-${Date.now()}`,
+      phone: key,
+      targetType,
+      count,
+      completedCount: 0,
+      language,
+      topic,
+      delaySeconds,
+      status: "running",
+      startedAt: new Date().toISOString(),
+      items: [],
+    };
+
+    this.batchCreationTasks.set(key, task);
+    this.addLog(
+      "info",
+      "system",
+      `آغاز عملیات ساخت خودکار ${count} عدد ${targetType === "channel" ? "کانال" : "گروه"} با زبان ${language.toUpperCase()}`,
+      key
+    );
+
+    // Asynchronous background creation loop
+    (async () => {
+      try {
+        for (let i = 0; i < count; i++) {
+          if (abortController.signal.aborted) {
+            task.status = "stopped";
+            task.completedAt = new Date().toISOString();
+            break;
+          }
+
+          const itemData = generatedList[i];
+          const aboutText = request.customAbout?.trim() || itemData.about;
+
+          try {
+            let createdChat: any = null;
+            let inviteLink: string | undefined = undefined;
+
+            if (targetType === "channel") {
+              // Create Channel
+              const res: any = await worker.client.invoke(
+                new Api.channels.CreateChannel({
+                  title: itemData.title,
+                  about: aboutText,
+                  broadcast: true,
+                  megagroup: false,
+                })
+              );
+              createdChat = res.chats?.[0];
+            } else if (targetType === "supergroup") {
+              // Create Supergroup
+              const res: any = await worker.client.invoke(
+                new Api.channels.CreateChannel({
+                  title: itemData.title,
+                  about: aboutText,
+                  broadcast: false,
+                  megagroup: true,
+                })
+              );
+              createdChat = res.chats?.[0];
+            } else {
+              // Create Basic Group
+              const res: any = await worker.client.invoke(
+                new Api.messages.CreateChat({
+                  users: ["me"],
+                  title: itemData.title,
+                })
+              );
+              createdChat = res.chats?.[0];
+            }
+
+            // Export invite link if possible
+            if (createdChat) {
+              try {
+                if (targetType === "channel" || targetType === "supergroup") {
+                  const linkRes: any = await worker.client.invoke(
+                    new Api.messages.ExportChatInvite({
+                      peer: createdChat,
+                    })
+                  );
+                  inviteLink = linkRes?.link;
+                } else {
+                  const linkRes: any = await worker.client.invoke(
+                    new Api.messages.ExportChatInvite({
+                      peer: createdChat.id,
+                    })
+                  );
+                  inviteLink = linkRes?.link;
+                }
+              } catch (_) {}
+            }
+
+            const createdItem: BatchCreatedItem = {
+              id: `item-${Date.now()}-${i}`,
+              telegramId: createdChat?.id ? String(createdChat.id) : undefined,
+              title: itemData.title,
+              about: aboutText,
+              type: targetType,
+              inviteLink,
+              username: createdChat?.username,
+              createdAt: new Date().toISOString(),
+              status: "success",
+            };
+
+            task.items.unshift(createdItem);
+            task.completedCount++;
+
+            this.addLog(
+              "success",
+              "system",
+              `ساخت موفق (${i + 1}/${count}): ${itemData.title}`,
+              key,
+              { id: createdChat?.id, link: inviteLink }
+            );
+          } catch (createErr: any) {
+            const errStr = createErr?.message || createErr?.errorMessage || String(createErr);
+            const isFlood = errStr.includes("FLOOD_WAIT");
+
+            const failedItem: BatchCreatedItem = {
+              id: `item-${Date.now()}-${i}`,
+              title: itemData.title,
+              about: aboutText,
+              type: targetType,
+              createdAt: new Date().toISOString(),
+              status: "failed",
+              error: errStr,
+            };
+            task.items.unshift(failedItem);
+
+            this.addLog("warn", "system", `خطا در ایجاد مورد (${i + 1}/${count}): ${errStr}`, key);
+
+            if (isFlood) {
+              const waitSec = Number(errStr.match(/\d+/)?.[0] || 60);
+              this.addLog(
+                "warn",
+                "system",
+                `محدودیت FloodWait تلگرام: توقف به مدت ${waitSec} ثانیه پیش از ادامه...`,
+                key
+              );
+              await new Promise((r) => setTimeout(r, waitSec * 1000));
+            }
+          }
+
+          // Delay between creations to protect account from rate limits
+          if (i < count - 1 && !abortController.signal.aborted) {
+            await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
+          }
+        }
+
+        if (task.status === "running") {
+          task.status = "completed";
+          task.completedAt = new Date().toISOString();
+          this.addLog(
+            "success",
+            "system",
+            `عملیات ساخت انبوه به اتمام رسید. ${task.completedCount} مورد با موفقیت ایجاد شد.`,
+            key
+          );
+        }
+      } catch (err: any) {
+        task.status = "error";
+        task.lastError = err?.message || String(err);
+        this.addLog("error", "system", `خطای کلی در عملیات ساخت انبوه: ${task.lastError}`, key);
+      } finally {
+        worker.isCreatingBatch = false;
+        worker.batchCreationAbortController = undefined;
+      }
+    })();
+
+    return task;
+  }
+
 
   // -------------------------------------------------------------
   // BOT CONTROLLER SETTINGS & RUNNER WITH INLINE KEYBOARDS
@@ -2366,7 +2852,20 @@ export class TelegramManager {
           style: "danger",
         },
       ],
-      // Row 4: Customer Credentials list for owner
+      // Row 4: New Features (Lock PV 🔒, Media Saver 📸)
+      [
+        {
+          text: `🔒 قفل پیوی (Direct Lock)`,
+          callback_data: "menu_lock_pv",
+          style: "danger",
+        },
+        {
+          text: `📸 ذخیره‌ساز رسانه و تایم‌دار`,
+          callback_data: "menu_media_saver",
+          style: "success",
+        },
+      ],
+      // Row 5: Customer Credentials list for owner
       [
         {
           text: `👥 دریافت رمز عبور مشتریان 🔑`,
@@ -2766,6 +3265,104 @@ export class TelegramManager {
     const inline_keyboard = [
       [
         { text: "🔄 تازه‌سازی لاگ‌ها 🔁", callback_data: "menu_logs" },
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getLockPvMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const anyLockActive = accounts.some((a) => a.features?.lock_pv?.active);
+    const anyBlockActive = accounts.some((a) => a.features?.lock_pv?.auto_block);
+    const anyDeleteActive = accounts.some((a) => a.features?.lock_pv?.auto_delete !== false);
+    const firstAcc = accounts[0];
+    const warnMsg = firstAcc?.features?.lock_pv?.warning_message || "⛔ پیوی قفل است.";
+
+    const text =
+      `🔒 <b>مدیریت قفل پیوی و دایرکت (Lock PV Engine)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔘 <b>وضعیت قفل پیوی:</b> ${anyLockActive ? "فعال 🔴 (پیوی بسته است)" : "غیرفعال ⚪ (پیوی باز است)"}\n` +
+      `🚫 <b>بلاک خودکار مزاحمین:</b> ${anyBlockActive ? "روشن ⚠️" : "خاموش ⚪"}\n` +
+      `🗑️ <b>حذف خودکار پیام‌های ارسالی:</b> ${anyDeleteActive ? "فعال ✅" : "غیرفعال ❌"}\n` +
+      `💬 <b>پیام هشدار:</b> <i>«${warnMsg}»</i>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `در صورت فعال بودن، هر پیامی در چت خصوصی فوراً بررسی شده و در صورت عدم تایید مسدود می‌گردد:`;
+
+    const inline_keyboard = [
+      [
+        {
+          text: anyLockActive ? "🔓 باز کردن پیوی (خاموش کردن قفل)" : "🔒 قفل کردن کامل پیوی (فعال‌سازی)",
+          callback_data: "lock_pv_toggle",
+        },
+      ],
+      [
+        {
+          text: anyBlockActive ? "🚫 خاموش کردن بلاک خودکار" : "🚫 روشن کردن بلاک خودکار مزاحم",
+          callback_data: "lock_pv_toggle_block",
+        },
+        {
+          text: anyDeleteActive ? "🗑️ عدم حذف پیام‌ها" : "🗑️ حذف خودکار پیام‌ها",
+          callback_data: "lock_pv_toggle_delete",
+        },
+      ],
+      [
+        { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
+      ],
+    ];
+
+    return { text, reply_markup: { inline_keyboard } };
+  }
+
+  private getMediaSaverMenuPayload() {
+    const accounts = Array.from(this.accounts.values());
+    const anySaverActive = accounts.some((a) => a.features?.media_saver?.active);
+    const savePhotos = accounts.some((a) => a.features?.media_saver?.save_photos !== false);
+    const saveVideos = accounts.some((a) => a.features?.media_saver?.save_videos !== false);
+    const saveVoice = accounts.some((a) => a.features?.media_saver?.save_voice !== false);
+    const saveDestruct = accounts.some((a) => a.features?.media_saver?.save_self_destruct !== false);
+
+    const text =
+      `📸 <b>ذخیره‌ساز خودکار رسانه‌ها و تایم‌دار (Media Saver)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔘 <b>وضعیت کلی ذخیره‌ساز:</b> ${anySaverActive ? "فعال 🟢" : "خاموش ⚪"}\n` +
+      `🔥 <b>عکس و ویدیوی تایم‌دار (Self-Destruct):</b> ${saveDestruct ? "ذخیره آنی ✅" : "خاموش ❌"}\n` +
+      `🖼️ <b>عکس‌های معمولی:</b> ${savePhotos ? "فعال ✅" : "خاموش ❌"}\n` +
+      `🎥 <b>ویدیوها:</b> ${saveVideos ? "فعال ✅" : "خاموش ❌"}\n` +
+      `🎙️ <b>ویس و پیام‌های صوتی:</b> ${saveVoice ? "فعال ✅" : "خاموش ❌"}\n` +
+      `📥 <b>محل ذخیره:</b> پیام‌های ذخیره شده تلگرام (Saved Messages)\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `رسانه‌های ارسالی بدون سوختن زمان‌دار فوراً در فضای ابری شما ذخیره می‌شوند:`;
+
+    const inline_keyboard = [
+      [
+        {
+          text: anySaverActive ? "⏸️ خاموش کردن ذخیره‌ساز" : "▶️ فعال‌سازی ذخیره‌ساز خودکار",
+          callback_data: "saver_toggle",
+        },
+      ],
+      [
+        {
+          text: saveDestruct ? "🔥 تایم‌دار: فعال ✅" : "🔥 تایم‌دار: غیرفعال ❌",
+          callback_data: "saver_toggle_destruct",
+        },
+        {
+          text: savePhotos ? "🖼️ عکس: فعال ✅" : "🖼️ عکس: غیرفعال ❌",
+          callback_data: "saver_toggle_photos",
+        },
+      ],
+      [
+        {
+          text: saveVideos ? "🎥 ویدیو: فعال ✅" : "🎥 ویدیو: غیرفعال ❌",
+          callback_data: "saver_toggle_videos",
+        },
+        {
+          text: saveVoice ? "🎙️ ویس: فعال ✅" : "🎙️ ویس: غیرفعال ❌",
+          callback_data: "saver_toggle_voice",
+        },
+      ],
+      [
         { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
       ],
     ];
@@ -3337,6 +3934,190 @@ export class TelegramManager {
       await this.editBotMessage(chatId, messageId, text, {
         inline_keyboard: [[{ text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" }]],
       });
+      return;
+    }
+
+    // Lock PV Callbacks
+    if (data === "menu_lock_pv") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getLockPvMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "lock_pv_toggle") {
+      const anyActive = Array.from(this.accounts.values()).some((a) => a.features?.lock_pv?.active);
+      const nextActive = !anyActive;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.lock_pv) {
+          acc.features.lock_pv = {
+            active: false,
+            warning_message: "⛔ پیوی این اکانت قفل می‌باشد!",
+            auto_block: false,
+            auto_delete: true,
+            allowed_user_ids: [],
+          };
+        }
+        acc.features.lock_pv.active = nextActive;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(
+        cq.id,
+        nextActive ? "قفل پیوی فعال شد 🔒 (مزاحمین مسدود می‌شوند)" : "قفل پیوی غیرفعال شد 🔓",
+        true
+      );
+      const payload = this.getLockPvMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "lock_pv_toggle_block") {
+      const anyBlock = Array.from(this.accounts.values()).some((a) => a.features?.lock_pv?.auto_block);
+      const nextBlock = !anyBlock;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.lock_pv) {
+          acc.features.lock_pv = {
+            active: false,
+            warning_message: "⛔ پیوی این اکانت قفل می‌باشد!",
+            auto_block: false,
+            auto_delete: true,
+            allowed_user_ids: [],
+          };
+        }
+        acc.features.lock_pv.auto_block = nextBlock;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(
+        cq.id,
+        nextBlock ? "بلاک خودکار کاربران مزاحم روشن شد 🚫" : "بلاک خودکار خاموش شد ⚪"
+      );
+      const payload = this.getLockPvMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "lock_pv_toggle_delete") {
+      const anyDelete = Array.from(this.accounts.values()).some((a) => a.features?.lock_pv?.auto_delete !== false);
+      const nextDelete = !anyDelete;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.lock_pv) {
+          acc.features.lock_pv = {
+            active: false,
+            warning_message: "⛔ پیوی این اکانت قفل می‌باشد!",
+            auto_block: false,
+            auto_delete: true,
+            allowed_user_ids: [],
+          };
+        }
+        acc.features.lock_pv.auto_delete = nextDelete;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(
+        cq.id,
+        nextDelete ? "حذف خودکار پیام‌های پیوی فعال شد 🗑️" : "حذف خودکار پیام‌ها غیرفعال شد ⚪"
+      );
+      const payload = this.getLockPvMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    // Media Saver Callbacks
+    if (data === "menu_media_saver") {
+      await this.answerCallbackQuery(cq.id);
+      const payload = this.getMediaSaverMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "saver_toggle") {
+      const anyActive = Array.from(this.accounts.values()).some((a) => a.features?.media_saver?.active);
+      const nextActive = !anyActive;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.media_saver) {
+          acc.features.media_saver = {
+            active: false,
+            save_photos: true,
+            save_videos: true,
+            save_voice: true,
+            save_self_destruct: true,
+            forward_to: "saved_messages",
+            caption_sender_info: true,
+          };
+        }
+        acc.features.media_saver.active = nextActive;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(
+        cq.id,
+        nextActive ? "ذخیره‌ساز خودکار رسانه فعال شد 📸" : "ذخیره‌ساز خودکار خاموش شد ⚪",
+        true
+      );
+      const payload = this.getMediaSaverMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "saver_toggle_destruct") {
+      const anyDestruct = Array.from(this.accounts.values()).some((a) => a.features?.media_saver?.save_self_destruct !== false);
+      const nextVal = !anyDestruct;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.media_saver) {
+          acc.features.media_saver = { active: true, save_photos: true, save_videos: true, save_voice: true, save_self_destruct: true, forward_to: "saved_messages", caption_sender_info: true };
+        }
+        acc.features.media_saver.save_self_destruct = nextVal;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(cq.id, nextVal ? "ذخیره رسانه‌های تایم‌دار فعال شد 🔥" : "ذخیره تایم‌دار خاموش شد");
+      const payload = this.getMediaSaverMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "saver_toggle_photos") {
+      const anyVal = Array.from(this.accounts.values()).some((a) => a.features?.media_saver?.save_photos !== false);
+      const nextVal = !anyVal;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.media_saver) {
+          acc.features.media_saver = { active: true, save_photos: true, save_videos: true, save_voice: true, save_self_destruct: true, forward_to: "saved_messages", caption_sender_info: true };
+        }
+        acc.features.media_saver.save_photos = nextVal;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(cq.id, nextVal ? "ذخیره عکس‌ها فعال شد 🖼️" : "ذخیره عکس خاموش شد");
+      const payload = this.getMediaSaverMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "saver_toggle_videos") {
+      const anyVal = Array.from(this.accounts.values()).some((a) => a.features?.media_saver?.save_videos !== false);
+      const nextVal = !anyVal;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.media_saver) {
+          acc.features.media_saver = { active: true, save_photos: true, save_videos: true, save_voice: true, save_self_destruct: true, forward_to: "saved_messages", caption_sender_info: true };
+        }
+        acc.features.media_saver.save_videos = nextVal;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(cq.id, nextVal ? "ذخیره ویدیوها فعال شد 🎥" : "ذخیره ویدیو خاموش شد");
+      const payload = this.getMediaSaverMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "saver_toggle_voice") {
+      const anyVal = Array.from(this.accounts.values()).some((a) => a.features?.media_saver?.save_voice !== false);
+      const nextVal = !anyVal;
+      for (const [phone, acc] of this.accounts.entries()) {
+        if (!acc.features.media_saver) {
+          acc.features.media_saver = { active: true, save_photos: true, save_videos: true, save_voice: true, save_self_destruct: true, forward_to: "saved_messages", caption_sender_info: true };
+        }
+        acc.features.media_saver.save_voice = nextVal;
+      }
+      this.saveState();
+      await this.answerCallbackQuery(cq.id, nextVal ? "ذخیره ویس و پیام صوتی فعال شد 🎙️" : "ذخیره ویس خاموش شد");
+      const payload = this.getMediaSaverMenuPayload();
+      await this.editBotMessage(chatId, messageId, payload.text, payload.reply_markup);
       return;
     }
 

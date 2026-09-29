@@ -12,6 +12,8 @@ import {
   getMarketQuote,
   getFeaturedMarketList,
 } from "./server/telegramManager.js";
+import { storeBotManager } from "./server/storeBotManager.js";
+import { supportBotManager } from "./server/supportBotManager.js";
 import { testAiApiKey } from "./server/aiSecretary.js";
 import {
   getSslConfig,
@@ -255,6 +257,458 @@ async function startServer() {
     }
   });
 
+  // ==========================================
+  // STORE BOT (فروشگاه اشتراک و سلف/تبچی - مخصوص مالک)
+  // ==========================================
+
+  // Get all store data (Settings, Plans, Payments, Orders, Coupons, Customers, Stats)
+  app.get("/api/store-bot/data", (req, res) => {
+    try {
+      const data = storeBotManager.getData();
+      return res.json({ success: true, data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Update store bot settings (Token, owner id, support username, keyboardMode, theme, welcome text, labels)
+  app.put("/api/store-bot/settings", async (req, res) => {
+    try {
+      const settings = await storeBotManager.updateSettings(req.body);
+      return res.json({ success: true, settings, message: "تنظیمات ربات فروشگاه با موفقیت بروزرسانی شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Test Store Bot Token
+  app.post("/api/store-bot/test-token", async (req, res) => {
+    try {
+      const { token } = req.body;
+      const result = await storeBotManager.testBotToken(token);
+      return res.json({ success: result.valid, ...result });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Toggle Live Polling Service
+  app.post("/api/store-bot/toggle-service", (req, res) => {
+    try {
+      const { enabled } = req.body;
+      if (enabled) {
+        storeBotManager.startPolling();
+      } else {
+        storeBotManager.stopPolling();
+      }
+      const data = storeBotManager.getData();
+      return res.json({ success: true, status: data.settings.status, message: enabled ? "سرویس ربات فروشگاه روشن شد." : "سرویس ربات فروشگاه متوقف شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Plans CRUD
+  app.post("/api/store-bot/plans", (req, res) => {
+    try {
+      const plan = storeBotManager.addPlan(req.body);
+      return res.json({ success: true, plan, message: "پلن جدید با موفقیت اضافه شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/store-bot/plans/:id", (req, res) => {
+    try {
+      const plan = storeBotManager.updatePlan(req.params.id, req.body);
+      return res.json({ success: true, plan, message: "پلن با موفقیت ویرایش شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/store-bot/plans/:id", (req, res) => {
+    try {
+      storeBotManager.deletePlan(req.params.id);
+      return res.json({ success: true, message: "پلن با موفقیت حذف گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Toggle Plan Active / Disabled status
+  app.patch("/api/store-bot/plans/:id/toggle", (req, res) => {
+    try {
+      const plan = storeBotManager.togglePlanActive(req.params.id);
+      return res.json({
+        success: true,
+        plan,
+        message: plan.isActive ? "پلن در ربات فعال شد." : "پلن از ربات پنهان شد.",
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Batch Update Pricing / Exchange rate
+  app.post("/api/store-bot/plans/batch-pricing", (req, res) => {
+    try {
+      const { multiplier, usdRate } = req.body;
+      const plans = storeBotManager.batchUpdatePricing({ multiplier, usdRate });
+      return res.json({ success: true, plans, message: "تعرفه‌ها با موفقیت بروزرسانی شدند." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Payment Settings
+  app.put("/api/store-bot/payments", (req, res) => {
+    try {
+      const payments = storeBotManager.updatePaymentSettings(req.body);
+      return res.json({ success: true, payments, message: "تنظیمات درگاه‌های پرداخت با موفقیت ذخیره شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Bank Cards Management
+  app.post("/api/store-bot/payments/cards", (req, res) => {
+    try {
+      const card = storeBotManager.addPaymentCard(req.body);
+      return res.json({ success: true, card, message: "حساب بانکی جدید با موفقیت اضافه شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/store-bot/payments/cards/:id", (req, res) => {
+    try {
+      const card = storeBotManager.updatePaymentCard(req.params.id, req.body);
+      return res.json({ success: true, card, message: "اطلاعات حساب بانکی بروزرسانی شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/store-bot/payments/cards/:id", (req, res) => {
+    try {
+      storeBotManager.deletePaymentCard(req.params.id);
+      return res.json({ success: true, message: "حساب بانکی با موفقیت حذف گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.patch("/api/store-bot/payments/cards/:id/toggle", (req, res) => {
+    try {
+      const card = storeBotManager.togglePaymentCard(req.params.id);
+      return res.json({ success: true, card, message: card.isActive ? "حساب فعال شد." : "حساب غیرفعال شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Crypto Networks Management
+  app.post("/api/store-bot/payments/crypto", (req, res) => {
+    try {
+      const net = storeBotManager.addCryptoNetwork(req.body);
+      return res.json({ success: true, network: net, message: "ارز / شبکه دیجیتال جدید با موفقیت اضافه شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/store-bot/payments/crypto/:id", (req, res) => {
+    try {
+      const net = storeBotManager.updateCryptoNetwork(req.params.id, req.body);
+      return res.json({ success: true, network: net, message: "اطلاعات والت کریپتو بروزرسانی شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/store-bot/payments/crypto/:id", (req, res) => {
+    try {
+      storeBotManager.deleteCryptoNetwork(req.params.id);
+      return res.json({ success: true, message: "ارز دیجیتال با موفقیت حذف گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.patch("/api/store-bot/payments/crypto/:id/toggle", (req, res) => {
+    try {
+      const net = storeBotManager.toggleCryptoNetwork(req.params.id);
+      return res.json({ success: true, network: net, message: net.isActive ? "ارز فعال شد." : "ارز غیرفعال شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Orders: Approve with auto-generated credentials / license
+  app.post("/api/store-bot/orders/:id/approve", async (req, res) => {
+    try {
+      const { credentials } = req.body;
+      const order = await storeBotManager.approveOrder(req.params.id, credentials);
+      return res.json({ success: true, order, message: "سفارش با موفقیت تأیید شد و اعلان آنی به مشتری ارسال گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Orders: Reject with reason
+  app.post("/api/store-bot/orders/:id/reject", async (req, res) => {
+    try {
+      const { reason } = req.body;
+      const order = await storeBotManager.rejectOrder(req.params.id, reason);
+      return res.json({ success: true, order, message: "سفارش با موفقیت رد شد و علت آن به کاربر اعلام شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Coupons
+  app.post("/api/store-bot/coupons", (req, res) => {
+    try {
+      const coupon = storeBotManager.addCoupon(req.body);
+      return res.json({ success: true, coupon, message: "کد تخفیف با موفقیت ایجاد شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/store-bot/coupons/:id", (req, res) => {
+    try {
+      storeBotManager.deleteCoupon(req.params.id);
+      return res.json({ success: true, message: "کد تخفیف با موفقیت حذف شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Broadcast to all Store Bot users
+  app.post("/api/store-bot/broadcast", async (req, res) => {
+    try {
+      const { message, buttonTitle, buttonUrl } = req.body;
+      if (!message || !message.trim()) {
+        return res.status(400).json({ success: false, message: "متن پیام الزامی است." });
+      }
+      const result = await storeBotManager.broadcastToBotUsers(message, buttonTitle, buttonUrl);
+      return res.json({
+        success: true,
+        sent: result.sent,
+        failed: result.failed,
+        message: `پیام همگانی به ${result.sent} کاربر با موفقیت ارسال شد.`,
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Store Customers: Bulk Extend Subscriptions
+  app.post("/api/store-bot/customers/bulk-extend", async (req, res) => {
+    try {
+      const { userIds, durationDays, planTitle, notifyTelegram } = req.body;
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        return res.status(400).json({ success: false, message: "لطفاً حداقل یک مشتری را برای تمدید انتخاب کنید." });
+      }
+      if (typeof durationDays !== "number" || isNaN(durationDays) || durationDays < 0) {
+        return res.status(400).json({ success: false, message: "مدت زمان تمدید نامعتبر است." });
+      }
+      const result = await storeBotManager.bulkExtendSubscriptions({
+        userIds,
+        durationDays,
+        planTitle,
+        notifyTelegram: notifyTelegram !== false,
+      });
+      return res.json({
+        success: true,
+        ...result,
+        customers: storeBotManager.getData().customers,
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Store Customers: Update Single Customer
+  app.put("/api/store-bot/customers/:userId", (req, res) => {
+    try {
+      const customer = storeBotManager.updateCustomer(req.params.userId, req.body);
+      return res.json({ success: true, customer, message: "اطلاعات مشتری و اشتراک با موفقیت بروزرسانی شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Store Customers: Get Detailed Transaction History (Purchases, Payments, Extensions)
+  app.get("/api/store-bot/customers/:userId/transactions", (req, res) => {
+    try {
+      const data = storeBotManager.getCustomerTransactions(req.params.userId);
+      return res.json({ success: true, ...data });
+    } catch (err: any) {
+      return res.status(404).json({ success: false, message: err.message });
+    }
+  });
+
+  // Store Customers: Add Customer Manually
+  app.post("/api/store-bot/customers", (req, res) => {
+    try {
+      const { userId } = req.body;
+      if (!userId) return res.status(400).json({ success: false, message: "شناسه تلگرام مشتری الزامی است." });
+      const customer = storeBotManager.addCustomer(req.body);
+      return res.json({ success: true, customer, message: "مشتری جدید با موفقیت ثبت شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Store Customers: Delete Customer
+  app.delete("/api/store-bot/customers/:userId", (req, res) => {
+    try {
+      storeBotManager.deleteCustomer(req.params.userId);
+      return res.json({ success: true, message: "مشتری با موفقیت از لیست حذف گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // SUPPORT BOT & TICKETING API ROUTES
+  // ==========================================
+
+  // Get full support bot data (settings, tickets, faqs)
+  app.get("/api/support-bot/data", (_req, res) => {
+    try {
+      const data = supportBotManager.getData();
+      return res.json({ success: true, data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Update support bot settings
+  app.put("/api/support-bot/settings", (req, res) => {
+    try {
+      const updated = supportBotManager.updateSettings(req.body);
+      return res.json({ success: true, settings: updated, message: "تنظیمات ربات پشتیبانی با موفقیت ذخیره شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Reply to a support ticket from Web Panel
+  app.post("/api/support-bot/tickets/:ticketId/reply", async (req, res) => {
+    try {
+      const { replyText, adminName } = req.body;
+      if (!replyText || !replyText.trim()) {
+        return res.status(400).json({ success: false, message: "متن پاسخ الزامی است." });
+      }
+      const ticket = await supportBotManager.replyToTicket(req.params.ticketId, replyText, adminName);
+      return res.json({ success: true, ticket, message: "پاسخ به تیکت ثبت و برای کاربر ارسال گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Update ticket status
+  app.put("/api/support-bot/tickets/:ticketId/status", (req, res) => {
+    try {
+      const { status } = req.body;
+      const ticket = supportBotManager.updateTicketStatus(req.params.ticketId, status);
+      return res.json({ success: true, ticket, message: "وضعیت تیکت بروزرسانی شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Update ticket priority
+  app.put("/api/support-bot/tickets/:ticketId/priority", (req, res) => {
+    try {
+      const { priority } = req.body;
+      const ticket = supportBotManager.updateTicketPriority(req.params.ticketId, priority);
+      return res.json({ success: true, ticket });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Delete ticket
+  app.delete("/api/support-bot/tickets/:ticketId", (req, res) => {
+    try {
+      supportBotManager.deleteTicket(req.params.ticketId);
+      return res.json({ success: true, message: "تیکت حذف شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Add FAQ
+  app.post("/api/support-bot/faqs", (req, res) => {
+    try {
+      const faq = supportBotManager.addFaq(req.body);
+      return res.json({ success: true, faq, message: "سوال متداول افزوده شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Update FAQ
+  app.put("/api/support-bot/faqs/:id", (req, res) => {
+    try {
+      const faq = supportBotManager.updateFaq(req.params.id, req.body);
+      return res.json({ success: true, faq, message: "سوال بروزرسانی شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Delete FAQ
+  app.delete("/api/support-bot/faqs/:id", (req, res) => {
+    try {
+      supportBotManager.deleteFaq(req.params.id);
+      return res.json({ success: true, message: "سوال حذف گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // BATCH CHANNEL & GROUP CREATOR API ROUTES
+  // ==========================================
+
+  // Start Batch Creation
+  app.post("/api/accounts/:phone/batch-create", async (req, res) => {
+    try {
+      const task = await telegramManager.startBatchCreation(req.params.phone, req.body);
+      return res.json({ success: true, task, message: "فرآیند ساخت خودکار آغاز شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Stop Batch Creation
+  app.post("/api/accounts/:phone/batch-create/stop", (req, res) => {
+    try {
+      const task = telegramManager.stopBatchCreation(req.params.phone);
+      return res.json({ success: true, task, message: "فرآیند ساخت متوقف گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Get current batch creation task status
+  app.get("/api/accounts/:phone/batch-create", (req, res) => {
+    try {
+      const task = telegramManager.getBatchCreationTask(req.params.phone);
+      return res.json({ success: true, task });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+
+
   // Telegram Auth: Step 1 - Send Code to Phone Number
   app.post("/api/telegram/auth/send-code", async (req, res) => {
     try {
@@ -399,6 +853,57 @@ async function startServer() {
       const { active, format, fontStyle } = req.body;
       const result = await telegramManager.updateSelfTimeConfig(phone, Boolean(active), format, fontStyle);
       return res.json({ success: true, self_time: result });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Self Module: Lock PV (قفل کردن پیوی و دایرکت)
+  app.post("/api/accounts/:phone/lock-pv", (req, res) => {
+    try {
+      const { phone } = req.params;
+      const { active, warningMessage, autoBlock, autoDelete, allowedUserIds } = req.body;
+      const result = telegramManager.updateLockPvConfig(
+        phone,
+        Boolean(active),
+        warningMessage,
+        Boolean(autoBlock),
+        autoDelete !== undefined ? Boolean(autoDelete) : true,
+        Array.isArray(allowedUserIds) ? allowedUserIds : []
+      );
+      return res.json({ success: true, lock_pv: result, message: "تنظیمات قفل پیوی ذخیره شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Self Module: Automatic Media Saver (ذخیره‌ساز عکس، ویدیو، ویس و عکس تایم‌دار)
+  app.post("/api/accounts/:phone/media-saver", (req, res) => {
+    try {
+      const { phone } = req.params;
+      const {
+        active,
+        savePhotos,
+        saveVideos,
+        saveVoice,
+        saveSelfDestruct,
+        forwardTo,
+        targetChannelId,
+        captionSenderInfo,
+      } = req.body;
+
+      const result = telegramManager.updateMediaSaverConfig(
+        phone,
+        Boolean(active),
+        savePhotos !== undefined ? Boolean(savePhotos) : true,
+        saveVideos !== undefined ? Boolean(saveVideos) : true,
+        saveVoice !== undefined ? Boolean(saveVoice) : true,
+        saveSelfDestruct !== undefined ? Boolean(saveSelfDestruct) : true,
+        forwardTo || "saved_messages",
+        targetChannelId,
+        captionSenderInfo !== undefined ? Boolean(captionSenderInfo) : true
+      );
+      return res.json({ success: true, media_saver: result, message: "تنظیمات ذخیره‌ساز رسانه ذخیره شد." });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }

@@ -226,12 +226,15 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
               inputMode="decimal"
               value={amount}
               onChange={(e) => {
-                const val = e.target.value.replace(/[^0-9.]/g, "");
+                let val = e.target.value.replace(/[^0-9.]/g, "");
                 // Allow only one decimal point
-                if ((val.match(/\./g) || []).length > 1) return;
+                const parts = val.split(".");
+                if (parts.length > 2) {
+                  val = parts[0] + "." + parts.slice(1).join("");
+                }
                 setAmount(val);
               }}
-              placeholder={lang === "fa" ? "تعداد / مقدار" : "Amount"}
+              placeholder={lang === "fa" ? "تعداد / مقدار (مثلاً ۱)" : "Amount (e.g. 1)"}
               dir="ltr"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-emerald-500"
             />
@@ -244,11 +247,14 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
               inputMode="decimal"
               value={buyPrice}
               onChange={(e) => {
-                const val = e.target.value.replace(/[^0-9.]/g, "");
-                if ((val.match(/\./g) || []).length > 1) return;
+                let val = e.target.value.replace(/[^0-9.]/g, "");
+                const parts = val.split(".");
+                if (parts.length > 2) {
+                  val = parts[0] + "." + parts.slice(1).join("");
+                }
                 setBuyPrice(val);
               }}
-              placeholder={lang === "fa" ? "قیمت خرید $ (اختیاری)" : "Buy Price $"}
+              placeholder={lang === "fa" ? "قیمت خرید $ (اختیاری)" : "Buy Price $ (optional)"}
               dir="ltr"
               className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-emerald-500"
             />

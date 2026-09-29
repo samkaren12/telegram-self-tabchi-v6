@@ -10,6 +10,7 @@ export const translations = {
     connectFirstAccount: "اتصال اولین حساب تلگرام",
     tabs: {
       accounts: "مدیریت حساب‌ها",
+      store: "فروشگاه و ربات اشتراک",
       self: "ماژول سلف (Self)",
       tabchi: "ماژول تبچی (Tabchi)",
       logs: "لاگ‌های زنده",
@@ -182,6 +183,7 @@ export const translations = {
     connectFirstAccount: "Connect First Telegram Account",
     tabs: {
       accounts: "Accounts",
+      store: "Store & Shop Bot",
       self: "Self Module",
       tabchi: "Tabchi Module",
       logs: "Live Logs",

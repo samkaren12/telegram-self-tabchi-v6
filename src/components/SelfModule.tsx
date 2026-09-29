@@ -28,6 +28,12 @@ import {
   EyeOff,
   RefreshCw,
   Wand2,
+  ShieldAlert,
+  Camera,
+  Flame,
+  Video,
+  Mic,
+  UserX,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import {
@@ -54,8 +60,29 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
 
   // Active sub-tab
   const [activeSubTab, setActiveSubTab] = useState<
-    "clock" | "autoReply" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
+    "clock" | "lockPv" | "mediaSaver" | "autoReply" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
   >("clock");
+
+  // Lock PV State
+  const [lockPvActive, setLockPvActive] = useState<boolean>(false);
+  const [lockPvWarning, setLockPvWarning] = useState<string>("⛔ پیوی این اکانت قفل می‌باشد! لطفاً پیام ندهید.");
+  const [lockPvAutoBlock, setLockPvAutoBlock] = useState<boolean>(false);
+  const [lockPvAutoDelete, setLockPvAutoDelete] = useState<boolean>(true);
+  const [lockPvAllowedIdsText, setLockPvAllowedIdsText] = useState<string>("");
+  const [savingLockPv, setSavingLockPv] = useState<boolean>(false);
+  const [lockPvFeedback, setLockPvFeedback] = useState<string | null>(null);
+
+  // Media Saver State
+  const [mediaSaverActive, setMediaSaverActive] = useState<boolean>(false);
+  const [savePhotos, setSavePhotos] = useState<boolean>(true);
+  const [saveVideos, setSaveVideos] = useState<boolean>(true);
+  const [saveVoice, setSaveVoice] = useState<boolean>(true);
+  const [saveSelfDestruct, setSaveSelfDestruct] = useState<boolean>(true);
+  const [mediaForwardTo, setMediaForwardTo] = useState<"saved_messages" | "custom_channel">("saved_messages");
+  const [mediaTargetChannelId, setMediaTargetChannelId] = useState<string>("");
+  const [mediaCaptionInfo, setMediaCaptionInfo] = useState<boolean>(true);
+  const [savingMediaSaver, setSavingMediaSaver] = useState<boolean>(false);
+  const [mediaSaverFeedback, setMediaSaverFeedback] = useState<string | null>(null);
 
   // 1. Self Time state
   const [timeActive, setTimeActive] = useState(false);
@@ -171,6 +198,23 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
     setPmStatus(account.features.broadcast?.status || "idle");
     setPmTotalSent(account.features.broadcast?.total_sent || 0);
 
+    // Lock PV
+    setLockPvActive(Boolean(account.features.lock_pv?.active));
+    setLockPvWarning(account.features.lock_pv?.warning_message || "⛔ پیوی این اکانت قفل می‌باشد! لطفاً پیام ندهید.");
+    setLockPvAutoBlock(Boolean(account.features.lock_pv?.auto_block));
+    setLockPvAutoDelete(account.features.lock_pv?.auto_delete !== false);
+    setLockPvAllowedIdsText((account.features.lock_pv?.allowed_user_ids || []).join("\n"));
+
+    // Media Saver
+    setMediaSaverActive(Boolean(account.features.media_saver?.active));
+    setSavePhotos(account.features.media_saver?.save_photos !== false);
+    setSaveVideos(account.features.media_saver?.save_videos !== false);
+    setSaveVoice(account.features.media_saver?.save_voice !== false);
+    setSaveSelfDestruct(account.features.media_saver?.save_self_destruct !== false);
+    setMediaForwardTo(account.features.media_saver?.forward_to || "saved_messages");
+    setMediaTargetChannelId(account.features.media_saver?.target_channel_id || "");
+    setMediaCaptionInfo(account.features.media_saver?.caption_sender_info !== false);
+
     // Fonts
     setFontActive(Boolean(account.features.font?.active));
     setFontStyle(account.features.font?.style || "bold");
@@ -239,6 +283,82 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
       setTimeFeedback(err.message || "Error updating self-time");
     } finally {
       setSavingTime(false);
+    }
+  };
+
+  // 1.1 Save Lock PV
+  const handleSaveLockPv = async () => {
+    setSavingLockPv(true);
+    setLockPvFeedback(null);
+    try {
+      const allowedUserIds = lockPvAllowedIdsText
+        .split("\n")
+        .map((id) => id.trim())
+        .filter(Boolean);
+
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/lock-pv`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active: lockPvActive,
+          warningMessage: lockPvWarning,
+          autoBlock: lockPvAutoBlock,
+          autoDelete: lockPvAutoDelete,
+          allowedUserIds,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to update Lock PV settings.");
+      }
+      account.features.lock_pv = data.lock_pv;
+      onUpdateAccount({ ...account });
+      setLockPvFeedback(
+        lang === "fa" ? "تنظیمات قفل پیوی با موفقیت در تلگرام فعال شد!" : "Lock PV settings saved successfully!"
+      );
+      setTimeout(() => setLockPvFeedback(null), 3500);
+    } catch (err: any) {
+      setLockPvFeedback(err.message || "Error saving Lock PV");
+    } finally {
+      setSavingLockPv(false);
+    }
+  };
+
+  // 1.2 Save Automatic Media Saver
+  const handleSaveMediaSaver = async () => {
+    setSavingMediaSaver(true);
+    setMediaSaverFeedback(null);
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/media-saver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active: mediaSaverActive,
+          savePhotos,
+          saveVideos,
+          saveVoice,
+          saveSelfDestruct,
+          forwardTo: mediaForwardTo,
+          targetChannelId: mediaTargetChannelId.trim() || undefined,
+          captionSenderInfo: mediaCaptionInfo,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to update Media Saver.");
+      }
+      account.features.media_saver = data.media_saver;
+      onUpdateAccount({ ...account });
+      setMediaSaverFeedback(
+        lang === "fa"
+          ? "تنظیمات ذخیره‌ساز خودکار عکس و ویدیو با موفقیت ذخیره شد!"
+          : "Media saver settings saved successfully!"
+      );
+      setTimeout(() => setMediaSaverFeedback(null), 3500);
+    } catch (err: any) {
+      setMediaSaverFeedback(err.message || "Error saving Media Saver");
+    } finally {
+      setSavingMediaSaver(false);
     }
   };
 
@@ -540,17 +660,17 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
   return (
     <div className="space-y-6" dir={lang === "fa" ? "rtl" : "ltr"}>
       {/* HEADER BANNER: PERMANENT LICENSE ACTIVE */}
-      <div className="bg-gradient-to-r from-cyan-950/60 via-slate-900 to-slate-900 border border-cyan-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+      <div className="glass-panel rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xl relative overflow-hidden">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/10">
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-slate-100 text-sm sm:text-base">
+              <h2 className="font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-300 text-sm sm:text-base">
                 {t.self.title}
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-bold border border-cyan-500/30">
+              <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-bold border border-cyan-500/40 font-mono">
                 HACKER v6
               </span>
             </div>
@@ -560,16 +680,18 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800 text-slate-300">
+        <div className="flex items-center gap-2 text-xs font-mono bg-slate-950/80 px-3.5 py-2 rounded-2xl border border-slate-800 text-slate-300 shadow-inner">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
           <span>{account.phone}</span>
         </div>
       </div>
 
       {/* SUB-TABS NAVIGATION */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800/80">
         {[
           { id: "clock", label: t.self.tabs.clock, icon: Clock, color: "text-cyan-400" },
+          { id: "lockPv", label: lang === "fa" ? "قفل پیوی 🔒" : "Lock PV", icon: ShieldAlert, color: "text-rose-400" },
+          { id: "mediaSaver", label: lang === "fa" ? "ذخیره‌ساز رسانه و تایم‌دار 📸" : "Media Saver", icon: Camera, color: "text-emerald-400" },
           { id: "autoReply", label: t.self.tabs.autoReply, icon: MessageSquare, color: "text-emerald-400" },
           { id: "mandatoryJoin", label: t.self.tabs.mandatoryJoin, icon: Lock, color: "text-amber-400" },
           { id: "market", label: lang === "fa" ? "نرخ زنده ارز، طلا و نمودار" : "Live Market & Charts", icon: TrendingUp, color: "text-emerald-400" },
@@ -583,9 +705,9 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id as any)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 ${
                 isActive
-                  ? "bg-slate-800 text-white shadow-sm border border-slate-700"
+                  ? "bg-slate-800/90 text-white shadow-lg border border-slate-700/80 backdrop-blur-md"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
               }`}
             >
@@ -598,7 +720,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
 
       {/* 1. SUB-TAB: PROFILE CLOCK */}
       {activeSubTab === "clock" && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+        <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">

@@ -42,6 +42,23 @@ export interface TelegramAccountFeatures {
     calculator_active: boolean;
     market_active: boolean;
   };
+  lock_pv?: {
+    active: boolean;
+    warning_message?: string;
+    auto_block: boolean;
+    auto_delete: boolean;
+    allowed_user_ids?: string[];
+  };
+  media_saver?: {
+    active: boolean;
+    save_photos: boolean;
+    save_videos: boolean;
+    save_voice: boolean;
+    save_self_destruct: boolean;
+    forward_to: "saved_messages" | "custom_channel";
+    target_channel_id?: string;
+    caption_sender_info: boolean;
+  };
   font: {
     active: boolean;
     style: "bold" | "italic" | "bold_italic" | "monospace" | "double" | "sans" | "gothic" | "normal" | "default";
@@ -221,4 +238,292 @@ export interface SystemHealth {
   };
   serverTime: string;
 }
+
+// ==========================================
+// STORE BOT (فروشگاه اشتراک سلف و تبچی)
+// ==========================================
+
+export type StoreKeyboardMode = "inline" | "reply" | "hybrid";
+export type StoreButtonTheme = "cyber_neon" | "galaxy_purple" | "luxury_gold" | "crypto_cyan";
+
+export interface StorePlan {
+  id: string;
+  title: string;
+  category: "self" | "tabchi" | "combo" | "subscription";
+  durationDays: number; // 0 = unlimited
+  isUnlimited: boolean;
+  priceToman: number;
+  priceUsdt: number;
+  description: string;
+  features: string[];
+  badge?: string;
+  color?: string; // "emerald" | "cyan" | "purple" | "amber" | "rose"
+  isActive: boolean;
+  orderIndex: number;
+}
+
+export interface StorePaymentCard {
+  enabled: boolean;
+  bankName: string;
+  cardNumber: string;
+  cardHolder: string;
+  shabaNumber?: string;
+  instructions?: string;
+}
+
+export interface StorePaymentCardItem {
+  id: string;
+  bankName: string;
+  cardNumber: string;
+  cardHolder: string;
+  shabaNumber?: string;
+  instructions?: string;
+  isActive: boolean;
+  color?: string; // e.g. "cyan" | "emerald" | "purple" | "blue" | "amber"
+}
+
+export interface StorePaymentCryptoNetwork {
+  id: string;
+  name: string; // e.g. USDT (TRC20), TON, TRX
+  symbol: string;
+  walletAddress: string;
+  network: string;
+  memo?: string;
+  isActive: boolean;
+  instructions?: string;
+}
+
+export interface StorePaymentSettings {
+  cardPayment: StorePaymentCard;
+  cards?: StorePaymentCardItem[];
+  cryptoPayment: {
+    enabled: boolean;
+    networks: StorePaymentCryptoNetwork[];
+    generalInstructions?: string;
+  };
+}
+
+export interface StoreBotButtonLabels {
+  buySelf: string;
+  buyTabchi: string;
+  buyCombo: string;
+  plansCatalog: string;
+  myOrders: string;
+  myAccount: string;
+  support: string;
+  helpGuide: string;
+  applyDiscount: string;
+  switchKeyboard?: string;
+}
+
+export interface StoreBotSettings {
+  botToken: string;
+  botUsername?: string;
+  botFirstName?: string;
+  ownerTelegramId: number | string;
+  supportUsername: string;
+  channelUsername?: string;
+  forceJoinChannel: boolean;
+  enabled: boolean;
+  status: "online" | "polling" | "stopped" | "error";
+  lastError?: string;
+  lastActive?: string;
+  keyboardMode: StoreKeyboardMode;
+  allowCustomerKeyboardSwitch: boolean;
+  buttonTheme: StoreButtonTheme;
+  buttonLabels: StoreBotButtonLabels;
+  welcomeText: string;
+  rulesText?: string;
+  stats: {
+    totalUsers: number;
+    totalOrders: number;
+    totalRevenueToman: number;
+    totalRevenueUsdt: number;
+  };
+}
+
+export interface StoreOrder {
+  id: string;
+  planId: string;
+  planTitle: string;
+  category: "self" | "tabchi" | "combo" | "subscription";
+  durationDays: number;
+  isUnlimited: boolean;
+  userId: number | string;
+  userUsername?: string;
+  userFirstName?: string;
+  priceToman: number;
+  priceUsdt: number;
+  discountAmount?: number;
+  finalPriceToman: number;
+  finalPriceUsdt: number;
+  paymentMethod: "card" | "crypto";
+  paymentDetails: {
+    cryptoNetwork?: string;
+    walletAddress?: string;
+    receiptProof?: string;
+    receiptType?: "image" | "text" | "txid";
+  };
+  status: "pending" | "approved" | "rejected";
+  adminNote?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  generatedCredentials?: {
+    licenseCode?: string;
+    accountPhone?: string;
+    portalUrl?: string;
+    password?: string;
+    notes?: string;
+  };
+}
+
+export interface StoreCoupon {
+  id: string;
+  code: string;
+  discountPercent: number;
+  discountToman: number;
+  maxUses: number;
+  usedCount: number;
+  expiresAt?: string | null;
+  isActive: boolean;
+}
+
+export interface StoreSubscriptionExtension {
+  id: string;
+  timestamp: string;
+  durationDays: number; // 0 = unlimited / lifetime
+  previousExpiresAt?: string | null;
+  newExpiresAt?: string | null;
+  planTitle?: string;
+  actionType: "manual_bulk" | "manual_single" | "order_approved";
+  adminNote?: string;
+}
+
+export interface StoreCustomer {
+  userId: number | string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  joinedAt: string;
+  ordersCount: number;
+  activePlan?: string;
+  expiresAt?: string | null;
+  preferredKeyboardMode?: StoreKeyboardMode;
+  extensionsHistory?: StoreSubscriptionExtension[];
+}
+
+export interface StoreData {
+  settings: StoreBotSettings;
+  plans: StorePlan[];
+  payments: StorePaymentSettings;
+  orders: StoreOrder[];
+  coupons: StoreCoupon[];
+  customers: StoreCustomer[];
+}
+
+// ==========================================
+// SUPPORT BOT TYPES (ربات پشتیبانی تیکتینگ)
+// ==========================================
+
+export interface SupportBotSettings {
+  enabled: boolean;
+  botToken: string;
+  adminChatId?: string | number; // Telegram ID of owner to receive tickets
+  welcomeMessage: string;
+  ticketSubmittedMessage: string;
+  closedTicketMessage: string;
+  supportName: string;
+  workingHoursText?: string;
+  autoFaqEnabled?: boolean;
+}
+
+export interface SupportTicketMessage {
+  id: string;
+  sender: "user" | "admin";
+  senderName: string;
+  text: string;
+  timestamp: string;
+  telegramMessageId?: number;
+}
+
+export interface SupportTicket {
+  id: string;
+  ticketNumber: number;
+  userId: number | string;
+  userUsername?: string;
+  userFullName: string;
+  subject: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  priority: "low" | "medium" | "high" | "urgent";
+  createdAt: string;
+  updatedAt: string;
+  lastMessageSnippet?: string;
+  messages: SupportTicketMessage[];
+}
+
+export interface SupportFaqItem {
+  id: string;
+  question: string;
+  answer: string;
+  category?: string;
+  order: number;
+}
+
+export interface SupportBotData {
+  settings: SupportBotSettings;
+  tickets: SupportTicket[];
+  faqs: SupportFaqItem[];
+}
+
+// ==========================================
+// BATCH CHANNEL & GROUP CREATOR TYPES (گروه‌ساز و کانال‌ساز انبوه)
+// ==========================================
+
+export type BatchTargetType = "channel" | "group" | "supergroup";
+export type BatchNamingLanguage = "fa" | "en" | "ar" | "ru" | "mixed";
+export type BatchThemeTopic = "crypto" | "tech" | "business" | "gaming" | "entertainment" | "vip" | "general";
+
+export interface BatchCreatedItem {
+  id: string;
+  telegramId?: string | number;
+  title: string;
+  about?: string;
+  type: BatchTargetType;
+  inviteLink?: string;
+  username?: string;
+  createdAt: string;
+  status: "success" | "failed";
+  error?: string;
+}
+
+export interface BatchCreationTask {
+  id: string;
+  phone: string;
+  targetType: BatchTargetType;
+  count: number;
+  completedCount: number;
+  language: BatchNamingLanguage;
+  topic: BatchThemeTopic;
+  delaySeconds: number;
+  status: "idle" | "running" | "completed" | "stopped" | "error";
+  startedAt?: string;
+  completedAt?: string;
+  lastError?: string;
+  items: BatchCreatedItem[];
+}
+
+export interface BatchCreationRequest {
+  targetType: BatchTargetType;
+  count: number;
+  language: BatchNamingLanguage;
+  topic: BatchThemeTopic;
+  delaySeconds: number;
+  customPrefix?: string;
+  customSuffix?: string;
+  customNamesList?: string[];
+  customAbout?: string;
+}
+
 

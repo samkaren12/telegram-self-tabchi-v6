@@ -27,6 +27,7 @@ import {
   Download,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
+import { Volume2, VolumeX, BellRing } from "lucide-react";
 import { SystemHealth } from "../types";
 import { UpdateManager } from "./UpdateManager";
 import { SslBackgroundServiceManager } from "./SslBackgroundServiceManager";
@@ -35,9 +36,23 @@ interface SystemStatusProps {
   health: SystemHealth | null;
   lang: Language;
   onOpenOwnerPasswordModal?: () => void;
+  soundEnabled?: boolean;
+  onToggleSound?: () => void;
+  onTestSound?: () => void;
+  volume?: number;
+  onVolumeChange?: (v: number) => void;
 }
 
-export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang, onOpenOwnerPasswordModal }) => {
+export const SystemStatus: React.FC<SystemStatusProps> = ({
+  health,
+  lang,
+  onOpenOwnerPasswordModal,
+  soundEnabled = true,
+  onToggleSound,
+  onTestSound,
+  volume = 0.45,
+  onVolumeChange,
+}) => {
   const t = translations[lang];
 
   // BotFather Controller & MTProto API State
@@ -584,6 +599,84 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({ health, lang, onOpen
                 <span className="text-slate-400 text-[11px]">{c.desc}</span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Global Sound Notification Settings Card */}
+        <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-slate-500" />}
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-100 text-sm">
+                  {lang === "fa" ? "اعلان‌های صوتی هوشمند (Audio Chimes)" : "Smart Sound Notifications"}
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  {lang === "fa"
+                    ? "پخش آوای ملایم و دلنشین هنگام ثبت سفارش جدید یا اتمام ارسال تبچی"
+                    : "Subtle, non-intrusive harmonic tones on new orders and broadcast completions"}
+                </p>
+              </div>
+            </div>
+
+            {onToggleSound && (
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={soundEnabled}
+                  onChange={onToggleSound}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+              </label>
+            )}
+          </div>
+
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-300 font-medium">
+                {lang === "fa" ? "حجم صدای اعلان‌ها (Volume):" : "Notification Volume:"}
+              </span>
+              <span className="text-cyan-400 font-mono font-bold">
+                {Math.round(volume * 100)}%
+              </span>
+            </div>
+
+            {onVolumeChange && (
+              <input
+                type="range"
+                min="0.05"
+                max="1"
+                step="0.05"
+                value={volume}
+                disabled={!soundEnabled}
+                onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400 disabled:opacity-40"
+              />
+            )}
+
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span className="text-[11px] text-slate-400">
+                  {lang === "fa" ? "سفارش جدید فروشگاه و اتمام تبچی" : "New store order & broadcast done"}
+                </span>
+              </div>
+
+              {onTestSound && (
+                <button
+                  type="button"
+                  onClick={onTestSound}
+                  disabled={!soundEnabled}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-40 shadow-sm"
+                >
+                  <BellRing className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{lang === "fa" ? "تست پخش آوا" : "Test Sound"}</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
