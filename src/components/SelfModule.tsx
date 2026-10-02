@@ -859,6 +859,315 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
         </div>
       )}
 
+      {/* 1.1 SUB-TAB: LOCK PV (قفل کردن پیوی و دایرکت) */}
+      {activeSubTab === "lockPv" && (
+        <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-2xl space-y-6">
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-lg shadow-rose-500/10">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-white text-base">
+                    {lang === "fa" ? "قفل کردن هوشمند پیوی و چت‌های خصوصی (Lock PV)" : "Direct Messages Lock (Lock PV)"}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 font-mono">
+                    ANTI-SPAM
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                  {lang === "fa"
+                    ? "با فعال‌سازی این قابلیت، ورود هرگونه پیام ناشناس در پیوی شما کنترل شده، در صورت تمایل اخطار ارسال می‌شود، پیام به صورت خودکار حذف شده و فرستنده بلاک می‌گردد."
+                    : "Block unwanted direct messages automatically, send custom warnings, delete messages, and auto-block spammers."}
+                </p>
+              </div>
+            </div>
+
+            {/* Main Toggle */}
+            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={lockPvActive}
+                onChange={(e) => setLockPvActive(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Warning Message */}
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span>متن اخطار و پاسخ خودکار هنگام ارسال پیام به پیوی قفل:</span>
+                <span className="text-[11px] text-slate-500 font-mono">Auto Warning</span>
+              </label>
+              <textarea
+                rows={2}
+                value={lockPvWarning}
+                onChange={(e) => setLockPvWarning(e.target.value)}
+                placeholder="⛔ پیوی این اکانت قفل می‌باشد! لطفاً پیام ندهید."
+                className="w-full bg-slate-950/90 border border-slate-800 rounded-2xl p-3 text-xs text-white outline-none focus:border-rose-500 transition-all placeholder-slate-600"
+              />
+            </div>
+
+            {/* Auto Block Spammer Option */}
+            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <UserX className="w-4 h-4 text-rose-400" />
+                  <span>بلاک خودکار فرستنده (Auto-Block)</span>
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  کاربر مزاحم پس از ارسال پیام فوراً مسدود و بلاک خواهد شد.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={lockPvAutoBlock}
+                onChange={(e) => setLockPvAutoBlock(e.target.checked)}
+                className="w-4 h-4 rounded text-rose-500 focus:ring-0 cursor-pointer"
+              />
+            </div>
+
+            {/* Auto Delete Incoming Message */}
+            <div className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Trash2 className="w-4 h-4 text-amber-400" />
+                  <span>حذف فوری پیام از چت (Auto-Delete)</span>
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  پیام ارسال شده در پیوی برای هر دو طرف بلافاصله پاک می‌شود.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={lockPvAutoDelete}
+                onChange={(e) => setLockPvAutoDelete(e.target.checked)}
+                className="w-4 h-4 rounded text-amber-500 focus:ring-0 cursor-pointer"
+              />
+            </div>
+
+            {/* Whitelisted Allowed User IDs */}
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span>لیست سفید آیدی‌های مجاز (استثناها - هر آیدی عددی در یک خط):</span>
+                <span className="text-[11px] text-emerald-400 font-mono">Whitelist IDs</span>
+              </label>
+              <textarea
+                rows={3}
+                value={lockPvAllowedIdsText}
+                onChange={(e) => setLockPvAllowedIdsText(e.target.value)}
+                placeholder="123456789&#10;987654321"
+                className="w-full bg-slate-950/90 border border-slate-800 rounded-2xl p-3 text-xs font-mono text-cyan-300 outline-none focus:border-rose-500 transition-all placeholder-slate-600"
+              />
+              <span className="text-[11px] text-slate-500">
+                این افراد حتی در صورت فعال بودن قفل پیوی، بدون مانع می‌توانند به شما پیام ارسال کنند.
+              </span>
+            </div>
+          </div>
+
+          {lockPvFeedback && (
+            <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>{lockPvFeedback}</span>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleSaveLockPv}
+              disabled={savingLockPv}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-400 hover:to-pink-400 text-white font-bold text-xs shadow-lg shadow-rose-950/40 disabled:opacity-50 transition-all active:scale-95"
+            >
+              <Save className="w-4 h-4" />
+              <span>{savingLockPv ? "درحال ذخیره..." : "ذخیره تنظیمات قفل پیوی"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 1.2 SUB-TAB: MEDIA SAVER (ذخیره‌ساز عکس، ویدیو، ویس و عکس‌های زمان‌دار) */}
+      {activeSubTab === "mediaSaver" && (
+        <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-2xl space-y-6">
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10">
+                <Camera className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-extrabold text-white text-base">
+                    {lang === "fa" ? "ذخیره‌ساز هوشمند رسانه‌ها و عکس‌های زمان‌دار (Media Saver)" : "Automatic Media & Self-Destruct Saver"}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+                    AUTOSAVE
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                  {lang === "fa"
+                    ? "هر نوع عکسی که در پیوی برای شما فرستاده شود، چه عکس‌ها و ویدیوهای تایم‌دار خودسوز (Self-Destruct) و چه فایل‌های معمولی، پیش از حذف خودکار دانلود شده و فوراً در Saved Messages یا کانال دلخواه شما بایگانی می‌شود."
+                    : "Automatically backup self-destruct photos/videos, normal images, voice notes, and videos directly into your Saved Messages."}
+                </p>
+              </div>
+            </div>
+
+            {/* Main Toggle */}
+            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+              <input
+                type="checkbox"
+                checked={mediaSaverActive}
+                onChange={(e) => setMediaSaverActive(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold text-slate-300">انواع رسانه‌ها جهت ذخیره‌سازی خودکار:</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* 1. Self Destruct */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-semibold text-white">عکس و ویدیوی تایم‌دار 🔥</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={saveSelfDestruct}
+                  onChange={(e) => setSaveSelfDestruct(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
+
+              {/* 2. Photos */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-semibold text-white">عکس‌های عادی 📸</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={savePhotos}
+                  onChange={(e) => setSavePhotos(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
+
+              {/* 3. Videos */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Video className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-semibold text-white">ویدیوها 🎥</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={saveVideos}
+                  onChange={(e) => setSaveVideos(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
+
+              {/* 4. Voice */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Mic className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-semibold text-white">پیام‌های صوتی و ویس 🎙️</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={saveVoice}
+                  onChange={(e) => setSaveVoice(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-800">
+              {/* Destination */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300">محل ذخیره‌سازی رسانه‌ها:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMediaForwardTo("saved_messages")}
+                    className={`py-2 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                      mediaForwardTo === "saved_messages"
+                        ? "bg-emerald-500/20 border-emerald-500 text-emerald-300"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    پیام‌های ذخیره شده (Saved)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaForwardTo("custom_channel")}
+                    className={`py-2 px-3 rounded-xl border text-xs font-semibold transition-all ${
+                      mediaForwardTo === "custom_channel"
+                        ? "bg-emerald-500/20 border-emerald-500 text-emerald-300"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    کانال خصوصی اختصاصی
+                  </button>
+                </div>
+              </div>
+
+              {/* Target Channel ID if selected */}
+              {mediaForwardTo === "custom_channel" && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300">شناسه یا یوزرنیم کانال مقصد:</label>
+                  <input
+                    type="text"
+                    value={mediaTargetChannelId}
+                    onChange={(e) => setMediaTargetChannelId(e.target.value)}
+                    placeholder="@MyPrivateArchiveChannel یا -100..."
+                    className="w-full bg-slate-950/90 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-emerald-500 transition-all"
+                  />
+                </div>
+              )}
+
+              {/* Include sender info in caption */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between gap-3 md:col-span-2">
+                <div>
+                  <h5 className="text-xs font-bold text-white">ثبت مشخصات فرستنده در کپشن</h5>
+                  <p className="text-[11px] text-slate-400">
+                    نام، آیدی عددی و زمان دقیق دریافت همراه با فایل در چت ذخیره می‌شود.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={mediaCaptionInfo}
+                  onChange={(e) => setMediaCaptionInfo(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+          {mediaSaverFeedback && (
+            <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>{mediaSaverFeedback}</span>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={handleSaveMediaSaver}
+              disabled={savingMediaSaver}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-950/40 disabled:opacity-50 transition-all active:scale-95"
+            >
+              <Save className="w-4 h-4" />
+              <span>{savingMediaSaver ? "درحال ذخیره..." : "ذخیره تنظیمات ذخیره‌ساز رسانه"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 2. SUB-TAB: AUTO-REPLY */}
       {activeSubTab === "autoReply" && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">

@@ -64,10 +64,12 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
   const [botStatus, setBotStatus] = useState<"connected" | "disconnected" | "error">("disconnected");
   const [apiId, setApiId] = useState("");
   const [apiHash, setApiHash] = useState("");
+  const [buttonLayout, setButtonLayout] = useState<"3-cols" | "2-cols" | "1-col">("3-cols");
   const [savingBot, setSavingBot] = useState(false);
   const [testingBot, setTestingBot] = useState(false);
   const [botFeedback, setBotFeedback] = useState<string | null>(null);
   const [isFeedbackError, setIsFeedbackError] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState(false);
 
   useEffect(() => {
     fetchBotSettings();
@@ -85,6 +87,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
         setBotUsername(b.bot_username || "");
         setBotFirstName(b.bot_first_name || "");
         setBotStatus(b.status || (b.enabled && b.bot_token ? "connected" : "disconnected"));
+        if (b.button_layout) setButtonLayout(b.button_layout);
         if (b.api_id) setApiId(String(b.api_id));
         if (b.api_hash) setApiHash(String(b.api_hash));
       }
@@ -186,6 +189,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
           enabled: botEnabled,
           botToken: botToken.trim(),
           ownerId: ownerId.trim(),
+          buttonLayout,
           apiId: apiId ? Number(apiId) : undefined,
           apiHash: apiHash ? apiHash.trim() : undefined,
         }),
@@ -445,6 +449,44 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
                 dir="ltr"
                 className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
               />
+          </div>
+
+          {/* Button Layout & Style Arrangement (aiogram: 3-cols, 2-cols, 1-col) */}
+          <div className="pt-3 border-t border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-slate-300">
+                {lang === "fa" ? "چینش و استایل کلیدهای شیشه‌ای (پالت رنگی aiogram):" : "Inline Button Layout (aiogram style):"}
+              </label>
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">success</span>
+                <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">primary</span>
+                <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">danger</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: "3-cols", title: "سه‌تایی (۳ ستونه)", desc: "۳ دکمه در هر سطر" },
+                { id: "2-cols", title: "دوتایی (۲ ستونه)", desc: "۲ دکمه در هر سطر" },
+                { id: "1-col", title: "تک‌ستونه (۱ تایی)", desc: "۱ دکمه در هر سطر" },
+              ].map((layout) => {
+                const isSelected = buttonLayout === layout.id;
+                return (
+                  <button
+                    key={layout.id}
+                    type="button"
+                    onClick={() => setButtonLayout(layout.id as any)}
+                    className={`py-2 px-2.5 rounded-xl border text-center transition-all ${
+                      isSelected
+                        ? "bg-cyan-500/20 border-cyan-400 text-cyan-300 font-bold shadow-md shadow-cyan-950/40"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="text-xs">{layout.title}</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">{layout.desc}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -487,42 +529,42 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
               : "After connecting, open your bot and send /start. These interactive glass buttons will be displayed in real time:"}
           </p>
 
+          {/* Dynamic grid based on selected layout (3-cols, 2-cols, 1-col) */}
           <div className="space-y-2 max-w-lg mx-auto pt-1 font-sans">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-cyan-300 text-xs font-bold shadow-sm shadow-cyan-950/50 hover:border-cyan-400 cursor-default transition-all">
-                <span>⏰ ساعت سلف: روشن 🟢</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-cyan-300 text-xs font-bold shadow-sm shadow-cyan-950/50 hover:border-cyan-400 cursor-default transition-all">
-                <span>🚀 تبچی: فعال 🟢</span>
-              </div>
-            </div>
+            {(() => {
+              const gridColsClass =
+                buttonLayout === "1-col"
+                  ? "grid-cols-1"
+                  : buttonLayout === "2-cols"
+                  ? "grid-cols-2"
+                  : "grid-cols-3";
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/80 border border-slate-700/80 text-slate-200 text-xs font-medium hover:border-slate-600 cursor-default transition-all">
-                <span>💬 منشی خودکار</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/80 border border-slate-700/80 text-slate-200 text-xs font-medium hover:border-slate-600 cursor-default transition-all">
-                <span>🔤 استایل و فونت</span>
-              </div>
-            </div>
+              const previewButtons = [
+                { title: "ساعت سلف: روشن 🟢", style: "bg-emerald-950/70 border-emerald-500/50 text-emerald-300", badge: "success" },
+                { title: "تبچی: فعال 🟢", style: "bg-blue-950/70 border-blue-500/50 text-blue-300", badge: "primary" },
+                { title: "منشی هوشمند 💬", style: "bg-rose-950/70 border-rose-500/50 text-rose-300", badge: "danger" },
+                { title: "جوین اجباری 🔒", style: "bg-emerald-950/70 border-emerald-500/50 text-emerald-300", badge: "success" },
+                { title: "ابزارها و ارز 📈", style: "bg-blue-950/70 border-blue-500/50 text-blue-300", badge: "primary" },
+                { title: "استایل فونت ✨", style: "bg-rose-950/70 border-rose-500/50 text-rose-300", badge: "danger" },
+                { title: "اشتراک اکانت‌ها 📅", style: "bg-emerald-950/70 border-emerald-500/50 text-emerald-300", badge: "success" },
+                { title: "آمار سیستم ⚡", style: "bg-blue-950/70 border-blue-500/50 text-blue-300", badge: "primary" },
+                { title: "لاگ‌های زنده 📜", style: "bg-rose-950/70 border-rose-500/50 text-rose-300", badge: "danger" },
+              ];
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/80 border border-slate-700/80 text-slate-200 text-xs font-medium hover:border-slate-600 cursor-default transition-all">
-                <span>👥 مدیریت اکانت‌ها</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/80 border border-slate-700/80 text-slate-200 text-xs font-medium hover:border-slate-600 cursor-default transition-all">
-                <span>📊 آمار و دایاگ‌ها 📈</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/80 border border-slate-700/80 text-slate-200 text-xs font-medium hover:border-slate-600 cursor-default transition-all">
-                <span>📋 آخرین لاگ‌ها 📑</span>
-              </div>
-              <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/80 border border-slate-700/80 text-slate-200 text-xs font-medium hover:border-slate-600 cursor-default transition-all">
-                <span>🏓 پینگ سرور ⚡️</span>
-              </div>
-            </div>
+              return (
+                <div className={`grid ${gridColsClass} gap-1.5`}>
+                  {previewButtons.map((btn, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex items-center justify-between py-2 px-2.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${btn.style}`}
+                    >
+                      <span className="truncate">{btn.title}</span>
+                      <span className="text-[9px] opacity-75 font-mono">[{btn.badge}]</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             <div className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-slate-900/90 border border-cyan-800/40 text-cyan-400 text-xs font-bold hover:border-cyan-500 cursor-default transition-all">
               <span>🔄 بروزرسانی وضعیت پنل 🔁</span>
@@ -731,6 +773,132 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
               ? "🔒 سشن‌های تلگرام و کلیدهای ارتباطی به صورت کاملاً ایزوله در سرور اختصاصی ذخیره شده و بدون ذخیره هیچ‌گونه دیتایی روی سرورهای متفرقه اجرا می‌شوند."
               : "🔒 Telegram sessions and authentication keys are stored in an isolated, encrypted local state directory without 3rd-party relays."}
           </p>
+        </div>
+      </div>
+
+      {/* DEDICATED TERMINAL ASSISTANT CLI CARD (sudo selfandtabchi) */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/20 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-md">
+              <Terminal className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-100 text-base">
+                  {lang === "fa" ? "دستیار خط فرمان ترمینال (Terminal CLI)" : "Terminal Assistant CLI"}
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  sudo selfandtabchi
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {lang === "fa"
+                  ? "کنترل سریع سرور از طریق SSH بدون نیاز به مرورگر (آپدیت، حذف، دامنه، SSL و ریستارت)"
+                  : "Quick server control directly via SSH (Update, Uninstall, Domain, SSL & Restart)"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-slate-950 border border-emerald-500/40 rounded-xl px-3.5 py-2">
+            <span className="text-slate-400 text-xs font-mono select-none">$</span>
+            <code className="text-emerald-400 font-mono font-bold text-xs">sudo selfandtabchi</code>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText("sudo selfandtabchi");
+                setCopiedCmd(true);
+                setTimeout(() => setCopiedCmd(false), 2000);
+              }}
+              className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-emerald-300 transition-colors"
+              title={lang === "fa" ? "کپی دستور" : "Copy command"}
+            >
+              {copiedCmd ? <Check className="w-4 h-4 text-emerald-400" /> : <Save className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+              <span className="w-5 h-5 rounded-md bg-emerald-500/20 flex items-center justify-center text-[11px] font-mono">3</span>
+              <span>{lang === "fa" ? "بروزرسانی خودکار" : "Update Script"}</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {lang === "fa"
+                ? "دریافت آخرین پکیج‌ها، بیلد مجدد و اعمال تغییرات جدید با یک عدد"
+                : "Pull latest updates, rebuild assets and reload daemon automatically"}
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-cyan-400 font-bold text-xs">
+              <span className="w-5 h-5 rounded-md bg-cyan-500/20 flex items-center justify-center text-[11px] font-mono">4</span>
+              <span>{lang === "fa" ? "تنظیم و چنج دامنه" : "Set & Change Domain"}</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {lang === "fa"
+                ? "اتصال دامنه دلخواه به آی‌پی سرور یا تغییر ساب‌دامین به سادگی"
+                : "Link custom domains or subdomains to server IP seamlessly"}
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-purple-400 font-bold text-xs">
+              <span className="w-5 h-5 rounded-md bg-purple-500/20 flex items-center justify-center text-[11px] font-mono">5</span>
+              <span>{lang === "fa" ? "صدور SSL برای IP یا دامنه" : "Issue SSL (IP/Domain)"}</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {lang === "fa"
+                ? "گرفتن گواهی امنیتی Let's Encrypt یا OpenSSL SAN برای آی‌پی سرور"
+                : "Instant SSL certificates with automatic renewal for domains and IPs"}
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+              <span className="w-5 h-5 rounded-md bg-amber-500/20 flex items-center justify-center text-[11px] font-mono">1</span>
+              <span>{lang === "fa" ? "شروع و ریستارت سرویس" : "Start & Restart"}</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {lang === "fa"
+                ? "راه‌اندازی فوری پروسه و آزادسازی پورت‌ها در صورت اختلال سرور"
+                : "Restart background processes and flush ports instantly"}
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
+              <span className="w-5 h-5 rounded-md bg-blue-500/20 flex items-center justify-center text-[11px] font-mono">7</span>
+              <span>{lang === "fa" ? "مشاهده لاگ‌های زنده" : "Live PM2 Logs"}</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {lang === "fa"
+                ? "مشاهده زنده فعالیت اکانت‌های سلف، تبچی و سفارش‌های ربات"
+                : "Watch real-time live logs of Telegram engine and requests"}
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-red-500/20 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-red-400 font-bold text-xs">
+              <span className="w-5 h-5 rounded-md bg-red-500/20 flex items-center justify-center text-[11px] font-mono">9</span>
+              <span>{lang === "fa" ? "حذف کامل اسکریپت" : "Full Uninstall"}</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {lang === "fa"
+                ? "توقف همه سرویس‌ها، پاکسازی کامل فایل‌ها و حذف بدون ردپا از سرور"
+                : "Safely kill processes, purge databases and wipe application cleanly"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-950/50 p-2.5 rounded-lg border border-slate-800">
+          <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>
+            {lang === "fa"
+              ? "نکته: دستور sudo selfandtabchi در هنگام نصب اسکریپت به صورت سراسری در لینوکس ثبت شده و در هر مسیری قابل اجراست."
+              : "Tip: sudo selfandtabchi is installed as a global binary and can be called from any directory in your Linux terminal."}
+          </span>
         </div>
       </div>
 

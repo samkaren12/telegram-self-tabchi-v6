@@ -208,7 +208,13 @@ fi
 # Determine Server IP
 SERVER_IP=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
-chmod +x "$PROJECT_DIR/start.sh" "$PROJECT_DIR/stop.sh" "$PROJECT_DIR/status.sh"
+# Register sudo selfandtabchi global terminal command
+if [ -f "$PROJECT_DIR/scripts/selfandtabchi.sh" ]; then
+  chmod +x "$PROJECT_DIR/scripts/selfandtabchi.sh"
+  mkdir -p /usr/local/bin /usr/bin 2>/dev/null || true
+  ln -sf "$PROJECT_DIR/scripts/selfandtabchi.sh" /usr/local/bin/selfandtabchi 2>/dev/null || true
+  ln -sf "$PROJECT_DIR/scripts/selfandtabchi.sh" /usr/bin/selfandtabchi 2>/dev/null || true
+fi
 
 echo -e "\n${GREEN}${BOLD}======================================================================${NC}"
 echo -e "${GREEN}${BOLD}   🎉 INSTALLATION COMPLETED — 24/7 DAEMON ACTIVATED PERMANENTLY!    ${NC}"
@@ -219,6 +225,11 @@ echo -e " ${BOLD}🌍 Public Server URL:${NC}       ${CYAN}http://${SERVER_IP}:3
 echo -e " ${BOLD}🔑 Startup Security Key:${NC}    ${YELLOW}selfsamkaren12${NC}"
 echo -e " ${BOLD}🤖 Telegram Saved Messages:${NC} ${MAGENTA}/self, /tabchi, /help${NC}"
 echo ""
+echo -e "${BOLD}🚀 NEW: Terminal Assistant Command:${NC}"
+echo -e " هر زمان در ترمینال سرور دستور زیر را بزنید منوی مدیریتی فارسی باز می‌شود:"
+echo -e "   👉 ${GREEN}${BOLD}sudo selfandtabchi${NC}"
+echo -e " با این دستور می‌توانید اسکریپت را ${YELLOW}بروزرسانی، حذف، تنظیم دامنه، دریافت SSL و تغییر IP${NC} کنید."
+echo ""
 echo -e "${BOLD}📌 Important (24/7 Background Persistence):${NC}"
 echo -e " ✔ The application runs independently as a ${GREEN}PM2 background daemon${NC}."
 echo -e " ✔ ${BOLD}You can safely CLOSE your terminal, SSH, or PuTTY window now.${NC}"
@@ -226,6 +237,7 @@ echo -e " ✔ To enable automatic startup upon server reboot, run:"
 echo -e "     ${YELLOW}pm2 startup && pm2 save${NC}"
 echo ""
 echo -e "${BOLD}🛠 Management Commands:${NC}"
+echo -e " • Terminal CLI:   ${GREEN}sudo selfandtabchi${NC}"
 echo -e " • Status check:   ${CYAN}pm2 status${NC}  or  ${CYAN}./status.sh${NC}"
 echo -e " • View live logs: ${CYAN}pm2 logs telegram-self-tabchi-v6${NC}"
 echo -e " • Restart panel:  ${CYAN}pm2 restart telegram-self-tabchi-v6${NC}"

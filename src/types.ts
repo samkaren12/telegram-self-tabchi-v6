@@ -159,6 +159,7 @@ export interface BotSettings {
   last_error?: string;
   last_active?: string;
   web_app_url?: string;
+  button_layout?: "3-cols" | "2-cols" | "1-col"; // aiogram-style row arrangement
 }
 
 export interface MarketQuote {
@@ -216,7 +217,7 @@ export interface LogEntry {
   timestamp: string;
   level: "info" | "success" | "warn" | "error";
   accountPhone?: string;
-  module: "auth" | "self_time" | "auto_reply" | "tabchi" | "mandatory_join" | "tools" | "broadcast" | "bot" | "system";
+  module: "auth" | "self" | "self_time" | "auto_reply" | "tabchi" | "mandatory_join" | "tools" | "broadcast" | "bot" | "system";
   message: string;
   details?: any;
 }
@@ -244,7 +245,18 @@ export interface SystemHealth {
 // ==========================================
 
 export type StoreKeyboardMode = "inline" | "reply" | "hybrid";
-export type StoreButtonTheme = "cyber_neon" | "galaxy_purple" | "luxury_gold" | "crypto_cyan";
+export type StoreKeyboardColumns = 1 | 2 | 3;
+export type TelegramButtonStyle = "primary" | "success" | "danger";
+
+export type StoreButtonTheme =
+  | "cyber_neon"
+  | "galaxy_purple"
+  | "luxury_gold"
+  | "crypto_cyan"
+  | "fire_red"
+  | "emerald_matrix"
+  | "rainbow_vivid"
+  | "aiogram_colored"; // aiogram-style primary/success/danger
 
 export interface StorePlan {
   id: string;
@@ -329,6 +341,8 @@ export interface StoreBotSettings {
   lastError?: string;
   lastActive?: string;
   keyboardMode: StoreKeyboardMode;
+  keyboardColumns?: StoreKeyboardColumns; // 1 | 2 | 3
+  replyKeyboardColumns?: StoreKeyboardColumns; // 1 | 2 | 3
   allowCustomerKeyboardSwitch: boolean;
   buttonTheme: StoreButtonTheme;
   buttonLabels: StoreBotButtonLabels;
@@ -524,6 +538,52 @@ export interface BatchCreationRequest {
   customSuffix?: string;
   customNamesList?: string[];
   customAbout?: string;
+}
+
+// ==========================================
+// DASHBOARD ACTIVITY & ANALYTICS TYPES
+// ==========================================
+
+export interface HourlyActivityPoint {
+  hour: string;
+  sentMessages: number;
+  receivedMessages: number;
+  autoReplies: number;
+  blockedUsers: number;
+  savedMedia: number;
+}
+
+export interface AccountActivityStat {
+  phone: string;
+  firstName: string;
+  totalSent: number;
+  totalReceived: number;
+  autoReplies: number;
+  tabchiSent: number;
+  savedMediaCount: number;
+  blockedCount: number;
+  interactionRate: number; // percentage
+  status: "online" | "offline";
+}
+
+export interface ActivityDashboardData {
+  overview: {
+    totalAccounts: number;
+    onlineAccounts: number;
+    totalMessagesSentToday: number;
+    totalMessagesReceivedToday: number;
+    avgInteractionRate: number;
+    totalMediaSaved: number;
+    totalBlocked: number;
+  };
+  hourlyTimeline: HourlyActivityPoint[];
+  accountStats: AccountActivityStat[];
+  moduleDistribution: Array<{
+    name: string;
+    activeCount: number;
+    percentage: number;
+    color: string;
+  }>;
 }
 
 

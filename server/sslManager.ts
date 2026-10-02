@@ -226,9 +226,10 @@ function inspectCertStatus(status: SslStatus): SslStatus {
  * Generate high-grade SAN (Subject Alternative Name) self-signed certificate
  * for raw server IP (IP SAN) + nip.io / sslip.io wildcard domain.
  */
-export async function generateServerIpSsl(customIp?: string): Promise<SslStatus> {
+export async function generateServerIpSsl(customIp?: string, customDomain?: string): Promise<SslStatus> {
   ensureDir(SSL_DATA_DIR);
   const serverIp = customIp || (await getPublicServerIp());
+  const selectedDomain = customDomain && customDomain.trim() ? customDomain.trim().toLowerCase() : `${serverIp}.nip.io`;
   const nipDomain = `${serverIp}.nip.io`;
   const sslipDomain = `${serverIp}.sslip.io`;
 
@@ -236,8 +237,27 @@ export async function generateServerIpSsl(customIp?: string): Promise<SslStatus>
   const certPath = path.join(SSL_DATA_DIR, "server.crt");
   const cnfPath = path.join(SSL_DATA_DIR, "openssl.cnf");
 
-  // OpenSSL SAN configuration file allowing direct IP and nip.io domains
-  const opensslConfig = `[req]
+  // Try Certbot for valid Let's Encrypt SSL if custom domain provided and certbot is available
+  let certbotSucceeded = false;
+  if (customDomain && !customDomain.includes("nip.io") && !customDomain.includes("sslip.io")) {
+    try {
+      execSync(`certbot certonly --standalone -d "${selectedDomain}" --non-interactive --agree-tos -m admin@${selectedDomain} --keep-until-expiring 2>/dev/null`, {
+        timeout: 30000,
+        stdio: "ignore",
+      });
+      const liveCert = `/etc/letsencrypt/live/${selectedDomain}/fullchain.pem`;
+      const liveKey = `/etc/letsencrypt/live/${selectedDomain}/privkey.pem`;
+      if (fs.existsSync(liveCert) && fs.existsSync(liveKey)) {
+        fs.copyFileSync(liveCert, certPath);
+        fs.copyFileSync(liveKey, keyPath);
+        certbotSucceeded = true;
+      }
+    } catch (_) {}
+  }
+
+  if (!certbotSucceeded) {
+    // OpenSSL SAN configuration file allowing direct IP and custom domain
+    const opensslConfig = `[req]
 default_bits = 2048
 prompt = no
 default_md = sha256
@@ -250,7 +270,7 @@ ST = Tehran
 L = Tehran
 O = Telegram Automation Security
 OU = Automated VPS SSL
-CN = ${serverIp}
+CN = ${selectedDomain}
 
 [req_ext]
 subjectAltName = @alt_names
@@ -258,31 +278,32 @@ subjectAltName = @alt_names
 [alt_names]
 IP.1 = ${serverIp}
 IP.2 = 127.0.0.1
-DNS.1 = ${serverIp}
-DNS.2 = ${nipDomain}
-DNS.3 = ${sslipDomain}
-DNS.4 = localhost
+DNS.1 = ${selectedDomain}
+DNS.2 = ${serverIp}
+DNS.3 = ${nipDomain}
+DNS.4 = ${sslipDomain}
+DNS.5 = localhost
 `;
 
-  fs.writeFileSync(cnfPath, opensslConfig, "utf-8");
+    fs.writeFileSync(cnfPath, opensslConfig, "utf-8");
 
-  // Generate private key and SAN certificate valid for 365 days
-  try {
-    execSync(
-      `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -config "${cnfPath}"`,
-      { stdio: "ignore", timeout: 15000 }
-    );
-  } catch (err: any) {
-    // If openssl command is missing or fails, use fallback node-based basic cert if possible or rethrow
-    throw new Error(`خطا در ایجاد گواهی امنیتی OpenSSL: ${err.message}`);
+    // Generate private key and SAN certificate valid for 365 days
+    try {
+      execSync(
+        `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -config "${cnfPath}"`,
+        { stdio: "ignore", timeout: 15000 }
+      );
+    } catch (err: any) {
+      throw new Error(`خطا در ایجاد گواهی امنیتی OpenSSL: ${err.message}`);
+    }
   }
 
   const current = getSslConfig();
   const newStatus: SslStatus = {
     enabled: true,
-    type: "self_signed",
+    type: certbotSucceeded ? "letsencrypt_nip" : "self_signed",
     serverIp,
-    domain: nipDomain,
+    domain: selectedDomain,
     certPath,
     keyPath,
     autoRenew: current.autoRenew ?? true,
@@ -292,7 +313,7 @@ DNS.4 = localhost
     isDaemonRunning: !!autoRenewTimer,
     history: getSslLogs(),
     lastRenewCheck: new Date().toISOString(),
-    lastRenewResult: "گواهی SSL با موفقیت برای آی‌پی سرور صادر شد.",
+    lastRenewResult: `گواهی SSL با موفقیت برای ${selectedDomain} صادر شد.`,
   };
 
   const inspected = inspectCertStatus(newStatus);
@@ -300,7 +321,7 @@ DNS.4 = localhost
   appendSslLog({
     action: "generate",
     status: "success",
-    message: `صدور گواهی امنیتی SSL با موفقیت برای آی‌پی ${serverIp} انجام شد.`,
+    message: `صدور گواهی امنیتی SSL با موفقیت برای دامنه/آی‌پی ${selectedDomain} (${serverIp}) انجام شد.`,
     daysRemaining: inspected.daysRemaining,
   });
   return inspected;

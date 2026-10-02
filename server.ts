@@ -674,6 +674,19 @@ async function startServer() {
   });
 
   // ==========================================
+  // DASHBOARD ANALYTICS & ACTIVITY STATS API
+  // ==========================================
+
+  app.get("/api/dashboard/analytics", (_req, res) => {
+    try {
+      const data = telegramManager.getActivityDashboardData();
+      return res.json({ success: true, data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
   // BATCH CHANNEL & GROUP CREATOR API ROUTES
   // ==========================================
 
@@ -1146,6 +1159,8 @@ async function startServer() {
         api_id,
         apiHash,
         api_hash,
+        buttonLayout,
+        button_layout,
       } = req.body;
 
       const tokenToUse = (botToken !== undefined ? botToken : bot_token || "").trim();
@@ -1153,13 +1168,15 @@ async function startServer() {
       const apiIdToUse = apiId !== undefined ? apiId : api_id;
       const apiHashToUse = apiHash !== undefined ? apiHash : api_hash;
       const enabledToUse = enabled !== undefined ? Boolean(enabled) : Boolean(tokenToUse);
+      const layoutToUse = (buttonLayout || button_layout || "3-cols") as "3-cols" | "2-cols" | "1-col";
 
       const settings = await telegramManager.updateBotSettings(
         tokenToUse,
         Number(ownerToUse) || 0,
         enabledToUse,
         apiIdToUse ? Number(apiIdToUse) : undefined,
-        apiHashToUse ? String(apiHashToUse).trim() : undefined
+        apiHashToUse ? String(apiHashToUse).trim() : undefined,
+        layoutToUse
       );
 
       return res.json({ success: true, settings, bot: settings, message: "تنظیمات ربات با موفقیت تایید و ذخیره شد." });
@@ -1255,6 +1272,14 @@ chmod +x start.sh stop.sh status.sh
 pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || pm2 startup >/dev/null 2>&1 || true
 pm2 save >/dev/null 2>&1 || true
 
+# 7. Register sudo selfandtabchi global terminal command
+if [ -f "$INSTALL_DIR/scripts/selfandtabchi.sh" ]; then
+  chmod +x "$INSTALL_DIR/scripts/selfandtabchi.sh"
+  mkdir -p /usr/local/bin /usr/bin 2>/dev/null || true
+  ln -sf "$INSTALL_DIR/scripts/selfandtabchi.sh" /usr/local/bin/selfandtabchi 2>/dev/null || true
+  ln -sf "$INSTALL_DIR/scripts/selfandtabchi.sh" /usr/bin/selfandtabchi 2>/dev/null || true
+fi
+
 SERVER_IP=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
 echo ""
@@ -1266,6 +1291,10 @@ echo "🔑 Login Password:       selfsamkaren12"
 echo "🛡️ 24/7 Daemon:          ACTIVE (Runs even if you exit SSH)"
 echo "📜 View live logs:       pm2 logs telegram-self-tabchi-v6"
 echo "📊 Check status:         pm2 status"
+echo ""
+echo "🚀 TERMINAL ASSISTANT CLI:"
+echo "   You can now run:      sudo selfandtabchi"
+echo "   Features: Update, Uninstall, Change Domain, Issue SSL, View Logs"
 echo "======================================================================"
 `;
 
@@ -1299,14 +1328,14 @@ echo "======================================================================"
 
   app.post("/api/ssl/generate", async (req, res) => {
     try {
-      const { customIp } = req.body || {};
-      const status = await generateServerIpSsl(customIp);
+      const { customIp, customDomain } = req.body || {};
+      const status = await generateServerIpSsl(customIp, customDomain);
       // Try to attach HTTPS server if not already running
       attachHttpsServer(app, status.httpsPort || 3443);
       return res.json({
         success: true,
         ssl: status,
-        message: `گواهی SSL امنیتی برای آی‌پی ${status.serverIp} با موفقیت صادر و فعال شد.`,
+        message: `گواهی SSL امنیتی برای ${status.domain || status.serverIp} با موفقیت صادر و فعال شد.`,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });

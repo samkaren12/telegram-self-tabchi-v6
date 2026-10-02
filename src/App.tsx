@@ -17,6 +17,7 @@ import {
   Headset,
   Sparkles,
   FolderPlus,
+  Activity,
 } from "lucide-react";
 import { Language, translations } from "./utils/i18n";
 import { TelegramAccount, SystemHealth, AuthSession } from "./types";
@@ -29,6 +30,7 @@ import { SystemStatus } from "./components/SystemStatus";
 import { StoreBotModule } from "./components/StoreBotModule";
 import { SupportBotManager } from "./components/SupportBotManager";
 import { BatchCreatorModule } from "./components/BatchCreatorModule";
+import { DashboardAnalyticsModule } from "./components/DashboardAnalyticsModule";
 import { ConnectAccountModal } from "./components/ConnectAccountModal";
 import { StartupLockModal } from "./components/StartupLockModal";
 import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
@@ -51,8 +53,8 @@ export default function App() {
   const [lang, setLang] = useState<Language>("fa");
   const [portalMode, setPortalMode] = useState<"admin" | "client">(getInitialPortal);
   const [activeTab, setActiveTab] = useState<
-    "accounts" | "store" | "support" | "batchCreator" | "self" | "tabchi" | "logs" | "system"
-  >(() => (getInitialPortal() === "client" ? "self" : "accounts"));
+    "dashboard" | "accounts" | "store" | "support" | "batchCreator" | "self" | "tabchi" | "logs" | "system"
+  >(() => (getInitialPortal() === "client" ? "self" : "dashboard"));
 
   const [storePendingCount, setStorePendingCount] = useState<number>(0);
 
@@ -227,6 +229,11 @@ export default function App() {
         { id: "logs", label: t.tabs.logs, icon: Terminal },
       ]
     : [
+        {
+          id: "dashboard",
+          label: lang === "fa" ? "داشبورد و تحلیل فعالیت 📊" : "Activity Dashboard",
+          icon: Activity,
+        },
         { id: "accounts", label: t.tabs.accounts, icon: Users, badge: visibleAccounts.length },
         {
           id: "store",
@@ -252,7 +259,7 @@ export default function App() {
 
   // Auto-switch away from owner-only tabs if customer
   useEffect(() => {
-    if (isCustomer && (activeTab === "accounts" || activeTab === "store" || activeTab === "support" || activeTab === "batchCreator" || activeTab === "system")) {
+    if (isCustomer && (activeTab === "dashboard" || activeTab === "accounts" || activeTab === "store" || activeTab === "support" || activeTab === "batchCreator" || activeTab === "system")) {
       setActiveTab("self");
     }
   }, [isCustomer, activeTab]);
@@ -482,6 +489,10 @@ export default function App() {
 
         {/* Tab Contents */}
         <div className="pt-2 animate-in fade-in duration-300">
+          {activeTab === "dashboard" && !isCustomer && (
+            <DashboardAnalyticsModule lang={lang} />
+          )}
+
           {activeTab === "accounts" && (
             <AccountsList
               accounts={visibleAccounts}

@@ -62,6 +62,7 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
   const [intervalHours, setIntervalHours] = useState(6);
   const [autoRenew, setAutoRenew] = useState(true);
   const [customIp, setCustomIp] = useState("");
+  const [customDomain, setCustomDomain] = useState("");
   const [showConfig, setShowConfig] = useState(false);
 
   const fetchStatus = async () => {
@@ -76,6 +77,9 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
         setAutoRenew(data.ssl.autoRenew ?? true);
         if (data.ssl.detectedIp && !customIp) {
           setCustomIp(data.ssl.detectedIp);
+        }
+        if (data.ssl.domain && !customDomain) {
+          setCustomDomain(data.ssl.domain);
         }
       }
     } catch (err: any) {
@@ -99,7 +103,10 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
       const res = await fetch("/api/ssl/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customIp: customIp.trim() || undefined }),
+        body: JSON.stringify({
+          customIp: customIp.trim() || undefined,
+          customDomain: customDomain.trim() || undefined,
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -501,17 +508,28 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
           <span>{lang === "fa" ? "اجرای دستی دستور تمدید (Force Renew)" : "Execute Force Renew"}</span>
         </button>
 
-        {!ssl?.enabled && (
+        <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <input
+            type="text"
+            value={customDomain}
+            onChange={(e) => setCustomDomain(e.target.value)}
+            placeholder={lang === "fa" ? "دامنه دلخواه (مثال: panel.domain.com)" : "Custom domain (e.g. panel.domain.com)"}
+            className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-cyan-300 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+          />
           <button
             type="button"
             onClick={handleGenerateSsl}
             disabled={actionLoading}
-            className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-emerald-600/20"
+            className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 whitespace-nowrap"
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>{lang === "fa" ? "صدور و راه‌اندازی اولیه SSL روی آی‌پی" : "Issue IP SSL"}</span>
+            <span>
+              {customDomain.trim()
+                ? (lang === "fa" ? "صدور SSL روی دامنه" : "Issue Domain SSL")
+                : (lang === "fa" ? "صدور SSL روی آی‌پی" : "Issue IP SSL")}
+            </span>
           </button>
-        )}
+        </div>
 
         <div className="ml-auto flex items-center gap-2">
           {ssl?.isDaemonRunning ? (

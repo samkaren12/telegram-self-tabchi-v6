@@ -635,6 +635,54 @@ export class StoreBotManager {
           guide: "📘",
           discount: "🎫",
         };
+      case "aiogram_colored":
+        return {
+          self: "🟢", // success
+          tabchi: "🔵", // primary
+          combo: "🔴", // danger
+          catalog: "🔵", // primary
+          orders: "🟢", // success
+          account: "🔵", // primary
+          support: "🔴", // danger
+          guide: "🔵", // primary
+          discount: "🟢", // success
+        };
+      case "fire_red":
+        return {
+          self: "🔴",
+          tabchi: "🔥",
+          combo: "💥",
+          catalog: "🏮",
+          orders: "📦",
+          account: "👤",
+          support: "🚨",
+          guide: "📕",
+          discount: "🎟️",
+        };
+      case "emerald_matrix":
+        return {
+          self: "🟢",
+          tabchi: "⚡",
+          combo: "❇️",
+          catalog: "🌿",
+          orders: "📥",
+          account: "👤",
+          support: "📞",
+          guide: "📗",
+          discount: "🍀",
+        };
+      case "rainbow_vivid":
+        return {
+          self: "🟢",
+          tabchi: "🔵",
+          combo: "🟣",
+          catalog: "🟡",
+          orders: "🟠",
+          account: "👤",
+          support: "🔴",
+          guide: "📘",
+          discount: "🎁",
+        };
       case "cyber_neon":
       default:
         return {
@@ -654,26 +702,25 @@ export class StoreBotManager {
   public getReplyKeyboardMarkup() {
     const labels = this.data.settings.buttonLabels;
     const theme = this.getThemePrefix(this.data.settings.buttonTheme);
+    const cols = Number(this.data.settings.replyKeyboardColumns || this.data.settings.keyboardColumns || 2);
 
-    const keyboardRows: any[][] = [
-      [
-        { text: `${theme.self} ${labels.buySelf}` },
-        { text: `${theme.tabchi} ${labels.buyTabchi}` },
-      ],
-      [
-        { text: `${theme.combo} ${labels.buyCombo}` },
-        { text: `${theme.catalog} ${labels.plansCatalog}` },
-      ],
-      [
-        { text: `${theme.account} ${labels.myAccount}` },
-        { text: `${theme.orders} ${labels.myOrders}` },
-      ],
-      [
-        { text: `${theme.support} ${labels.support}` },
-        { text: `${theme.guide} ${labels.helpGuide}` },
-      ],
-      [{ text: `${theme.discount} ${labels.applyDiscount}` }],
+    const allButtons: any[] = [
+      { text: `${theme.self} ${labels.buySelf}` },
+      { text: `${theme.tabchi} ${labels.buyTabchi}` },
+      { text: `${theme.combo} ${labels.buyCombo}` },
+      { text: `${theme.catalog} ${labels.plansCatalog}` },
+      { text: `${theme.account} ${labels.myAccount}` },
+      { text: `${theme.orders} ${labels.myOrders}` },
+      { text: `${theme.support} ${labels.support}` },
+      { text: `${theme.guide} ${labels.helpGuide}` },
+      { text: `${theme.discount} ${labels.applyDiscount}` },
     ];
+
+    // Chunk buttons into rows based on chosen columns (1, 2, or 3)
+    const keyboardRows: any[][] = [];
+    for (let i = 0; i < allButtons.length; i += cols) {
+      keyboardRows.push(allButtons.slice(i, i + cols));
+    }
 
     if (this.data.settings.allowCustomerKeyboardSwitch) {
       keyboardRows.push([{ text: "🪟 تغییر به دکمه‌های شیشه‌ای (Inline)" }]);
@@ -689,32 +736,69 @@ export class StoreBotManager {
   public getInlineKeyboardMenu() {
     const labels = this.data.settings.buttonLabels;
     const theme = this.getThemePrefix(this.data.settings.buttonTheme);
+    const isAiogram = this.data.settings.buttonTheme === "aiogram_colored";
+    const cols = Number(this.data.settings.keyboardColumns || 2);
 
-    const inlineRows: any[][] = [
-      [
-        { text: `${theme.self} ${labels.buySelf}`, callback_data: "cat_self" },
-        { text: `${theme.tabchi} ${labels.buyTabchi}`, callback_data: "cat_tabchi" },
-      ],
-      [
-        { text: `${theme.combo} ${labels.buyCombo}`, callback_data: "cat_combo" },
-        { text: `${theme.catalog} ${labels.plansCatalog}`, callback_data: "cat_all" },
-      ],
-      [
-        { text: `${theme.account} ${labels.myAccount}`, callback_data: "menu_account" },
-        { text: `${theme.orders} ${labels.myOrders}`, callback_data: "menu_orders" },
-      ],
-      [
-        { text: `${theme.support} ${labels.support}`, callback_data: "menu_support" },
-        { text: `${theme.guide} ${labels.helpGuide}`, callback_data: "menu_guide" },
-      ],
-      [{ text: `${theme.discount} ${labels.applyDiscount}`, callback_data: "menu_discount" }],
+    const allButtons: any[] = [
+      {
+        text: `${theme.self} ${labels.buySelf}`,
+        callback_data: "cat_self",
+        ...(isAiogram ? { style: "success" } : {}),
+      },
+      {
+        text: `${theme.tabchi} ${labels.buyTabchi}`,
+        callback_data: "cat_tabchi",
+        ...(isAiogram ? { style: "primary" } : {}),
+      },
+      {
+        text: `${theme.combo} ${labels.buyCombo}`,
+        callback_data: "cat_combo",
+        ...(isAiogram ? { style: "danger" } : {}),
+      },
+      {
+        text: `${theme.catalog} ${labels.plansCatalog}`,
+        callback_data: "cat_all",
+        ...(isAiogram ? { style: "primary" } : {}),
+      },
+      {
+        text: `${theme.account} ${labels.myAccount}`,
+        callback_data: "menu_account",
+        ...(isAiogram ? { style: "primary" } : {}),
+      },
+      {
+        text: `${theme.orders} ${labels.myOrders}`,
+        callback_data: "menu_orders",
+        ...(isAiogram ? { style: "success" } : {}),
+      },
+      {
+        text: `${theme.support} ${labels.support}`,
+        callback_data: "menu_support",
+        ...(isAiogram ? { style: "danger" } : {}),
+      },
+      {
+        text: `${theme.guide} ${labels.helpGuide}`,
+        callback_data: "menu_guide",
+        ...(isAiogram ? { style: "primary" } : {}),
+      },
+      {
+        text: `${theme.discount} ${labels.applyDiscount}`,
+        callback_data: "menu_discount",
+        ...(isAiogram ? { style: "success" } : {}),
+      },
     ];
+
+    // Chunk buttons into rows according to column setting (1, 2, or 3)
+    const inlineRows: any[][] = [];
+    for (let i = 0; i < allButtons.length; i += cols) {
+      inlineRows.push(allButtons.slice(i, i + cols));
+    }
 
     if (this.data.settings.allowCustomerKeyboardSwitch) {
       inlineRows.push([
         {
           text: labels.switchKeyboard || "⌨️ تغییر به کیبورد باتن (پایین صفحه)",
           callback_data: "switch_to_reply",
+          ...(isAiogram ? { style: "primary" } : {}),
         },
       ]);
     }

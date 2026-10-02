@@ -69,6 +69,8 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
   const [channelUsername, setChannelUsername] = useState("");
   const [welcomeText, setWelcomeText] = useState("");
   const [keyboardMode, setKeyboardMode] = useState<StoreKeyboardMode>("inline");
+  const [keyboardColumns, setKeyboardColumns] = useState<1 | 2 | 3>(2);
+  const [replyKeyboardColumns, setReplyKeyboardColumns] = useState<1 | 2 | 3>(2);
   const [allowCustomerKeyboardSwitch, setAllowCustomerKeyboardSwitch] = useState<boolean>(true);
   const [simEffectiveMode, setSimEffectiveMode] = useState<StoreKeyboardMode>("inline");
   const [buttonTheme, setButtonTheme] = useState<StoreButtonTheme>("cyber_neon");
@@ -139,6 +141,124 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  const getThemeDetails = (theme: StoreButtonTheme) => {
+    switch (theme) {
+      case "fire_red":
+        return {
+          selfIcon: "🔴",
+          tabchiIcon: "🔥",
+          comboIcon: "💥",
+          catalogIcon: "🏮",
+          ordersIcon: "📦",
+          accountIcon: "👤",
+          supportIcon: "🚨",
+          selfColor: "text-rose-400 border-rose-500/40 bg-rose-950/40 hover:bg-rose-900/50",
+          tabchiColor: "text-red-400 border-red-500/40 bg-red-950/40 hover:bg-red-900/50",
+          comboColor: "text-orange-400 border-orange-500/40 bg-orange-950/40 hover:bg-orange-900/50",
+          catalogColor: "text-amber-400 border-amber-500/40 bg-amber-950/40 hover:bg-amber-900/50",
+        };
+      case "emerald_matrix":
+        return {
+          selfIcon: "🟢",
+          tabchiIcon: "⚡",
+          comboIcon: "❇️",
+          catalogIcon: "🌿",
+          ordersIcon: "📥",
+          accountIcon: "👤",
+          supportIcon: "📞",
+          selfColor: "text-emerald-400 border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50",
+          tabchiColor: "text-teal-400 border-teal-500/40 bg-teal-950/40 hover:bg-teal-900/50",
+          comboColor: "text-green-400 border-green-500/40 bg-green-950/40 hover:bg-green-900/50",
+          catalogColor: "text-lime-400 border-lime-500/40 bg-lime-950/40 hover:bg-lime-900/50",
+        };
+      case "rainbow_vivid":
+        return {
+          selfIcon: "🟢",
+          tabchiIcon: "🔵",
+          comboIcon: "🟣",
+          catalogIcon: "🟡",
+          ordersIcon: "🟠",
+          accountIcon: "👤",
+          supportIcon: "🔴",
+          selfColor: "text-emerald-400 border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50",
+          tabchiColor: "text-sky-400 border-sky-500/40 bg-sky-950/40 hover:bg-sky-900/50",
+          comboColor: "text-fuchsia-400 border-fuchsia-500/40 bg-fuchsia-950/40 hover:bg-fuchsia-900/50",
+          catalogColor: "text-amber-400 border-amber-500/40 bg-amber-950/40 hover:bg-amber-900/50",
+        };
+      case "galaxy_purple":
+        return {
+          selfIcon: "🔮",
+          tabchiIcon: "🌌",
+          comboIcon: "✨",
+          catalogIcon: "🪐",
+          ordersIcon: "📦",
+          accountIcon: "👤",
+          supportIcon: "🛰️",
+          selfColor: "text-purple-400 border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50",
+          tabchiColor: "text-indigo-400 border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-900/50",
+          comboColor: "text-fuchsia-400 border-fuchsia-500/40 bg-fuchsia-950/40 hover:bg-fuchsia-900/50",
+          catalogColor: "text-violet-400 border-violet-500/40 bg-violet-950/40 hover:bg-violet-900/50",
+        };
+      case "luxury_gold":
+        return {
+          selfIcon: "👑",
+          tabchiIcon: "⚜️",
+          comboIcon: "🏆",
+          catalogIcon: "💼",
+          ordersIcon: "🏷️",
+          accountIcon: "💎",
+          supportIcon: "🛎️",
+          selfColor: "text-amber-300 border-amber-500/40 bg-amber-950/40 hover:bg-amber-900/50",
+          tabchiColor: "text-yellow-300 border-yellow-500/40 bg-yellow-950/40 hover:bg-yellow-900/50",
+          comboColor: "text-amber-400 border-amber-500/40 bg-amber-950/40 hover:bg-amber-900/50",
+          catalogColor: "text-orange-300 border-orange-500/40 bg-orange-950/40 hover:bg-orange-900/50",
+        };
+      case "crypto_cyan":
+        return {
+          selfIcon: "💠",
+          tabchiIcon: "🌐",
+          comboIcon: "⚡",
+          catalogIcon: "📊",
+          ordersIcon: "🔗",
+          accountIcon: "💳",
+          supportIcon: "💬",
+          selfColor: "text-cyan-400 border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-900/50",
+          tabchiColor: "text-blue-400 border-blue-500/40 bg-blue-950/40 hover:bg-blue-900/50",
+          comboColor: "text-sky-400 border-sky-500/40 bg-sky-950/40 hover:bg-sky-900/50",
+          catalogColor: "text-teal-400 border-teal-500/40 bg-teal-950/40 hover:bg-teal-900/50",
+        };
+      case "aiogram_colored":
+        return {
+          selfIcon: "🟢", // success
+          tabchiIcon: "🔵", // primary
+          comboIcon: "🔴", // danger
+          catalogIcon: "🔵", // primary
+          ordersIcon: "🟢", // success
+          accountIcon: "🔵", // primary
+          supportIcon: "🔴", // danger
+          selfColor: "text-emerald-400 border-emerald-500/50 bg-emerald-950/60 hover:bg-emerald-900/70 shadow-sm shadow-emerald-500/10",
+          tabchiColor: "text-blue-400 border-blue-500/50 bg-blue-950/60 hover:bg-blue-900/70 shadow-sm shadow-blue-500/10",
+          comboColor: "text-rose-400 border-rose-500/50 bg-rose-950/60 hover:bg-rose-900/70 shadow-sm shadow-rose-500/10",
+          catalogColor: "text-indigo-400 border-indigo-500/50 bg-indigo-950/60 hover:bg-indigo-900/70 shadow-sm shadow-indigo-500/10",
+        };
+      case "cyber_neon":
+      default:
+        return {
+          selfIcon: "💎",
+          tabchiIcon: "🚀",
+          comboIcon: "⚡",
+          catalogIcon: "🛍️",
+          ordersIcon: "📦",
+          accountIcon: "👤",
+          supportIcon: "📞",
+          selfColor: "text-cyan-300 border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-900/50",
+          tabchiColor: "text-emerald-300 border-emerald-500/40 bg-emerald-950/40 hover:bg-emerald-900/50",
+          comboColor: "text-purple-300 border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/50",
+          catalogColor: "text-amber-300 border-amber-500/40 bg-amber-950/40 hover:bg-amber-900/50",
+        };
+    }
+  };
+
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(id);
@@ -162,6 +282,8 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
           const km = json.data.settings.keyboardMode || "inline";
           setKeyboardMode(km);
           setSimEffectiveMode(km);
+          setKeyboardColumns(Number(json.data.settings.keyboardColumns || 2) as any);
+          setReplyKeyboardColumns(Number(json.data.settings.replyKeyboardColumns || json.data.settings.keyboardColumns || 2) as any);
           setAllowCustomerKeyboardSwitch(
             json.data.settings.allowCustomerKeyboardSwitch !== undefined
               ? Boolean(json.data.settings.allowCustomerKeyboardSwitch)
@@ -198,6 +320,8 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
           channelUsername,
           welcomeText,
           keyboardMode,
+          keyboardColumns,
+          replyKeyboardColumns,
           allowCustomerKeyboardSwitch,
           buttonTheme,
           buttonLabels,
@@ -1586,6 +1710,54 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
                 </div>
               </div>
 
+              {/* Button Column Grid Arrangement (User Request: 2-tayi, 3-tayi, 1-tayi) */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-200 block">
+                    چینش دکمه‌ها در هر ردیف (تعداد ستون‌ها):
+                  </label>
+                  <span className="text-[11px] text-cyan-400 font-mono">
+                    {keyboardColumns === 1 ? "تکی (۱ ستونه)" : keyboardColumns === 2 ? "دوتایی (۲ ستونه)" : "سه‌تایی (۳ ستونه)"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {[
+                    { id: 1, title: "تک‌ستونه (۱ تایی)", desc: "هر دکمه یک ردیف کامل" },
+                    { id: 2, title: "دوتایی (۲ ستونه)", desc: "چینش متوازن ۲ دکمه در هر ردیف" },
+                    { id: 3, title: "سه‌تایی (۳ ستونه)", desc: "فشرده و حرفه‌ای ۳ دکمه در هر ردیف" },
+                  ].map((col) => {
+                    const isSelected = keyboardColumns === col.id;
+                    return (
+                      <button
+                        key={col.id}
+                        type="button"
+                        onClick={() => {
+                          setKeyboardColumns(col.id as any);
+                          setReplyKeyboardColumns(col.id as any);
+                        }}
+                        className={`p-3 rounded-2xl border text-right transition-all ${
+                          isSelected
+                            ? "bg-cyan-500/15 border-cyan-500 text-cyan-300 shadow-md"
+                            : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-bold text-white">{col.title}</span>
+                          <span
+                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                              isSelected ? "border-cyan-400 bg-cyan-400" : "border-slate-600"
+                            }`}
+                          >
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-slate-950"></span>}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400">{col.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Customer Switchable Keyboard Toggle (User Request #3) */}
               <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-inner">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1698,6 +1870,30 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
                       title: "کریپتو و وب‌۳ 💠",
                       colors: "اموجی‌های شبکه و ارز دیجیتال",
                       gradient: "from-cyan-400 to-blue-600",
+                    },
+                    {
+                      id: "fire_red",
+                      title: "آتشین و سرخ 🔴",
+                      colors: "دکمه‌های داغ قرمز و شعله‌ای",
+                      gradient: "from-rose-500 to-red-600",
+                    },
+                    {
+                      id: "emerald_matrix",
+                      title: "زمردی و ماتریکس 🟢",
+                      colors: "دکمه‌های سبز نئونی و درخشان",
+                      gradient: "from-emerald-400 to-teal-600",
+                    },
+                    {
+                      id: "rainbow_vivid",
+                      title: "رنگین‌کمانی شاد 🌈",
+                      colors: "ترکیب رنگارنگ و فانتزی برای هر دکمه",
+                      gradient: "from-pink-500 via-amber-400 to-cyan-500",
+                    },
+                    {
+                      id: "aiogram_colored",
+                      title: "پالت اختصاصی aiogram 🤖",
+                      colors: "سبز (Success)، آبی (Primary)، قرمز (Danger)",
+                      gradient: "from-emerald-500 via-blue-500 to-rose-500",
                     },
                   ].map((theme) => {
                     const isSelected = buttonTheme === theme.id;
@@ -1858,70 +2054,101 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
                   </p>
 
                   {/* If mode is Inline or Hybrid -> render inline buttons inside message */}
-                  {(simEffectiveMode === "inline" || simEffectiveMode === "hybrid") && simStep === "menu" && (
-                    <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          onClick={() => {
-                            setSimCategory("self");
-                            setSimStep("category");
-                          }}
-                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-cyan-300 font-bold text-[11px] border border-cyan-500/30 transition-all text-center"
-                        >
-                          💎 {buttonLabels.buySelf || "خرید اکانت سلف"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSimCategory("tabchi");
-                            setSimStep("category");
-                          }}
-                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-purple-300 font-bold text-[11px] border border-purple-500/30 transition-all text-center"
-                        >
-                          🚀 {buttonLabels.buyTabchi || "خرید اکانت تبچی"}
-                        </button>
-                      </div>
+                  {(simEffectiveMode === "inline" || simEffectiveMode === "hybrid") && simStep === "menu" && (() => {
+                    const themeObj = getThemeDetails(buttonTheme);
+                    const gridClass =
+                      keyboardColumns === 1
+                        ? "grid-cols-1"
+                        : keyboardColumns === 3
+                        ? "grid-cols-3"
+                        : "grid-cols-2";
 
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          onClick={() => {
-                            setSimCategory("combo");
-                            setSimStep("category");
-                          }}
-                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-amber-300 font-bold text-[11px] border border-amber-500/30 transition-all text-center"
-                        >
-                          ⚡ {buttonLabels.buyCombo || "پکیج VIP ترکیبی"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSimCategory("self");
-                            setSimStep("category");
-                          }}
-                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-[11px] border border-slate-700 transition-all text-center"
-                        >
-                          🛍️ تمام تعرفه‌ها
-                        </button>
-                      </div>
+                    const buttonsList = [
+                      {
+                        label: buttonLabels.buySelf || "خرید اکانت سلف",
+                        icon: themeObj.selfIcon,
+                        color: themeObj.selfColor,
+                        action: () => {
+                          setSimCategory("self");
+                          setSimStep("category");
+                        },
+                      },
+                      {
+                        label: buttonLabels.buyTabchi || "خرید اکانت تبچی",
+                        icon: themeObj.tabchiIcon,
+                        color: themeObj.tabchiColor,
+                        action: () => {
+                          setSimCategory("tabchi");
+                          setSimStep("category");
+                        },
+                      },
+                      {
+                        label: buttonLabels.buyCombo || "پکیج VIP ترکیبی",
+                        icon: themeObj.comboIcon,
+                        color: themeObj.comboColor,
+                        action: () => {
+                          setSimCategory("combo");
+                          setSimStep("category");
+                        },
+                      },
+                      {
+                        label: buttonLabels.plansCatalog || "تمام تعرفه‌ها",
+                        icon: themeObj.catalogIcon,
+                        color: themeObj.catalogColor,
+                        action: () => {
+                          setSimCategory("self");
+                          setSimStep("category");
+                        },
+                      },
+                      {
+                        label: buttonLabels.myAccount || "حساب کاربری",
+                        icon: themeObj.accountIcon,
+                        color: themeObj.catalogColor,
+                        action: () => setSimStep("menu"),
+                      },
+                      {
+                        label: buttonLabels.myOrders || "پیگیری سفارشات",
+                        icon: themeObj.ordersIcon,
+                        color: themeObj.selfColor,
+                        action: () => setSimStep("menu"),
+                      },
+                    ];
 
-                      {/* Customer Switch Button in Inline Menu */}
-                      {allowCustomerKeyboardSwitch && (
-                        <div className="pt-1">
-                          <button
-                            onClick={() => {
-                              setSimEffectiveMode("reply");
-                              showToast(
-                                "success",
-                                "شبیه‌ساز: مشتری دکمه را فشرد و منو به «کیبورد باتن (پایین صفحه)» تغییر یافت!"
-                              );
-                            }}
-                            className="w-full py-2 px-3 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 font-bold text-[11px] border border-cyan-500/40 transition-all flex items-center justify-center gap-1.5 shadow-sm"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>{buttonLabels.switchKeyboard || "🔄 تغییر به کیبورد معمولی (پایین)"}</span>
-                          </button>
+                    return (
+                      <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                        <div className={`grid ${gridClass} gap-1.5`}>
+                          {buttonsList.map((btn, idx) => (
+                            <button
+                              key={idx}
+                              onClick={btn.action}
+                              className={`px-2.5 py-2 rounded-xl font-bold text-[11px] border transition-all text-center truncate ${btn.color}`}
+                            >
+                              {btn.icon} {btn.label}
+                            </button>
+                          ))}
                         </div>
-                      )}
-                    </div>
-                  )}
+
+                        {/* Customer Switch Button in Inline Menu */}
+                        {allowCustomerKeyboardSwitch && (
+                          <div className="pt-1">
+                            <button
+                              onClick={() => {
+                                setSimEffectiveMode("reply");
+                                showToast(
+                                  "success",
+                                  "شبیه‌ساز: مشتری دکمه را فشرد و منو به «کیبورد باتن (پایین صفحه)» تغییر یافت!"
+                                );
+                              }}
+                              className="w-full py-2 px-3 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 font-bold text-[11px] border border-cyan-500/40 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>{buttonLabels.switchKeyboard || "🔄 تغییر به کیبورد معمولی (پایین)"}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -2074,67 +2301,106 @@ export function StoreBotModule({ lang }: StoreBotModuleProps) {
             </div>
 
             {/* Bottom Keyboard Buttons Area (If Reply or Hybrid) */}
-            {(simEffectiveMode === "reply" || simEffectiveMode === "hybrid") && (
-              <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2 bg-slate-900/60 p-2.5 rounded-2xl">
-                <span className="text-[10px] text-slate-500 block text-center">
-                  کیبورد ثابت پایین چت تلگرام (Reply Keyboard)
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    onClick={() => {
-                      setSimCategory("self");
-                      setSimStep("category");
-                    }}
-                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-cyan-300 border border-slate-700"
-                  >
-                    💎 {buttonLabels.buySelf || "خرید سلف"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSimCategory("tabchi");
-                      setSimStep("category");
-                    }}
-                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-purple-300 border border-slate-700"
-                  >
-                    🚀 {buttonLabels.buyTabchi || "خرید تبچی"}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    onClick={() => {
-                      setSimCategory("combo");
-                      setSimStep("category");
-                    }}
-                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-amber-300 border border-slate-700"
-                  >
-                    ⚡ {buttonLabels.buyCombo || "پکیج VIP"}
-                  </button>
-                  <button
-                    onClick={() => setSimStep("menu")}
-                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 border border-slate-700"
-                  >
-                    👤 حساب من
-                  </button>
-                </div>
+            {(simEffectiveMode === "reply" || simEffectiveMode === "hybrid") && (() => {
+              const themeObj = getThemeDetails(buttonTheme);
+              const gridClass =
+                (replyKeyboardColumns || keyboardColumns) === 1
+                  ? "grid-cols-1"
+                  : (replyKeyboardColumns || keyboardColumns) === 3
+                  ? "grid-cols-3"
+                  : "grid-cols-2";
 
-                {/* Switch to inline button for customer in simulator */}
-                {allowCustomerKeyboardSwitch && (
-                  <button
-                    onClick={() => {
-                      setSimEffectiveMode("inline");
-                      showToast(
-                        "success",
-                        "شبیه‌ساز: مشتری دکمه را فشرد و منو به «دکمه‌های شیشه‌ای (Inline)» تغییر یافت!"
-                      );
-                    }}
-                    className="w-full py-2 px-3 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-xs font-bold text-purple-300 border border-purple-500/40 flex items-center justify-center gap-1.5 transition-all shadow-sm"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-purple-400" />
-                    <span>🪟 تغییر به دکمه‌های شیشه‌ای (Inline)</span>
-                  </button>
-                )}
-              </div>
-            )}
+              const replyButtonsList = [
+                {
+                  label: buttonLabels.buySelf || "خرید سلف",
+                  icon: themeObj.selfIcon,
+                  color: themeObj.selfColor,
+                  action: () => {
+                    setSimCategory("self");
+                    setSimStep("category");
+                  },
+                },
+                {
+                  label: buttonLabels.buyTabchi || "خرید تبچی",
+                  icon: themeObj.tabchiIcon,
+                  color: themeObj.tabchiColor,
+                  action: () => {
+                    setSimCategory("tabchi");
+                    setSimStep("category");
+                  },
+                },
+                {
+                  label: buttonLabels.buyCombo || "پکیج VIP",
+                  icon: themeObj.comboIcon,
+                  color: themeObj.comboColor,
+                  action: () => {
+                    setSimCategory("combo");
+                    setSimStep("category");
+                  },
+                },
+                {
+                  label: buttonLabels.plansCatalog || "تعرفه‌ها",
+                  icon: themeObj.catalogIcon,
+                  color: themeObj.catalogColor,
+                  action: () => setSimStep("menu"),
+                },
+                {
+                  label: buttonLabels.myAccount || "حساب من",
+                  icon: themeObj.accountIcon,
+                  color: themeObj.catalogColor,
+                  action: () => setSimStep("menu"),
+                },
+                {
+                  label: buttonLabels.myOrders || "پیگیری",
+                  icon: themeObj.ordersIcon,
+                  color: themeObj.selfColor,
+                  action: () => setSimStep("menu"),
+                },
+              ];
+
+              return (
+                <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2 bg-slate-900/60 p-2.5 rounded-2xl">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500">
+                    <span>کیبورد ثابت پایین چت تلگرام (Reply Keyboard)</span>
+                    <span className="font-mono text-cyan-400">
+                      {(replyKeyboardColumns || keyboardColumns) === 1
+                        ? "چینش: ۱ ستونه"
+                        : (replyKeyboardColumns || keyboardColumns) === 3
+                        ? "چینش: ۳ ستونه"
+                        : "چینش: ۲ ستونه"}
+                    </span>
+                  </div>
+                  <div className={`grid ${gridClass} gap-1.5`}>
+                    {replyButtonsList.map((btn, idx) => (
+                      <button
+                        key={idx}
+                        onClick={btn.action}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all truncate text-center ${btn.color}`}
+                      >
+                        {btn.icon} {btn.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Switch to inline button for customer in simulator */}
+                  {allowCustomerKeyboardSwitch && (
+                    <button
+                      onClick={() => {
+                        setSimEffectiveMode("inline");
+                        showToast(
+                          "success",
+                          "شبیه‌ساز: مشتری دکمه را فشرد و منو به «دکمه‌های شیشه‌ای (Inline)» تغییر یافت!"
+                        );
+                      }}
+                      className="w-full py-2 px-3 rounded-xl bg-purple-950/70 hover:bg-purple-900/80 text-xs font-bold text-purple-300 border border-purple-500/40 flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-purple-400" />
+                      <span>🪟 تغییر به دکمه‌های شیشه‌ای (Inline)</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

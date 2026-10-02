@@ -206,6 +206,55 @@ export const UpdateManager: React.FC<UpdateManagerProps> = ({ lang }) => {
         </div>
       </div>
 
+      {/* Terminal Assistant Banner (sudo selfandtabchi) */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/30 shadow-lg space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
+              <Terminal className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs sm:text-sm font-bold text-white">
+                  {lang === "fa" ? "دستیار تعاملی سرور و ترمینال لینوکس (CLI Assistant)" : "Interactive Server Terminal Assistant"}
+                </h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 font-mono border border-cyan-500/40">
+                  NEW CLI
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {lang === "fa"
+                  ? "با اجرای دستور زیر در ترمینال لینوکس، منوی شماره‌دار برای آپدیت، حذف، چنج دامنه، دریافت SSL روی آی‌پی یا دامنه باز می‌شود:"
+                  : "Run this command anytime in your server SSH terminal to manage, update, uninstall, or configure domains and SSL:"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 bg-black/80 border border-slate-700/80 rounded-xl px-3 py-2 font-mono text-xs">
+            <span className="text-emerald-400 select-all font-bold">sudo selfandtabchi</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-300 pt-1 border-t border-slate-800/80">
+          <div className="flex items-center gap-1.5">
+            <span className="text-cyan-400 font-bold">[1]</span>
+            <span>استارت و ری‌استارت سریع</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-cyan-400 font-bold">[3]</span>
+            <span>آپدیت خودکار اسکریپت</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-cyan-400 font-bold">[4]</span>
+            <span>تنظیم و چنج دامنه</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-cyan-400 font-bold">[5]</span>
+            <span>دریافت SSL روی آی‌پی یا دامنه</span>
+          </div>
+        </div>
+      </div>
+
       {/* Feedback & Output Alert */}
       {feedback && (
         <div
