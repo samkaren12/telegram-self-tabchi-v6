@@ -3606,6 +3606,24 @@ export class TelegramManager {
       return;
     }
 
+    if (cmd === "/donate" || cmd === "/support" || text === "💖 دونیت و حمایت" || text === "دونیت") {
+      const donateText =
+        `💖 <b>حمایت مالی و دونیت به توسعه‌دهنده سلف و تبچی:</b>\n\n` +
+        `اگر این پروژه و امکانات اتوماسیون براتون کاربردی بوده، با دونیت کردن از توسعه نسخه‌های بعدی و نگهداری سرورها حمایت کنید:\n\n` +
+        `⚡ <b>شبکه ترون (TRON / TRX / USDT TRC-20):</b>\n` +
+        `<code>TBgTK3Png5D467cvCnwfA3xdLvUgJbpAfy</code>\n\n` +
+        `💎 <b>شبکه تون‌کوین (The Open Network / TON / Gram):</b>\n` +
+        `<code>UQAozwWDvLXgp4XWS0t8Z9xYdmN5iJ76anD5XD3y74rdhQP-</code>\n\n` +
+        `👨‍💻 <b>سازنده:</b> <a href="https://github.com/samkaren12">GitHub: samkaren12</a>`;
+      await this.sendBotMessage(chatId, donateText, {
+        inline_keyboard: [
+          [{ text: "👨‍💻 گیت‌هاب سازنده", url: "https://github.com/samkaren12" }],
+          [{ text: "🔙 منوی اصلی", callback_data: "menu_main" }],
+        ],
+      });
+      return;
+    }
+
     if (cmd === "/self" || cmd === "/self on") {
       for (const [phone, acc] of this.accounts.entries()) {
         this.updateSelfTimeConfig(

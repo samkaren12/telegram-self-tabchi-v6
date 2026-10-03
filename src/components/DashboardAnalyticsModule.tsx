@@ -29,16 +29,19 @@ import {
   CheckCircle2,
   Clock,
   Radio,
+  Lightbulb,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { ActivityDashboardData } from "../types";
 
 interface DashboardAnalyticsModuleProps {
   lang: Language;
+  onOpenHelp?: (section?: any) => void;
 }
 
 export const DashboardAnalyticsModule: React.FC<DashboardAnalyticsModuleProps> = ({
   lang,
+  onOpenHelp,
 }) => {
   const [data, setData] = useState<ActivityDashboardData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -115,11 +118,22 @@ export const DashboardAnalyticsModule: React.FC<DashboardAnalyticsModuleProps> =
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {onOpenHelp && (
+              <button
+                type="button"
+                onClick={() => onOpenHelp("analytics")}
+                className="px-3.5 py-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                title="آموزش تصویری آمار و نمودارهای پنل"
+              >
+                <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <span>راهنمای آمار 💡</span>
+              </button>
+            )}
             <button
               onClick={fetchData}
               disabled={refreshing}
-              className="px-4 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-300 flex items-center gap-2 shadow-inner transition-all active:scale-95"
+              className="px-4 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-300 flex items-center gap-2 shadow-inner transition-all active:scale-95 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin text-cyan-400" : ""}`} />
               <span>{refreshing ? "درحال تازه‌سازی..." : "بروزرسانی داده‌ها"}</span>

@@ -19,6 +19,7 @@ import {
   FolderPlus,
   Activity,
   Lightbulb,
+  Heart,
 } from "lucide-react";
 import { Language, translations } from "./utils/i18n";
 import { TelegramAccount, SystemHealth, AuthSession } from "./types";
@@ -37,6 +38,7 @@ import { StartupLockModal } from "./components/StartupLockModal";
 import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
 import { OwnerPasswordModal } from "./components/OwnerPasswordModal";
 import { VisualHelpModal, HelpSectionId } from "./components/VisualHelpModal";
+import { DonateModal } from "./components/DonateModal";
 import { useSoundNotification } from "./hooks/useSoundNotification";
 
 const getInitialPortal = (): "admin" | "client" => {
@@ -81,6 +83,7 @@ export default function App() {
   const [isOwnerPasswordModalOpen, setIsOwnerPasswordModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [helpInitialSection, setHelpInitialSection] = useState<HelpSectionId>("accounts");
+  const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const handleOpenHelp = (section?: HelpSectionId) => {
@@ -310,6 +313,7 @@ export default function App() {
         soundEnabled={soundEnabled}
         onToggleSound={toggleSound}
         onOpenHelpModal={handleOpenHelp}
+        onOpenDonateModal={() => setIsDonateModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -525,7 +529,7 @@ export default function App() {
         {/* Tab Contents */}
         <div className="pt-2 animate-in fade-in duration-300">
           {activeTab === "dashboard" && !isCustomer && (
-            <DashboardAnalyticsModule lang={lang} />
+            <DashboardAnalyticsModule lang={lang} onOpenHelp={() => handleOpenHelp("analytics")} />
           )}
 
           {activeTab === "accounts" && (
@@ -573,7 +577,9 @@ export default function App() {
             />
           )}
 
-          {activeTab === "logs" && <LiveLogs lang={lang} />}
+          {activeTab === "logs" && (
+            <LiveLogs lang={lang} onOpenHelp={() => handleOpenHelp("system")} />
+          )}
 
           {activeTab === "system" && !isCustomer && (
             <SystemStatus
@@ -598,7 +604,17 @@ export default function App() {
             <span className="font-medium">Telegram Self & Tabchi Automation Engine • 24/7 Permanent Daemon</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap justify-center">
+            {/* Donate & Support Button in Footer */}
+            <button
+              type="button"
+              onClick={() => setIsDonateModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500/20 to-rose-600/30 hover:from-rose-500/30 hover:to-rose-600/40 border border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white font-bold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
+            >
+              <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-500/30 animate-pulse" />
+              <span>دونیت و حمایت مالی 💖</span>
+            </button>
+
             <span className="text-slate-400">سازنده و توسعه‌دهنده پنل:</span>
             <a
               href="https://github.com/samkaren12"
@@ -681,6 +697,13 @@ export default function App() {
         onClose={() => setIsHelpModalOpen(false)}
         lang={lang}
         initialSection={helpInitialSection}
+      />
+
+      {/* Donation Modal */}
+      <DonateModal
+        isOpen={isDonateModalOpen}
+        onClose={() => setIsDonateModalOpen(false)}
+        lang={lang}
       />
     </div>
   );

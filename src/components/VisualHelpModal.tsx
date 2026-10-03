@@ -22,6 +22,7 @@ import {
   Globe,
   Layers,
   ArrowRight,
+  Activity,
 } from "lucide-react";
 import { Language } from "../utils/i18n";
 
@@ -32,7 +33,8 @@ export type HelpSectionId =
   | "store"
   | "system"
   | "ssl"
-  | "broadcast";
+  | "broadcast"
+  | "analytics";
 
 interface VisualHelpModalProps {
   isOpen: boolean;
@@ -129,6 +131,15 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
       color: "text-rose-400 bg-rose-500/10",
       borderColor: "border-rose-500/40",
       badge: "پی‌وی کست",
+    },
+    {
+      id: "analytics",
+      title: "داشبورد تحلیلی و آمار",
+      subtitle: "نمودار زنده فعالیت، ارسال‌ها و رخدادها",
+      icon: Activity,
+      color: "text-emerald-400 bg-emerald-500/10",
+      borderColor: "border-emerald-500/40",
+      badge: "مانیتورینگ ۲۴/۷",
     },
   ];
 
@@ -563,6 +574,43 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
                 <p className="text-xs text-slate-400 leading-relaxed">
                   هنگام ارسال همگانی، شمارنده زنده تعداد ارسال‌های موفق و ناموفق رو نشون میده. هر لحظه حس کردی کافیه، دکمه قرمز «توقف فوری» رو می‌زنی و فرآیند همون لحظه متوقف میشه.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* SECTION: ANALYTICS & MONITORING */}
+          {activeSection === "analytics" && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-4 sm:p-5">
+                <div className="flex items-center gap-2 text-emerald-400 font-black text-sm mb-2">
+                  <Activity className="w-4 h-4" />
+                  <span>داشبورد تحلیلی و پایش زنده اکانت‌ها چطور کار می‌کنه؟</span>
+                </div>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  این بخش وضعیت کل سیستم رو به شکل نمودارهای زنده و لحظه‌ای نشون میده؛ از تعداد پیام‌های ارسالی امروز گرفته تا پاسخ‌های خودکار، عکس‌های تایم‌دار ذخیره شده و کاربران بلاک‌شده مزاحم.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-black/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <h4 className="font-bold text-xs text-white flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>پایش ۲۴ ساعته جریان پیام‌ها</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    با نمودار خطی Recharts، می‌تونی اوج ترافیک پیام‌ها رو در ساعات مختلف شبانه‌روز ببینی و بفهمی چه ساعتی بهترین بازدهی رو برای تبلیغات تبچی داری.
+                  </p>
+                </div>
+
+                <div className="bg-black/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <h4 className="font-bold text-xs text-white flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-rose-400" />
+                    <span>تفکیک عملکرد بر اساس ماژول</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    نمودار دایره‌ای بهت نشون میده چند درصد فعالیت‌ها مربوط به سلف‌تایم، چند درصد منشی هوشمند و چند درصد تبچی بوده تا تعادل اکانت‌ها حفظ بشه.
+                  </p>
+                </div>
               </div>
             </div>
           )}

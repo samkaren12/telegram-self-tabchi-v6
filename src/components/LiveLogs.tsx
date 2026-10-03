@@ -10,15 +10,17 @@ import {
   CheckCircle2,
   Info,
   AlertTriangle,
+  Lightbulb,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { LogEntry } from "../types";
 
 interface LiveLogsProps {
   lang: Language;
+  onOpenHelp?: (section?: any) => void;
 }
 
-export const LiveLogs: React.FC<LiveLogsProps> = ({ lang }) => {
+export const LiveLogs: React.FC<LiveLogsProps> = ({ lang, onOpenHelp }) => {
   const t = translations[lang];
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -109,17 +111,27 @@ export const LiveLogs: React.FC<LiveLogsProps> = ({ lang }) => {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {onOpenHelp && (
+            <button
+              onClick={() => onOpenHelp("logs")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition-all active:scale-95 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+              title="راهنمای تصویری لاگ‌ها و رخدادها"
+            >
+              <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>راهنمای لاگ‌ها 💡</span>
+            </button>
+          )}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors cursor-pointer"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? t.logs.copied : t.logs.copy}</span>
           </button>
           <button
             onClick={handleClear}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/30 hover:text-rose-400 text-slate-300 text-xs transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/30 hover:text-rose-400 text-slate-300 text-xs transition-colors cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>{t.logs.clear}</span>

@@ -21,6 +21,7 @@
   <a href="#-فهرست-مطالب-table-of-contents"><b>🇮🇷 راهنمای فارسی</b></a> •
   <a href="#-دستیار-خط-فرمان-ترمینال-sudo-selfandtabchi"><b>💻 دستور sudo selfandtabchi</b></a> •
   <a href="#-سیستم-گواهی-امنیتی-ssl-و-دامنه"><b>🔒 دامنه و SSL</b></a> •
+  <a href="#-حمایت-مالی-و-دونیت-donation--support"><b>💖 حمایت مالی و دونیت</b></a> •
   <a href="#-english-documentation"><b>🇬🇧 English Documentation</b></a>
 </p>
 
@@ -51,6 +52,7 @@
   - [Terminal CLI Assistant (sudo selfandtabchi)](#terminal-cli-assistant-sudo-selfandtabchi)
   - [SSL & Custom Domain Engine](#ssl--custom-domain-engine)
   - [Store Bot & Color Buttons](#store-bot--color-buttons)
+- [💖 حمایت مالی و دونیت (Donation & Support)](#-حمایت-مالی-و-دونیت-donation--support)
 - [📜 مجوز و سلب مسئولیت (License & Disclaimer)](#-مجوز-و-سلب-مسئولیت-license--disclaimer)
 
 ---
@@ -395,6 +397,46 @@ Deploy instantly on Ubuntu / Debian / CentOS / AlmaLinux:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/samkaren12/telegram-self-tabchi-v6/main/install.sh | bash
 ```
+
+---
+
+## 💖 حمایت مالی و دونیت (Donation & Support)
+
+اگر این پروژه رایگان و متن‌باز برای شما مفید بوده و تمایل دارید از توسعه مداوم، ارائه قابلیت‌های جدید، رفع باگ‌ها و نگهداری سرورها حمایت مالی فرمایید، می‌توانید کمک‌های خود را از طریق آدرس‌های رسمی رمزارز زیر ارسال نمایید:
+
+<div align="center">
+
+### ⚡ شبکه ترون (TRON / TRX / USDT TRC-20)
+[![TRON](https://img.shields.io/badge/TRON-TRX%20|%20USDT--TRC20-FF060A?style=for-the-badge&logo=tron&logoColor=white)](https://tronscan.org/#/address/TBgTK3Png5D467cvCnwfA3xdLvUgJbpAfy)
+
+```text
+TBgTK3Png5D467cvCnwfA3xdLvUgJbpAfy
+```
+
+<br/>
+
+### 💎 شبکه تون‌کوین (The Open Network / TON / Gram / USDT-TON)
+[![TON](https://img.shields.io/badge/TON-Toncoin%20|%20Gram%20|%20USDT--TON-0088CC?style=for-the-badge&logo=ton&logoColor=white)](https://tonscan.org/address/UQAozwWDvLXgp4XWS0t8Z9xYdmN5iJ76anD5XD3y74rdhQP-)
+
+```text
+UQAozwWDvLXgp4XWS0t8Z9xYdmN5iJ76anD5XD3y74rdhQP-
+```
+
+<br/>
+
+<sub>❤️ تمام دونیت‌ها مستقیماً صرف نگهداری زیرساخت، تست متدهای جدید MTProto و توسعه قابلیت‌های سلف و تبچی خواهد شد. از همراهی و لطف شما بی‌نهایت سپاسگزاریم!</sub>
+
+</div>
+
+### 🇬🇧 Support & Donation (Crypto Wallets)
+
+If you find this project valuable and wish to support its ongoing open-source development, improvements, and maintenance, feel free to donate via the following official cryptocurrency addresses:
+
+* **⚡ TRON Network (TRX / USDT TRC-20):**  
+  `TBgTK3Png5D467cvCnwfA3xdLvUgJbpAfy`
+
+* **💎 TON Network (Toncoin / Gram / USDT TON):**  
+  `UQAozwWDvLXgp4XWS0t8Z9xYdmN5iJ76anD5XD3y74rdhQP-`
 
 ---
 

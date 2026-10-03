@@ -19,6 +19,7 @@ import {
   Check,
   Copy,
   Sparkles,
+  Heart,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount, SystemHealth, AuthSession } from "../types";
@@ -38,6 +39,7 @@ interface NavbarProps {
   soundEnabled?: boolean;
   onToggleSound?: () => void;
   onOpenHelpModal?: (section?: HelpSectionId) => void;
+  onOpenDonateModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -54,6 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   soundEnabled = true,
   onToggleSound,
   onOpenHelpModal,
+  onOpenDonateModal,
 }) => {
   const t = translations[lang];
   const activeCount = accounts.filter((a) => a.isOnline).length;
@@ -65,11 +68,32 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-2 sm:gap-4">
         {/* Brand & Logo with Matrix Green & Crimson Glow */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-400 to-rose-500 p-0.5 shadow-[0_0_20px_rgba(16,185,129,0.35)] flex-shrink-0 group hover:scale-105 transition-transform">
-            <div className="w-full h-full bg-[#030805] rounded-[14px] flex items-center justify-center text-emerald-400 group-hover:text-emerald-300">
-              <Send className="w-4 h-4 sm:w-5 sm:h-5 transform -rotate-12 group-hover:rotate-0 transition-transform duration-300" />
+          {/* Official GitHub Avatar Logo for samkaren12 */}
+          <a
+            href="https://github.com/samkaren12"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="توسعه‌دهنده: github.com/samkaren12"
+            className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 via-emerald-400 to-rose-500 p-0.5 shadow-[0_0_20px_rgba(16,185,129,0.4)] flex-shrink-0 group hover:scale-105 hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] transition-all duration-300 cursor-pointer"
+          >
+            <div className="w-full h-full bg-[#030805] rounded-[14px] overflow-hidden flex items-center justify-center relative">
+              <img
+                src="https://github.com/samkaren12.png"
+                alt="samkaren12"
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center text-emerald-400 -z-10 group-hover:text-emerald-300">
+                <Send className="w-4 h-4 sm:w-5 sm:h-5 transform -rotate-12" />
+              </div>
             </div>
-          </div>
+            {/* Live Online Ping Badge */}
+            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#020503] flex items-center justify-center shadow-[0_0_8px_#10b981]">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+            </span>
+          </a>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="text-sm sm:text-base md:text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-white to-rose-400 tracking-tight truncate">
@@ -113,11 +137,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => onOpenHelpModal()}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 via-emerald-500/10 to-rose-500/15 hover:from-emerald-500/30 hover:to-rose-500/25 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 text-xs font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 via-emerald-500/10 to-rose-500/15 hover:from-emerald-500/30 hover:to-rose-500/25 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 text-xs font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 cursor-pointer"
               title="راهنمای تصویری و خودمونی بخش‌ها"
             >
               <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
               <span className="hidden xs:inline sm:inline">راهنمای تصویری 💡</span>
+            </button>
+          )}
+
+          {/* Donate & Support Button */}
+          {onOpenDonateModal && (
+            <button
+              type="button"
+              onClick={onOpenDonateModal}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-500/20 to-rose-600/30 hover:from-rose-500/30 hover:to-rose-600/40 border border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white text-xs font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.25)] hover:shadow-[0_0_20px_rgba(239,68,68,0.45)] active:scale-95 cursor-pointer"
+              title="حمایت مالی و دونیت به توسعه‌دهنده (TRON & TON)"
+            >
+              <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-500/30 animate-pulse" />
+              <span className="hidden sm:inline">دونیت 💖</span>
             </button>
           )}
 

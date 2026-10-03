@@ -119,6 +119,8 @@ DEFAULT_REPEAT_ROUNDS = 3
 SCRIPT_AUTHOR = "samkaren12"
 GITHUB_URL = "https://github.com/samkaren12"
 SUPPORT_TELEGRAM = "@samkarendev"
+DONATION_TRON = "TBgTK3Png5D467cvCnwfA3xdLvUgJbpAfy"
+DONATION_TON = "UQAozwWDvLXgp4XWS0t8Z9xYdmN5iJ76anD5XD3y74rdhQP-"
 STATE_LOCK = threading.RLock()
 STATE: Dict[str, Any] = {}
 
