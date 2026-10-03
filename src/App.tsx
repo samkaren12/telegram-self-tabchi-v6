@@ -18,6 +18,7 @@ import {
   Sparkles,
   FolderPlus,
   Activity,
+  Lightbulb,
 } from "lucide-react";
 import { Language, translations } from "./utils/i18n";
 import { TelegramAccount, SystemHealth, AuthSession } from "./types";
@@ -35,6 +36,7 @@ import { ConnectAccountModal } from "./components/ConnectAccountModal";
 import { StartupLockModal } from "./components/StartupLockModal";
 import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
 import { OwnerPasswordModal } from "./components/OwnerPasswordModal";
+import { VisualHelpModal, HelpSectionId } from "./components/VisualHelpModal";
 import { useSoundNotification } from "./hooks/useSoundNotification";
 
 const getInitialPortal = (): "admin" | "client" => {
@@ -77,7 +79,26 @@ export default function App() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [extendModalAccount, setExtendModalAccount] = useState<TelegramAccount | null>(null);
   const [isOwnerPasswordModalOpen, setIsOwnerPasswordModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [helpInitialSection, setHelpInitialSection] = useState<HelpSectionId>("accounts");
   const [loading, setLoading] = useState(true);
+
+  const handleOpenHelp = (section?: HelpSectionId) => {
+    if (section) {
+      setHelpInitialSection(section);
+    } else {
+      const map: Record<string, HelpSectionId> = {
+        accounts: "accounts",
+        self: "self",
+        tabchi: "tabchi",
+        store: "store",
+        system: "system",
+        batchCreator: "broadcast",
+      };
+      setHelpInitialSection(map[activeTab] || "accounts");
+    }
+    setIsHelpModalOpen(true);
+  };
 
   // Sound Notifications Hook
   const { soundEnabled, volume, toggleSound, updateVolume, playSound } = useSoundNotification();
@@ -266,13 +287,13 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-300 relative overflow-x-hidden cyber-grid"
+      className="min-h-screen bg-[#020504] text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-300 relative overflow-x-hidden cyber-matrix-grid"
       dir={lang === "fa" ? "rtl" : "ltr"}
     >
-      {/* Dynamic Ambient Background Glow Elements */}
-      <div className="fixed top-[-10%] right-[-5%] w-[500px] h-[500px] bg-cyan-600/10 rounded-full blur-[130px] pointer-events-none z-0"></div>
-      <div className="fixed bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-emerald-600/10 rounded-full blur-[130px] pointer-events-none z-0"></div>
-      <div className="fixed top-[40%] left-[30%] w-[400px] h-[400px] bg-purple-600/5 rounded-full blur-[140px] pointer-events-none z-0"></div>
+      {/* High-Contrast Cyber Emerald & Crimson Ambient Background Glow */}
+      <div className="fixed top-[-10%] right-[-5%] w-[550px] h-[550px] bg-emerald-500/12 rounded-full blur-[140px] pointer-events-none z-0"></div>
+      <div className="fixed bottom-[-10%] left-[-5%] w-[550px] h-[550px] bg-rose-500/12 rounded-full blur-[140px] pointer-events-none z-0"></div>
+      <div className="fixed top-[35%] left-[25%] w-[450px] h-[450px] bg-emerald-600/8 rounded-full blur-[160px] pointer-events-none z-0"></div>
 
       {/* Top Navigation */}
       <Navbar
@@ -288,6 +309,7 @@ export default function App() {
         onOpenOwnerPasswordModal={() => setIsOwnerPasswordModalOpen(true)}
         soundEnabled={soundEnabled}
         onToggleSound={toggleSound}
+        onOpenHelpModal={handleOpenHelp}
       />
 
       {/* Main Container */}
@@ -456,35 +478,48 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab Navigation Menu (Glassmorphism & Interactive Hover) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-2 border-b border-slate-800/80 scrollbar-none">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap active:scale-95 ${
-                  isActive
-                    ? "bg-gradient-to-r from-cyan-500/20 to-emerald-500/10 text-cyan-300 border border-cyan-500/50 shadow-lg shadow-cyan-500/15 backdrop-blur-md"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent hover:border-slate-800"
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? "text-cyan-400" : "text-slate-500"}`} />
-                <span>{tab.label}</span>
-                {typeof tab.badge === "number" && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                      isActive ? "bg-cyan-500 text-slate-950 shadow-sm" : "bg-slate-800 text-slate-300"
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        {/* Tab Navigation Menu (Hacker Green & Black with Glowing Active State & Visual Guide) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-emerald-500/20">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none flex-1">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap active:scale-95 ${
+                    isActive
+                      ? "bg-gradient-to-r from-emerald-500/25 via-emerald-500/15 to-rose-500/15 text-emerald-300 border border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.3)] backdrop-blur-md"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-black/60 border border-transparent hover:border-emerald-500/30"
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? "text-emerald-400" : "text-slate-500"}`} />
+                  <span>{tab.label}</span>
+                  {typeof tab.badge === "number" && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                        isActive ? "bg-emerald-400 text-slate-950 shadow-sm" : "bg-slate-800 text-slate-300"
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Quick Visual Help for current section */}
+          <button
+            type="button"
+            onClick={() => handleOpenHelp()}
+            className="self-end sm:self-auto flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-rose-500/20 hover:from-emerald-500/30 hover:to-rose-500/30 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-white text-xs font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_25px_rgba(16,185,129,0.45)] active:scale-95 whitespace-nowrap"
+            title="آموزش تصویری و راهنمای خیلی راحت این بخش"
+          >
+            <Lightbulb className="w-4 h-4 text-emerald-400 animate-pulse" />
+            <span>راهنمای تصویری و خودمونی 💡</span>
+          </button>
         </div>
 
         {/* Tab Contents */}
@@ -501,11 +536,12 @@ export default function App() {
               onOpenConnectModal={() => setIsConnectModalOpen(true)}
               onRefresh={fetchData}
               lang={lang}
+              onOpenHelp={() => handleOpenHelp("accounts")}
             />
           )}
 
           {activeTab === "store" && !isCustomer && (
-            <StoreBotModule lang={lang} />
+            <StoreBotModule lang={lang} onOpenHelp={() => handleOpenHelp("store")} />
           )}
 
           {activeTab === "support" && !isCustomer && (
@@ -524,6 +560,7 @@ export default function App() {
               account={selectedAccount}
               lang={lang}
               onUpdateAccount={handleUpdateAccount}
+              onOpenHelp={(sec) => handleOpenHelp(sec || "self")}
             />
           )}
 
@@ -532,6 +569,7 @@ export default function App() {
               account={selectedAccount}
               lang={lang}
               onUpdateAccount={handleUpdateAccount}
+              onOpenHelp={(sec) => handleOpenHelp(sec || "tabchi")}
             />
           )}
 
@@ -547,6 +585,7 @@ export default function App() {
               onTestSound={() => playSound("test")}
               volume={volume}
               onVolumeChange={updateVolume}
+              onOpenHelp={(sec) => handleOpenHelp(sec || "system")}
             />
           )}
         </div>
@@ -634,6 +673,14 @@ export default function App() {
             });
           }
         }}
+      />
+
+      {/* Visual Help & Friendly Tutorial Modal */}
+      <VisualHelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+        lang={lang}
+        initialSection={helpInitialSection}
       />
     </div>
   );

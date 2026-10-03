@@ -16,6 +16,7 @@ import {
   Sparkles,
   Bot,
   KeyRound,
+  Lightbulb,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
@@ -30,6 +31,7 @@ interface AccountsListProps {
   onOpenConnectModal: () => void;
   onRefresh: () => void;
   lang: Language;
+  onOpenHelp?: (section?: any) => void;
 }
 
 export const AccountsList: React.FC<AccountsListProps> = ({
@@ -39,6 +41,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   onOpenConnectModal,
   onRefresh,
   lang,
+  onOpenHelp,
 }) => {
   const t = translations[lang];
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
@@ -169,12 +172,23 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               : "Manage each phone number independently, configure subscription days, extend access, and monitor status"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {onOpenHelp && (
+            <button
+              type="button"
+              onClick={() => onOpenHelp("accounts")}
+              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              title="آموزش تصویری اتصال اکانت"
+            >
+              <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>راهنمای اتصال 💡</span>
+            </button>
+          )}
           <button
             onClick={onOpenConnectModal}
-            className="px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all active:scale-95"
+            className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.35)] transition-all active:scale-95"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
             <span>{lang === "fa" ? "افزودن شماره جدید" : "Add Account"}</span>
           </button>
           <button

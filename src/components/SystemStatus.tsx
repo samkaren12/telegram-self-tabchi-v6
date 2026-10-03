@@ -25,6 +25,7 @@ import {
   Sliders,
   Check,
   Download,
+  Lightbulb,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { Volume2, VolumeX, BellRing } from "lucide-react";
@@ -41,6 +42,7 @@ interface SystemStatusProps {
   onTestSound?: () => void;
   volume?: number;
   onVolumeChange?: (v: number) => void;
+  onOpenHelp?: (section?: any) => void;
 }
 
 export const SystemStatus: React.FC<SystemStatusProps> = ({
@@ -52,6 +54,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
   onTestSound,
   volume = 0.45,
   onVolumeChange,
+  onOpenHelp,
 }) => {
   const t = translations[lang];
 
@@ -233,6 +236,35 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
 
   return (
     <div className="space-y-6" dir={lang === "fa" ? "rtl" : "ltr"}>
+      {/* Top Banner with Quick Visual Guide Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-black/60 border border-emerald-500/30 rounded-2xl shadow-[0_0_20px_rgba(0,0,0,0.6)]">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+            <Server className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-100 text-sm sm:text-base">
+              {lang === "fa" ? "وضعیت هسته سرور، دیمن ۲۴/۷ و خط فرمان" : "Server Core & 24/7 Daemon Health"}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {lang === "fa" ? "پایش حافظه، وضعیت سشن‌های MTProto، مدیریت دامنه و SSL" : "Monitor resources, sessions, domains and SSL certificates"}
+            </p>
+          </div>
+        </div>
+
+        {onOpenHelp && (
+          <button
+            type="button"
+            onClick={() => onOpenHelp("system")}
+            className="self-end sm:self-auto flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+            title="آموزش دستورات لینوکس و کار با سرور"
+          >
+            <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            <span>راهنمای سرور و ترمینال 💡</span>
+          </button>
+        )}
+      </div>
+
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Status */}
@@ -449,6 +481,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
                 dir="ltr"
                 className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
               />
+            </div>
           </div>
 
           {/* Button Layout & Style Arrangement (aiogram: 3-cols, 2-cols, 1-col) */}
@@ -906,7 +939,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
       <UpdateManager lang={lang} />
 
       {/* COMPREHENSIVE SSL BACKGROUND SERVICE MONITOR & AUTO-RENEWAL DAEMON */}
-      <SslBackgroundServiceManager lang={lang} />
+      <SslBackgroundServiceManager lang={lang} onOpenHelp={onOpenHelp} />
     </div>
   );
 };

@@ -14,6 +14,7 @@ import {
   Lock,
   Globe,
   Radio,
+  Lightbulb,
 } from "lucide-react";
 import { Language } from "../utils/i18n";
 
@@ -49,9 +50,10 @@ export interface SslBackgroundStatus {
 
 interface SslBackgroundServiceManagerProps {
   lang: Language;
+  onOpenHelp?: (section?: any) => void;
 }
 
-export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerProps> = ({ lang }) => {
+export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerProps> = ({ lang, onOpenHelp }) => {
   const [ssl, setSsl] = useState<SslBackgroundStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -229,7 +231,19 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {onOpenHelp && (
+            <button
+              type="button"
+              onClick={() => onOpenHelp("ssl")}
+              className="py-2 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              title="آموزش تصویری دامنه و SSL"
+            >
+              <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>راهنمای SSL و دامنه 💡</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={fetchStatus}

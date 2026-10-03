@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Target,
   ListFilter,
+  Lightbulb,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
@@ -23,12 +24,14 @@ interface TabchiModuleProps {
   account: TelegramAccount | null;
   lang: Language;
   onUpdateAccount: (account: TelegramAccount) => void;
+  onOpenHelp?: (section?: any) => void;
 }
 
 export const TabchiModule: React.FC<TabchiModuleProps> = ({
   account,
   lang,
   onUpdateAccount,
+  onOpenHelp,
 }) => {
   const t = translations[lang];
 
@@ -237,9 +240,23 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono bg-slate-950/80 px-3.5 py-2 rounded-2xl border border-slate-800 text-slate-300 shadow-inner">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>{account.phone}</span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {onOpenHelp && (
+            <button
+              type="button"
+              onClick={() => onOpenHelp("tabchi")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-bold text-xs shadow-[0_0_15px_rgba(239,68,68,0.2)] transition-all active:scale-95 cursor-pointer"
+              title="آموزش تصویری تبچی و تبلیغات گروهی"
+            >
+              <Lightbulb className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+              <span>راهنمای تبچی 💡</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 text-xs font-mono bg-black/80 px-3.5 py-2 rounded-2xl border border-rose-500/30 text-rose-300 shadow-inner">
+            <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping"></span>
+            <span>{account.phone}</span>
+          </div>
         </div>
       </div>
 
