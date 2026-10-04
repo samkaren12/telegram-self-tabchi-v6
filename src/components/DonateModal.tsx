@@ -5,11 +5,11 @@ import {
   Copy,
   Check,
   QrCode,
-  Sparkles,
   ExternalLink,
-  ShieldCheck,
   Coins,
-  Wallet,
+  ShieldCheck,
+  CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import { Language } from "../utils/i18n";
 
@@ -18,6 +18,85 @@ interface DonateModalProps {
   onClose: () => void;
   lang: Language;
 }
+
+/**
+ * High-Fidelity Official TRON (TRX) Logo
+ */
+export const TronLogo: React.FC<{ className?: string }> = ({
+  className = "w-6 h-6",
+}) => (
+  <svg
+    viewBox="0 0 32 32"
+    className={className}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-label="TRON (TRX) Logo"
+  >
+    <rect width="32" height="32" rx="9" fill="#1f0306" />
+    <rect
+      x="0.75"
+      y="0.75"
+      width="30.5"
+      height="30.5"
+      rx="8.25"
+      stroke="#FF060A"
+      strokeOpacity="0.5"
+      strokeWidth="1.5"
+    />
+    {/* Geometric Facets of TRON Diamond */}
+    <path d="M26.4 8.7L5.6 4.3l11.4 23.4L26.4 8.7z" fill="#E50914" />
+    <path d="M17 27.7l1.3-15-12.7-8.4 11.4 23.4z" fill="#B30710" />
+    <path d="M18.3 12.7L5.6 4.3l7 12.2 5.7-3.8z" fill="#FF3338" />
+    <path d="M18.3 12.7l8.1-4-9.4 19 1.3-15z" fill="#FF5E62" />
+    <path
+      d="M12.6 16.5l4.4 11.2-1.3-15-3.1 3.8z"
+      fill="#FFFFFF"
+      fillOpacity="0.35"
+    />
+  </svg>
+);
+
+/**
+ * High-Fidelity Official TON (The Open Network / Toncoin) Logo
+ */
+export const TonLogo: React.FC<{ className?: string }> = ({
+  className = "w-6 h-6",
+}) => (
+  <svg
+    viewBox="0 0 32 32"
+    className={className}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    aria-label="Toncoin (TON) Logo"
+  >
+    <rect width="32" height="32" rx="9" fill="#031526" />
+    <rect
+      x="0.75"
+      y="0.75"
+      width="30.5"
+      height="30.5"
+      rx="8.25"
+      stroke="#0098EA"
+      strokeOpacity="0.5"
+      strokeWidth="1.5"
+    />
+    {/* Faceted TON Gem */}
+    {/* Top left facet */}
+    <path d="M16 5.5L7 11.2l9 3.8V5.5z" fill="#38BDF8" />
+    {/* Top right facet */}
+    <path d="M16 5.5v9.5l9-3.8-9-5.7z" fill="#0098EA" />
+    {/* Bottom left facet */}
+    <path d="M7 11.2l9 15.3V15l-9-3.8z" fill="#0284C7" />
+    {/* Bottom right facet */}
+    <path d="M16 26.5l9-15.3-9 3.8v11.5z" fill="#0369A1" />
+    {/* Specular apex highlight */}
+    <path
+      d="M16 5.5l3.2 2-3.2 1.4-3.2-1.4 3.2-2z"
+      fill="#FFFFFF"
+      fillOpacity="0.6"
+    />
+  </svg>
+);
 
 export const DonateModal: React.FC<DonateModalProps> = ({
   isOpen,
@@ -49,7 +128,7 @@ export const DonateModal: React.FC<DonateModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-lg bg-gradient-to-br from-[#020503] via-[#040c06] to-[#0a0304] border-2 border-emerald-500/40 rounded-3xl p-5 sm:p-7 shadow-[0_0_60px_rgba(16,185,129,0.3)] space-y-6 overflow-hidden my-auto"
+        className="relative w-full max-w-lg bg-gradient-to-br from-[#020503] via-[#040c06] to-[#0a0304] border-2 border-emerald-500/40 rounded-3xl p-5 sm:p-7 shadow-[0_0_60px_rgba(16,185,129,0.3)] space-y-6 overflow-hidden my-auto max-h-[94vh] overflow-y-auto"
         dir={lang === "fa" ? "rtl" : "ltr"}
       >
         {/* Holographic Scanner Top Border */}
@@ -119,83 +198,154 @@ export const DonateModal: React.FC<DonateModalProps> = ({
         </div>
 
         {/* Wallets Container */}
-        <div className="space-y-3.5 relative z-10 text-xs">
+        <div className="space-y-4 relative z-10 text-xs">
           {/* 1. TRON Wallet (TRX & USDT-TRC20) */}
-          <div className="p-4 rounded-2xl bg-black/60 border border-emerald-500/40 shadow-inner space-y-2.5 hover:border-emerald-400 transition-all">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 font-bold">
-                  ⚡
+          <div className="p-4 sm:p-4.5 rounded-2xl bg-black/70 border border-rose-500/35 shadow-inner space-y-3 hover:border-rose-400/70 transition-all group">
+            <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {/* Official Tron Logo Badge */}
+                <div className="relative flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
+                  <TronLogo className="w-10 h-10 shadow-[0_0_15px_rgba(255,6,10,0.35)]" />
+                  <span className="absolute -bottom-1 -right-1 px-1 py-0.2 rounded text-[8px] font-black bg-rose-600 text-white font-mono shadow-sm">
+                    TRX
+                  </span>
                 </div>
-                <div>
-                  <h4 className="font-bold text-white text-xs">
-                    {lang === "fa" ? "کیف پول ترون (TRON / TRX / USDT TRC-20)" : "TRON Network (TRX / USDT TRC-20)"}
-                  </h4>
-                  <span className="text-[10px] text-emerald-400 font-mono">TRC-20 Standard</span>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h4 className="font-bold text-white text-xs sm:text-sm">
+                      {lang === "fa" ? "شبکه ترون (TRON / TRX)" : "TRON Network (TRX)"}
+                    </h4>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                      TRC-20
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      USDT
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono block truncate">
+                    TRX • Tether USDT TRC-20 • BitTorrent
+                  </span>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowTronQr(!showTronQr)}
-                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-emerald-500/40 transition-all cursor-pointer"
-                title="نمایش QR Code"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-              </button>
+              {/* Action Buttons: Explorer & QR */}
+              <div className="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-center">
+                <a
+                  href={`https://tronscan.org/#/address/${tronAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-slate-400 hover:text-rose-300 hover:border-rose-500/50 transition-all cursor-pointer flex items-center gap-1"
+                  title="مشاهده در مرجع TronScan"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline text-[10px] font-mono font-bold">TronScan</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setShowTronQr(!showTronQr)}
+                  className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                    showTronQr
+                      ? "bg-rose-500/20 border-rose-400 text-rose-200"
+                      : "bg-slate-900/90 border-slate-800 text-slate-400 hover:text-white hover:border-rose-500/40"
+                  }`}
+                  title="نمایش QR Code"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline text-[10px] font-bold">QR</span>
+                </button>
+              </div>
             </div>
 
             {/* Address Box */}
-            <div className="flex items-center gap-2 p-2.5 bg-[#020503] rounded-xl border border-emerald-500/30">
-              <span className="font-mono text-emerald-300 select-all break-all text-[11px] flex-1" dir="ltr">
+            <div className="flex items-center gap-2 p-2.5 bg-[#020503] rounded-xl border border-rose-500/30">
+              <span className="font-mono text-rose-300 select-all break-all text-[11px] flex-1" dir="ltr">
                 {tronAddress}
               </span>
               <button
                 type="button"
                 onClick={handleCopyTron}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-black text-[11px] shadow-[0_0_10px_rgba(16,185,129,0.4)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-400 hover:to-rose-500 text-white font-black text-[11px] shadow-[0_0_12px_rgba(239,68,68,0.4)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
               >
-                {copiedTron ? <Check className="w-3.5 h-3.5 text-black" /> : <Copy className="w-3.5 h-3.5 text-black" />}
+                {copiedTron ? <Check className="w-3.5 h-3.5 text-white stroke-[3]" /> : <Copy className="w-3.5 h-3.5 text-white" />}
                 <span>{copiedTron ? (lang === "fa" ? "کپی شد ✓" : "Copied!") : (lang === "fa" ? "کپی آدرس" : "Copy")}</span>
               </button>
             </div>
 
-            {/* Optional QR Code Preview */}
+            {/* QR Code Preview */}
             {showTronQr && (
-              <div className="p-3 bg-white rounded-xl mx-auto w-fit shadow-lg animate-in fade-in text-center space-y-1">
+              <div className="p-3.5 bg-white rounded-2xl mx-auto w-fit shadow-[0_0_30px_rgba(255,6,10,0.25)] animate-in fade-in zoom-in-95 text-center space-y-2 border-2 border-rose-500">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${tronAddress}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${tronAddress}`}
                   alt="Tron QR Code"
-                  className="w-36 h-36 mx-auto"
+                  className="w-36 h-36 mx-auto rounded-lg"
                 />
-                <span className="text-[10px] text-slate-800 font-mono block">TRON / TRX / USDT</span>
+                <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] font-bold text-slate-900 font-mono">
+                  <TronLogo className="w-4 h-4" />
+                  <span>TRON • TRX / USDT TRC-20</span>
+                </div>
               </div>
             )}
           </div>
 
           {/* 2. TON Wallet (TON / Gram / USDT-TON) */}
-          <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/40 shadow-inner space-y-2.5 hover:border-cyan-400 transition-all">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold">
-                  💎
+          <div className="p-4 sm:p-4.5 rounded-2xl bg-black/70 border border-cyan-500/35 shadow-inner space-y-3 hover:border-cyan-400/70 transition-all group">
+            <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {/* Official TON Logo Badge */}
+                <div className="relative flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
+                  <TonLogo className="w-10 h-10 shadow-[0_0_15px_rgba(0,152,234,0.35)]" />
+                  <span className="absolute -bottom-1 -right-1 px-1 py-0.2 rounded text-[8px] font-black bg-cyan-600 text-white font-mono shadow-sm">
+                    TON
+                  </span>
                 </div>
-                <div>
-                  <h4 className="font-bold text-white text-xs">
-                    {lang === "fa" ? "کیف پول تون‌کوین (TON / Gram / USDT TON)" : "Toncoin Network (TON / Gram)"}
-                  </h4>
-                  <span className="text-[10px] text-cyan-400 font-mono">The Open Network (TON)</span>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h4 className="font-bold text-white text-xs sm:text-sm">
+                      {lang === "fa" ? "شبکه تون‌کوین (TON / The Open Network)" : "Toncoin Network (TON)"}
+                    </h4>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                      TON
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      Gram
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono block truncate">
+                    Toncoin • USDT TON • Telegram Ecosystem
+                  </span>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setShowTonQr(!showTonQr)}
-                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-cyan-500/40 transition-all cursor-pointer"
-                title="نمایش QR Code"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-              </button>
+              {/* Action Buttons: Explorer & QR */}
+              <div className="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-center">
+                <a
+                  href={`https://tonscan.org/address/${tonAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-slate-400 hover:text-cyan-300 hover:border-cyan-500/50 transition-all cursor-pointer flex items-center gap-1"
+                  title="مشاهده در مرجع TonScan"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline text-[10px] font-mono font-bold">TonScan</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setShowTonQr(!showTonQr)}
+                  className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                    showTonQr
+                      ? "bg-cyan-500/20 border-cyan-400 text-cyan-200"
+                      : "bg-slate-900/90 border-slate-800 text-slate-400 hover:text-white hover:border-cyan-500/40"
+                  }`}
+                  title="نمایش QR Code"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline text-[10px] font-bold">QR</span>
+                </button>
+              </div>
             </div>
 
             {/* Address Box */}
@@ -206,34 +356,37 @@ export const DonateModal: React.FC<DonateModalProps> = ({
               <button
                 type="button"
                 onClick={handleCopyTon}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-cyan-400 hover:bg-cyan-300 text-black font-black text-[11px] shadow-[0_0_10px_rgba(34,211,238,0.4)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-400 to-cyan-500 hover:from-cyan-300 hover:to-cyan-400 text-black font-black text-[11px] shadow-[0_0_12px_rgba(34,211,238,0.4)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
               >
-                {copiedTon ? <Check className="w-3.5 h-3.5 text-black" /> : <Copy className="w-3.5 h-3.5 text-black" />}
+                {copiedTon ? <Check className="w-3.5 h-3.5 text-black stroke-[3]" /> : <Copy className="w-3.5 h-3.5 text-black" />}
                 <span>{copiedTon ? (lang === "fa" ? "کپی شد ✓" : "Copied!") : (lang === "fa" ? "کپی آدرس" : "Copy")}</span>
               </button>
             </div>
 
-            {/* Optional QR Code Preview */}
+            {/* QR Code Preview */}
             {showTonQr && (
-              <div className="p-3 bg-white rounded-xl mx-auto w-fit shadow-lg animate-in fade-in text-center space-y-1">
+              <div className="p-3.5 bg-white rounded-2xl mx-auto w-fit shadow-[0_0_30px_rgba(0,152,234,0.25)] animate-in fade-in zoom-in-95 text-center space-y-2 border-2 border-cyan-500">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${tonAddress}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${tonAddress}`}
                   alt="TON QR Code"
-                  className="w-36 h-36 mx-auto"
+                  className="w-36 h-36 mx-auto rounded-lg"
                 />
-                <span className="text-[10px] text-slate-800 font-mono block">TON / Gram / USDT-TON</span>
+                <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] font-bold text-slate-900 font-mono">
+                  <TonLogo className="w-4 h-4" />
+                  <span>TON • Toncoin / Gram / USDT</span>
+                </div>
               </div>
             )}
           </div>
         </div>
 
         {/* Footer Note */}
-        <div className="pt-2 text-center text-slate-400 text-[11px] flex items-center justify-center gap-1.5">
-          <Heart className="w-3.5 h-3.5 text-rose-500 fill-current animate-pulse" />
+        <div className="pt-1 text-center text-slate-400 text-[11px] flex items-center justify-center gap-1.5 border-t border-emerald-500/20">
+          <Heart className="w-3.5 h-3.5 text-rose-500 fill-current animate-pulse flex-shrink-0" />
           <span>
             {lang === "fa"
-              ? "خیلی مخلصیم! حمایت‌های شما انگیزه اصلی آپدیت‌هاست."
-              : "Thank you for supporting this open-source project!"}
+              ? "خیلی مخلصیم! حمایت‌های شما انگیزه اصلی آپدیت‌ها و سرورهای پروژه است."
+              : "Thank you for supporting this open-source Telegram automation project!"}
           </span>
         </div>
       </div>

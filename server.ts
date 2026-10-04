@@ -25,6 +25,7 @@ import {
   attachHttpsServer,
   getPublicServerIp,
 } from "./server/sslManager.js";
+import { backupService } from "./server/backupService.js";
 import { exec } from "child_process";
 
 const startTime = Date.now();
@@ -33,7 +34,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // Normalize and clean phone route parameter across all endpoints
   app.param("phone", (req, _res, next, phone) => {
@@ -61,6 +63,9 @@ async function startServer() {
   telegramManager.initAllAccounts().catch((err) => {
     console.error("Error initializing accounts:", err);
   });
+
+  // Initialize Auto-Backup scheduled daemon
+  backupService.initScheduler(telegramManager);
 
   // ==========================================
   // API ROUTES
@@ -254,6 +259,55 @@ async function startServer() {
       return res.json({ success: true, ...info });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // STORE BOT ADMIN CREDENTIALS & LOGIN APIS
+  // ==========================================
+  app.get("/api/store-bot/admin-credentials", (req, res) => {
+    try {
+      const credentials = storeBotManager.getAdminCredentials();
+      return res.json({ success: true, credentials });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/admin-credentials", (req, res) => {
+    try {
+      const { newUsername, newPassword, currentPassword } = req.body || {};
+      const current = storeBotManager.getAdminCredentials();
+      if (currentPassword && !storeBotManager.verifyAdminCredentials(current.username, currentPassword)) {
+        return res.status(401).json({ success: false, message: "رمز عبور فعلی ادمین فروشگاه اشتباه است." });
+      }
+      if (!newPassword || newPassword.length < 4) {
+        return res.status(400).json({ success: false, message: "رمز عبور جدید باید حداقل ۴ کاراکتر باشد." });
+      }
+      const result = storeBotManager.updateAdminCredentials(newUsername, newPassword);
+      return res.json({
+        success: true,
+        credentials: result,
+        message: "نام کاربری و رمز عبور اختصاصی پنل مدیریت ربات با موفقیت ذخیره شد.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/admin-login", (req, res) => {
+    try {
+      const { username, password } = req.body || {};
+      if (!storeBotManager.verifyAdminCredentials(username, password)) {
+        return res.status(401).json({ success: false, message: "نام کاربری یا رمز عبور پنل فروشگاه نامعتبر است." });
+      }
+      return res.json({
+        success: true,
+        message: "ورود به پنل اختصاصی مدیریت ربات فروشگاه با موفقیت انجام شد.",
+        session: { role: "owner", username, portal: "store" },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   });
 
@@ -965,6 +1019,60 @@ async function startServer() {
     }
   });
 
+  // Self Module: Smart Filters (Regex Rules, Delays, Ignore List)
+  app.post("/api/accounts/:phone/smart-filters", (req, res) => {
+    try {
+      const { phone } = req.params;
+      const { smart_filters } = req.body;
+      const result = telegramManager.updateSmartFiltersConfig(phone, smart_filters);
+      return res.json({ success: true, smart_filters: result });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Smart Filters Simulator / Test Endpoint
+  app.post("/api/smart-filters/test", (req, res) => {
+    try {
+      const { pattern, flags, testText, ignoreList, senderId } = req.body;
+      // Check ignore list first
+      if (Array.isArray(ignoreList) && senderId) {
+        const cleanSender = String(senderId).trim().toLowerCase().replace(/^@/, "");
+        const isIgnored = ignoreList.some((item: string) => {
+          const cl = item.trim().toLowerCase().replace(/^@/, "");
+          return cl && (cleanSender.includes(cl) || cl === cleanSender);
+        });
+        if (isIgnored) {
+          return res.json({
+            success: true,
+            matched: false,
+            ignored: true,
+            reason: `شناسه فرستنده '${senderId}' در لیست سیاه نادیده‌گرفته‌شده‌ها (Ignore-List) قرار دارد.`,
+          });
+        }
+      }
+
+      if (!pattern || !pattern.trim()) {
+        return res.status(400).json({ success: false, message: "الگوی رِجکس خالی است" });
+      }
+
+      const regex = new RegExp(pattern, flags || "i");
+      const matched = regex.test(testText || "");
+      const matches = matched ? (testText.match(regex) || []) : [];
+      return res.json({
+        success: true,
+        matched,
+        matches: Array.from(matches),
+        message: matched ? "الگو با موفقیت تطبیق یافت ✅" : "الگو تطبیق نیافت ⛔",
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: `خطای سینتکس در الگوی رِجکس: ${err.message}`,
+      });
+    }
+  });
+
   // Tabchi Module: Start Broadcast
   app.post("/api/accounts/:phone/tabchi/start", async (req, res) => {
     try {
@@ -1505,6 +1613,96 @@ echo "======================================================================"
         output: stdout,
       });
     });
+  });
+
+  // ==========================================
+  // AUTO-BACKUP & ENCRYPTED EXPORT/RESTORE APIS
+  // ==========================================
+  app.get("/api/backup/config", (_req, res) => {
+    try {
+      const cfg = backupService.getConfig();
+      const backups = backupService.listBackups();
+      return res.json({ success: true, config: cfg, totalStored: backups.length });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/backup/config", (req, res) => {
+    try {
+      const updated = backupService.updateConfig(req.body);
+      return res.json({ success: true, config: updated, message: "تنظیمات بکاپ خودکار ذخیره شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/backup/export", async (req, res) => {
+    try {
+      const { passphrase, download } = req.body || {};
+      const result = await backupService.createBackup(telegramManager, passphrase, true);
+      if (download) {
+        res.setHeader("Content-Disposition", `attachment; filename="${result.filename}"`);
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        return res.send(result.fileContent);
+      }
+      return res.json({
+        success: true,
+        info: result.info,
+        filename: result.filename,
+        fileContent: result.fileContent,
+        message: "فایل پشتیبان رمزنگاری‌شده با موفقیت ایجاد شد.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/backup/list", (_req, res) => {
+    try {
+      const list = backupService.listBackups();
+      return res.json({ success: true, backups: list });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/backup/download/:filename", (req, res) => {
+    try {
+      const filepath = backupService.getBackupFilePath(req.params.filename);
+      if (!filepath) {
+        return res.status(404).json({ success: false, message: "فایل بکاپ یافت نشد." });
+      }
+      res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filepath)}"`);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.sendFile(filepath);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/backup/:filename", (req, res) => {
+    try {
+      const ok = backupService.deleteBackup(req.params.filename);
+      if (!ok) return res.status(404).json({ success: false, message: "فایل بکاپ یافت نشد." });
+      return res.json({ success: true, message: "فایل بکاپ با موفقیت حذف شد." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/backup/restore", (req, res) => {
+    try {
+      const { backupData, passphrase } = req.body || {};
+      if (!backupData) {
+        return res.status(400).json({ success: false, message: "داده‌های فایل بکاپ ارسال نشده است." });
+      }
+      const envelope = typeof backupData === "string" ? JSON.parse(backupData) : backupData;
+      const result = backupService.restoreBackup(envelope, passphrase, telegramManager);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
   });
 
   // ==========================================

@@ -24,6 +24,7 @@ export interface TelegramAccountFeatures {
     ai_prompt?: string;
     ai_model?: string;
   };
+  smart_filters?: SmartFiltersConfig;
   mandatory_join: {
     active: boolean;
     channels: Array<{ name: string; ref: string }>;
@@ -85,6 +86,30 @@ export interface TelegramAccountFeatures {
     targets: string[];
   };
   keep_alive: boolean;
+}
+
+export interface SmartFilterRule {
+  id: string;
+  name: string;
+  pattern: string; // Regex pattern, e.g. "^(قیمت|نرخ|تعرفه)" or "\\b(support|admin)\\b"
+  flags?: string; // Regex flags e.g. "i", "g", "m"
+  reply_text: string;
+  delay_seconds: number; // Delay in seconds (0 to 60)
+  is_active: boolean;
+  priority?: number;
+  match_count?: number;
+  last_matched_at?: string;
+  ignore_list?: string[]; // List of user IDs or usernames to ignore for this specific rule
+  description?: string;
+}
+
+export interface SmartFiltersConfig {
+  active: boolean;
+  global_ignore_list: string[]; // Global user IDs or @usernames to ignore
+  global_delay_seconds: number; // Default delay in seconds
+  case_insensitive: boolean;
+  log_matches: boolean;
+  rules: SmartFilterRule[];
 }
 
 export interface AccountSubscription {
@@ -217,7 +242,7 @@ export interface LogEntry {
   timestamp: string;
   level: "info" | "success" | "warn" | "error";
   accountPhone?: string;
-  module: "auth" | "self" | "self_time" | "auto_reply" | "tabchi" | "mandatory_join" | "tools" | "broadcast" | "bot" | "system";
+  module: "auth" | "self" | "self_time" | "auto_reply" | "smart_filters" | "tabchi" | "mandatory_join" | "tools" | "broadcast" | "bot" | "system";
   message: string;
   details?: any;
 }
@@ -428,6 +453,13 @@ export interface StoreCustomer {
   extensionsHistory?: StoreSubscriptionExtension[];
 }
 
+export interface StoreAdminCredentials {
+  username: string;
+  password?: string;
+  updatedAt?: string;
+  isDefault?: boolean;
+}
+
 export interface StoreData {
   settings: StoreBotSettings;
   plans: StorePlan[];
@@ -435,6 +467,7 @@ export interface StoreData {
   orders: StoreOrder[];
   coupons: StoreCoupon[];
   customers: StoreCustomer[];
+  adminCredentials?: StoreAdminCredentials;
 }
 
 // ==========================================

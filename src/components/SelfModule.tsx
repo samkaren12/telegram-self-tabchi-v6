@@ -45,6 +45,7 @@ import {
 import { transformFont } from "../utils/fontStyler";
 import { formatTehranTime } from "../utils/tehranTime";
 import { MarketEngineCard } from "./MarketEngineCard";
+import { SmartFiltersManager } from "./SmartFiltersManager";
 
 interface SelfModuleProps {
   account: TelegramAccount | null;
@@ -63,7 +64,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
 
   // Active sub-tab
   const [activeSubTab, setActiveSubTab] = useState<
-    "clock" | "lockPv" | "mediaSaver" | "autoReply" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
+    "clock" | "lockPv" | "mediaSaver" | "autoReply" | "smartFilters" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
   >("clock");
 
   // Lock PV State
@@ -710,6 +711,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
           { id: "lockPv", label: lang === "fa" ? "قفل پیوی 🔒" : "Lock PV", icon: ShieldAlert, color: "text-rose-400" },
           { id: "mediaSaver", label: lang === "fa" ? "ذخیره‌ساز رسانه و تایم‌دار 📸" : "Media Saver", icon: Camera, color: "text-emerald-400" },
           { id: "autoReply", label: t.self.tabs.autoReply, icon: MessageSquare, color: "text-emerald-400" },
+          { id: "smartFilters", label: lang === "fa" ? "فیلترهای هوشمند رِجکس ⚡" : "Smart Filters", icon: Sparkles, color: "text-amber-400" },
           { id: "mandatoryJoin", label: t.self.tabs.mandatoryJoin, icon: Lock, color: "text-amber-400" },
           { id: "market", label: lang === "fa" ? "نرخ زنده ارز، طلا و نمودار" : "Live Market & Charts", icon: TrendingUp, color: "text-emerald-400" },
           { id: "tools", label: t.self.tabs.tools, icon: Calculator, color: "text-blue-400" },
@@ -1519,6 +1521,15 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* 2B. SUB-TAB: SMART FILTERS (REGEX RULES, DELAYS & IGNORE-LISTS) */}
+      {activeSubTab === "smartFilters" && (
+        <SmartFiltersManager
+          account={account}
+          lang={lang}
+          onUpdateAccount={onUpdateAccount}
+        />
       )}
 
       {/* 3. SUB-TAB: MANDATORY JOIN */}

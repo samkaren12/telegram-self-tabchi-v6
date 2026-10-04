@@ -23,6 +23,7 @@ import { TelegramAccount } from "../types";
 import { ExtendSubscriptionModal } from "./ExtendSubscriptionModal";
 import { AccountBotModal } from "./AccountBotModal";
 import { CustomerCredentialsModal } from "./CustomerCredentialsModal";
+import { AccountStatusBadge } from "./AccountStatusBadge";
 
 interface AccountsListProps {
   accounts: TelegramAccount[];
@@ -230,17 +231,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                     {acc.firstName ? acc.firstName[0].toUpperCase() : "U"}
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-slate-100 text-sm truncate">
-                        {acc.firstName || "Telegram User"} {acc.lastName}
-                      </h4>
-                      <span
-                        className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                          acc.isOnline ? "bg-emerald-400 animate-pulse" : "bg-slate-600"
-                        }`}
-                        title={acc.isOnline ? "Worker Online" : "Offline"}
-                      ></span>
-                    </div>
+                    <h4 className="font-bold text-slate-100 text-sm truncate">
+                      {acc.firstName || "Telegram User"} {acc.lastName}
+                    </h4>
                     <p className="text-xs text-slate-400 font-mono truncate" dir="ltr">
                       {acc.phone} {acc.username ? `@${acc.username}` : ""}
                     </p>
@@ -250,17 +243,26 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   </div>
                 </div>
 
-                {/* Select button */}
-                <button
-                  onClick={() => onSelectAccount(acc.phone)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex-shrink-0 ${
-                    isSelected
-                      ? "bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20"
-                      : "bg-slate-800 text-slate-300 hover:text-white"
-                  }`}
-                >
-                  {isSelected ? (lang === "fa" ? "حساب فعال" : "Active") : (lang === "fa" ? "انتخاب" : "Select")}
-                </button>
+                {/* Status Badge with Framer Motion Transition Pulse & Select button */}
+                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
+                  <AccountStatusBadge
+                    isOnline={acc.isOnline}
+                    phone={acc.phone}
+                    lang={lang}
+                  />
+
+                  {/* Select button */}
+                  <button
+                    onClick={() => onSelectAccount(acc.phone)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex-shrink-0 cursor-pointer ${
+                      isSelected
+                        ? "bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20"
+                        : "bg-slate-800 text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    {isSelected ? (lang === "fa" ? "حساب فعال" : "Active") : (lang === "fa" ? "انتخاب" : "Select")}
+                  </button>
+                </div>
               </div>
 
               {/* Subscription Status Bar */}

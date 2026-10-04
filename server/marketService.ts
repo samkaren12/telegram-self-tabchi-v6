@@ -437,13 +437,17 @@ export function generateQuickChartUrl(
   title: string,
   symbol: string,
   history: MarketHistoryPoint[],
-  trend: "up" | "down" | "neutral"
+  trend: "up" | "down" | "neutral",
+  changePercent: number = 0
 ): string {
   const labels = history.map((h) => h.time);
   const data = history.map((h) => h.price_toman);
 
-  const strokeColor = trend === "up" ? "#10b981" : trend === "down" ? "#f43f5e" : "#06b6d4";
-  const bgColor = trend === "up" ? "rgba(16, 185, 129, 0.15)" : trend === "down" ? "rgba(244, 63, 94, 0.15)" : "rgba(6, 182, 212, 0.15)";
+  const isProfit = changePercent >= 0;
+  const strokeColor = isProfit ? "#10b981" : "#f43f5e";
+  const bgColor = isProfit ? "rgba(16, 185, 129, 0.22)" : "rgba(244, 63, 94, 0.22)";
+  const sign = isProfit ? "+" : "";
+  const pnlTag = isProfit ? `سود ۲۴س: ${sign}${changePercent}% 🟢` : `زیان ۲۴س: ${changePercent}% 🔴`;
 
   const chartConfig = {
     type: "line",
@@ -451,13 +455,13 @@ export function generateQuickChartUrl(
       labels,
       datasets: [
         {
-          label: `${symbol} (Toman)`,
+          label: `${symbol} (تومان)`,
           data,
           borderColor: strokeColor,
           backgroundColor: bgColor,
           borderWidth: 3,
           fill: true,
-          pointRadius: 3,
+          pointRadius: 4,
           pointBackgroundColor: strokeColor,
           tension: 0.35,
         },
@@ -467,9 +471,9 @@ export function generateQuickChartUrl(
       responsive: true,
       title: {
         display: true,
-        text: `📈 ${title} • نمودار ۲۴ ساعته بازار`,
-        fontColor: "#f1f5f9",
-        fontSize: 14,
+        text: `📈 ${title} | ${pnlTag}`,
+        fontColor: isProfit ? "#34d399" : "#fb7185",
+        fontSize: 15,
         fontFamily: "sans-serif",
       },
       legend: {
@@ -496,9 +500,28 @@ export function generateQuickChartUrl(
     },
   };
 
-  return `https://quickchart.io/chart?w=600&h=320&bkg=%230b0f19&c=${encodeURIComponent(
+  return `https://quickchart.io/chart?w=640&h=340&bkg=%230b0f19&c=${encodeURIComponent(
     JSON.stringify(chartConfig)
   )}`;
+}
+
+/**
+ * Downloads the chart image as a binary Buffer to guarantee fast native photo delivery in Telegram
+ */
+export async function fetchChartImageBuffer(chartUrl: string): Promise<Buffer | null> {
+  if (!chartUrl) return null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(chartUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err: any) {
+    console.error("fetchChartImageBuffer error:", err.message);
+    return null;
+  }
 }
 
 export function generateSvgChart(
@@ -733,7 +756,7 @@ export async function getMarketQuote(
   const history = generateIntradayPoints(unitUsd, unitToman, change24h);
 
   // Generate Visual Charts
-  const chart_url = generateQuickChartUrl(`${name_fa} (${symbol})`, symbol, history, trend);
+  const chart_url = generateQuickChartUrl(`${name_fa} (${symbol})`, symbol, history, trend, change24h);
   const chart_svg = generateSvgChart(`${name_fa} (${symbol})`, history, trend);
 
   let profitLossText: string | undefined;
@@ -785,23 +808,28 @@ export async function getMarketQuote(
 // -------------------------------------------------------------
 
 export function formatTelegramMarketCaption(quote: DetailedMarketQuote): string {
-  const trendEmoji =
-    quote.trend === "up" ? "🟢 ⇡" : quote.trend === "down" ? "🔴 ⇣" : "⚪ ⁃";
-  const changeSign = quote.change_24h_percent >= 0 ? "+" : "";
+  const isProfit = quote.change_24h_percent >= 0;
+  const pnlEmoji = isProfit ? "🟢 ⇡" : "🔴 ⇣";
+  const changeSign = isProfit ? "+" : "";
+  const pnlTag = isProfit
+    ? `🟢 <b>وضعیت سود ۲۴ ساعته:</b> <b>+${quote.change_24h_percent}% سود</b>`
+    : `🔴 <b>وضعیت زیان ۲۴ ساعته:</b> <b>${quote.change_24h_percent}% زیان</b>`;
 
   return (
-    `📊 <b>استعلام زنده قیمت و نرخ بازار:</b>\n\n` +
+    `📊 <b>استعلام زنده قیمت و نمودار سود/زیان:</b>\n\n` +
     `💎 <b>دارایی:</b> ${quote.amount > 1 ? `${quote.amount} ` : ""}${quote.name_fa} [<code>${quote.symbol}</code>]\n` +
     `💵 <b>معادل دلاری:</b> <code>$${quote.total_usd.toLocaleString("en-US", {
       minimumFractionDigits: quote.total_usd < 1 ? 4 : 2,
     })}</code>\n` +
     `🇮🇷 <b>معادل تومانی:</b> <b>${quote.total_toman.toLocaleString("fa-IR")}</b> تومان\n` +
     `🪙 <b>معادل ریالی:</b> ${quote.total_irr.toLocaleString("fa-IR")} ریال\n\n` +
-    `📈 <b>تغییرات ۲۴ ساعته:</b> ${trendEmoji} <code>${changeSign}${quote.change_24h_percent}%</code>\n` +
-    `🔼 <b>سقف امروز:</b> ${quote.high_24h_toman.toLocaleString("fa-IR")} تومان\n` +
-    `🔽 <b>کف امروز:</b> ${quote.low_24h_toman.toLocaleString("fa-IR")} تومان\n` +
-    (quote.profitLossText ? `💡 <b>محاسبه:</b> ${quote.profitLossText}\n` : "") +
+    `${pnlTag}\n` +
+    `📈 <b>روند تغییرات:</b> ${pnlEmoji} <code>${changeSign}${quote.change_24h_percent}%</code>\n` +
+    `🔼 <b>سقف قیمت امروز:</b> ${quote.high_24h_toman.toLocaleString("fa-IR")} تومان\n` +
+    `🔽 <b>کف قیمت امروز:</b> ${quote.low_24h_toman.toLocaleString("fa-IR")} تومان\n` +
+    (quote.profitLossText ? `💡 <b>محاسبه خرید/فروش:</b> ${quote.profitLossText}\n` : "") +
     `\n🕒 <b>زمان استعلام:</b> <i>${quote.updated_at}</i>\n` +
+    `📈 <i>تصویر نمودار سود و زیان پیوست شده است ☝️</i>\n` +
     `⚡ <i>Telegram Self & Tabchi Automation v6</i>`
   );
 }

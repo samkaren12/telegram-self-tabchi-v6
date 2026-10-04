@@ -39,6 +39,7 @@ import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
 import { OwnerPasswordModal } from "./components/OwnerPasswordModal";
 import { VisualHelpModal, HelpSectionId } from "./components/VisualHelpModal";
 import { DonateModal } from "./components/DonateModal";
+import { MatrixRain } from "./components/MatrixRain";
 import { useSoundNotification } from "./hooks/useSoundNotification";
 
 const getInitialPortal = (): "admin" | "client" => {
@@ -297,6 +298,9 @@ export default function App() {
       <div className="fixed top-[-10%] right-[-5%] w-[550px] h-[550px] bg-emerald-500/12 rounded-full blur-[140px] pointer-events-none z-0"></div>
       <div className="fixed bottom-[-10%] left-[-5%] w-[550px] h-[550px] bg-rose-500/12 rounded-full blur-[140px] pointer-events-none z-0"></div>
       <div className="fixed top-[35%] left-[25%] w-[450px] h-[450px] bg-emerald-600/8 rounded-full blur-[160px] pointer-events-none z-0"></div>
+
+      {/* Subtle Canvas-Based Animated Matrix Rain Background Layer */}
+      <MatrixRain opacity={0.16} speed={36} fontSize={14} />
 
       {/* Top Navigation */}
       <Navbar

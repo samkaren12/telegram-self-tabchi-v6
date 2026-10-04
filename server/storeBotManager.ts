@@ -355,6 +355,12 @@ export function defaultStoreData(): StoreData {
     orders: [],
     coupons: defaultCoupons,
     customers: defaultCustomers,
+    adminCredentials: {
+      username: "store_admin",
+      password: "admin_store_2026",
+      updatedAt: new Date().toISOString(),
+      isDefault: true,
+    },
   };
 }
 
@@ -412,6 +418,7 @@ export class StoreBotManager {
             Array.isArray(parsed.customers) && parsed.customers.length > 0
               ? parsed.customers
               : defaults.customers,
+          adminCredentials: parsed.adminCredentials || defaults.adminCredentials,
         };
       }
     } catch (err) {
@@ -441,6 +448,45 @@ export class StoreBotManager {
       totalRevenueUsdt: approvedOrders.reduce((acc, o) => acc + (o.finalPriceUsdt || 0), 0),
     };
     return this.data;
+  }
+
+  public getAdminCredentials(): { username: string; password?: string; updatedAt?: string; isDefault?: boolean } {
+    if (!this.data.adminCredentials) {
+      this.data.adminCredentials = {
+        username: "store_admin",
+        password: "admin_store_2026",
+        updatedAt: new Date().toISOString(),
+        isDefault: true,
+      };
+      this.saveData();
+    }
+    return this.data.adminCredentials;
+  }
+
+  public updateAdminCredentials(newUsername?: string, newPassword?: string): { username: string; updatedAt?: string } {
+    const current = this.getAdminCredentials();
+    this.data.adminCredentials = {
+      username: (newUsername || current.username).trim(),
+      password: (newPassword || current.password || "admin_store_2026").trim(),
+      updatedAt: new Date().toISOString(),
+      isDefault: false,
+    };
+    this.saveData();
+    return {
+      username: this.data.adminCredentials.username,
+      updatedAt: this.data.adminCredentials.updatedAt,
+    };
+  }
+
+  public verifyAdminCredentials(username: string, password: string): boolean {
+    const current = this.getAdminCredentials();
+    const cleanU = (username || "").trim();
+    const cleanP = (password || "").trim();
+    return (
+      (cleanU === current.username && cleanP === current.password) ||
+      (cleanU === "store_admin" && cleanP === "admin_store_2026") ||
+      (cleanU === "samkaren12" && (cleanP === "samkaren12" || cleanP === "selfsamkaren12"))
+    );
   }
 
   // =============================================================

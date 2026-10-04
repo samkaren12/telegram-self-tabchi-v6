@@ -105,6 +105,14 @@ export function defaultFeatures(): TelegramAccountFeatures {
       target_channel_id: "",
       caption_sender_info: true,
     },
+    smart_filters: {
+      active: false,
+      global_ignore_list: [],
+      global_delay_seconds: 1,
+      case_insensitive: true,
+      log_matches: true,
+      rules: [],
+    },
     font: {
       active: false,
       style: "bold",
@@ -238,6 +246,7 @@ import {
   getFeaturedMarketList,
   DetailedMarketQuote,
   evaluateMathWithMarketRates,
+  fetchChartImageBuffer,
 } from "./marketService";
 
 export {
@@ -245,6 +254,7 @@ export {
   formatTelegramMarketCaption,
   getFeaturedMarketList,
   evaluateMathWithMarketRates,
+  fetchChartImageBuffer,
 };
 
 export { formatTehranTime, getTehranTimeParts };
@@ -448,6 +458,15 @@ export class TelegramManager {
     } catch (err: any) {
       this.addLog("error", "system", `Failed to save state: ${err?.message}`);
     }
+  }
+
+  public saveStateDirectly() {
+    this.saveState();
+  }
+
+  public addExistingAccount(account: TelegramAccount) {
+    this.accounts.set(account.phone, account);
+    this.saveState();
   }
 
   public getOwnerCredentials(): { username: string; updatedAt: string } {
@@ -1237,13 +1256,14 @@ export class TelegramManager {
               // Send chart image as photo with rich caption
               if (quote.chart_url) {
                 try {
+                  const chartBuf = await fetchChartImageBuffer(quote.chart_url);
                   await client.sendMessage(message.chatId!, {
                     message: quoteCaption,
-                    file: quote.chart_url,
+                    file: chartBuf || quote.chart_url,
                     replyTo: message.id,
                     parseMode: "html",
                   });
-                  this.addLog("info", "tools", `استعلام قیمت زنده و نمودار ارسال شد: ${quote.asset}`, phone);
+                  this.addLog("info", "tools", `استعلام قیمت زنده و عکس نمودار سود/زیان ارسال شد: ${quote.asset}`, phone);
                   return;
                 } catch (photoErr) {
                   // Fallback to text message
@@ -1478,7 +1498,152 @@ export class TelegramManager {
         }
       }
 
-      // 1D. AUTO-REPLY (SECRETARY)
+      // 1D. INCOMING MESSAGE SMART MARKET TOOL: CURRENCY/GOLD/CRYPTO PRICE & PROFIT/LOSS CHART
+      if (account.features.tools?.market_active && incomingText) {
+        const lower = incomingText.toLowerCase().trim();
+        const isTriggerCommand =
+          lower.startsWith(".price") || lower.startsWith("/price") ||
+          lower.startsWith(".quote") || lower.startsWith("/quote") ||
+          lower.startsWith(".قیمت") || lower.startsWith("قیمت") ||
+          lower.startsWith("نرخ") || lower.startsWith(".ارز") || lower.startsWith("ارز") ||
+          lower.endsWith("چنده") || lower.endsWith("چنده؟") || lower.endsWith("چنده!");
+
+        const assetMatch = isTriggerCommand
+          ? lower.replace(/^(\.price|\/price|\.quote|\/quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").replace(/(چنده\??|چنده!)/, "").trim()
+          : lower.match(
+              /(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
+            )?.[1];
+
+        if (assetMatch || (isTriggerCommand && (lower.includes("دلار") || lower.includes("تتر") || lower.includes("طلا") || lower.includes("سکه") || lower.includes("ارز")))) {
+          const rawAsset = (typeof assetMatch === "string" && assetMatch.length > 0)
+            ? assetMatch
+            : lower.includes("تتر") ? "usdt" : lower.includes("طلا") ? "gold18" : lower.includes("سکه") ? "emami" : "usd";
+
+          const amountMatch = lower.match(/(?<![a-z])\d+(?:\.\d+)?/);
+          const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
+
+          // Check if buy price was included
+          const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
+          const buyPrice = buyMatch ? parseFloat(buyMatch[1]) : undefined;
+
+          try {
+            const quote = await getMarketQuote(rawAsset, amount, buyPrice);
+            const quoteCaption = formatTelegramMarketCaption(quote);
+
+            // Fetch chart image buffer and send photo with caption
+            if (quote.chart_url) {
+              try {
+                const chartBuf = await fetchChartImageBuffer(quote.chart_url);
+                await client.sendMessage(message.chatId!, {
+                  message: quoteCaption,
+                  file: chartBuf || quote.chart_url,
+                  replyTo: message.id,
+                  parseMode: "html",
+                });
+                this.addLog(
+                  "info",
+                  "tools",
+                  `استعلام زنده قیمت و تصویر نمودار سود/زیان [${quote.asset}] برای کاربر ${message.chatId} ارسال شد 📊`,
+                  phone
+                );
+                return;
+              } catch (photoErr: any) {
+                // If photo sending failed, fallback to text message
+              }
+            }
+
+            await client.sendMessage(message.chatId!, {
+              message: quoteCaption,
+              replyTo: message.id,
+              parseMode: "html",
+            });
+            this.addLog(
+              "info",
+              "tools",
+              `استعلام زنده بازار [${quote.asset}] برای کاربر ${message.chatId} ارسال شد.`,
+              phone
+            );
+            return;
+          } catch (_) {}
+        }
+      }
+
+      // 1E. SMART FILTERS (REGEX-BASED AUTO REPLIES WITH DELAY & IGNORE LIST)
+      let smartFilterHandled = false;
+      if (account.features.smart_filters?.active && incomingText) {
+        const sf = account.features.smart_filters;
+        const senderStr = String(senderId || "");
+        const globalIgnored = (sf.global_ignore_list || []).some((item: string) => {
+          const cl = item.trim().toLowerCase().replace(/^@/, "");
+          return cl && (senderStr.toLowerCase().includes(cl) || cl === senderStr.toLowerCase());
+        });
+
+        if (!globalIgnored && Array.isArray(sf.rules)) {
+          for (const rule of sf.rules) {
+            if (!rule.is_active || !rule.pattern) continue;
+
+            // Check rule-specific ignore list
+            const ruleIgnored = (rule.ignore_list || []).some((item: string) => {
+              const cl = item.trim().toLowerCase().replace(/^@/, "");
+              return cl && (senderStr.toLowerCase().includes(cl) || cl === senderStr.toLowerCase());
+            });
+            if (ruleIgnored) continue;
+
+            try {
+              const flags = rule.flags || (sf.case_insensitive !== false ? "i" : "");
+              const regex = new RegExp(rule.pattern, flags);
+              const match = regex.exec(incomingText);
+              if (match) {
+                smartFilterHandled = true;
+                rule.match_count = (rule.match_count || 0) + 1;
+                rule.last_matched_at = new Date().toISOString();
+
+                let replyMsg = rule.reply_text || "";
+                replyMsg = replyMsg
+                  .replace(/\{match\}/g, match[0] || "")
+                  .replace(/\{name\}/g, account.firstName || "کاربر")
+                  .replace(/\{time\}/g, formatTehranTime("HH:mm"));
+
+                if (
+                  account.features.font?.active &&
+                  account.features.font.scopes?.auto_reply
+                ) {
+                  replyMsg = transformFont(replyMsg, account.features.font.style);
+                }
+
+                const delay = (rule.delay_seconds !== undefined ? rule.delay_seconds : (sf.global_delay_seconds || 1)) * 1000;
+                setTimeout(async () => {
+                  try {
+                    await client.sendMessage(message.chatId!, {
+                      message: replyMsg,
+                      replyTo: message.id,
+                    });
+                    this.saveState();
+                    if (sf.log_matches !== false) {
+                      this.addLog(
+                        "info",
+                        "smart_filters",
+                        `⚡ فیلتر هوشمند [${rule.name}] برای پیام کاربر ${message.chatId} ارسال شد (تاخیر: ${delay / 1000} ثانیه).`,
+                        phone
+                      );
+                    }
+                  } catch (err: any) {
+                    this.addLog("warn", "smart_filters", `خطا در ارسال پاسخ فیلتر هوشمند: ${err?.message}`, phone);
+                  }
+                }, delay);
+
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (smartFilterHandled) {
+        return;
+      }
+
+      // 1E. AUTO-REPLY (SECRETARY)
       if (account.features.auto_reply?.active) {
         const aiEnabled = Boolean(account.features.auto_reply.ai_enabled);
         const apiKeyToUse = (account.features.auto_reply.ai_api_key || process.env.GEMINI_API_KEY || "").trim();
@@ -1834,6 +1999,47 @@ export class TelegramManager {
       account.phone
     );
     return account.features.auto_reply;
+  }
+
+  // -------------------------------------------------------------
+  // SMART FILTERS (REGEX-BASED RULES WITH DELAYS & IGNORE LISTS)
+  // -------------------------------------------------------------
+
+  public updateSmartFiltersConfig(phone: string, config: any) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("Account not found");
+
+    if (!account.features.smart_filters) {
+      account.features.smart_filters = {
+        active: false,
+        global_ignore_list: [],
+        global_delay_seconds: 1,
+        case_insensitive: true,
+        log_matches: true,
+        rules: [],
+      };
+    }
+
+    account.features.smart_filters = {
+      ...account.features.smart_filters,
+      ...config,
+      rules: Array.isArray(config.rules) ? config.rules : (account.features.smart_filters.rules || []),
+      global_ignore_list: Array.isArray(config.global_ignore_list)
+        ? config.global_ignore_list.map((s: any) => String(s).trim()).filter(Boolean)
+        : (account.features.smart_filters.global_ignore_list || []),
+    };
+
+    const sf = account.features.smart_filters;
+    this.saveState();
+
+    this.addLog(
+      "info",
+      "smart_filters",
+      `تنظیمات فیلترهای هوشمند رِجکس (${sf?.rules?.length || 0} قانون) ذخیره شد. وضعیت: ${sf?.active ? "روشن ✅" : "خاموش ⛔"}`,
+      account.phone
+    );
+
+    return sf;
   }
 
   // -------------------------------------------------------------

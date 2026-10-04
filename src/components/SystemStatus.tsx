@@ -32,6 +32,7 @@ import { Volume2, VolumeX, BellRing } from "lucide-react";
 import { SystemHealth } from "../types";
 import { UpdateManager } from "./UpdateManager";
 import { SslBackgroundServiceManager } from "./SslBackgroundServiceManager";
+import { AutoBackupManager } from "./AutoBackupManager";
 
 interface SystemStatusProps {
   health: SystemHealth | null;
@@ -934,6 +935,9 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
           </span>
         </div>
       </div>
+
+      {/* DEDICATED AUTO-BACKUP & ENCRYPTED VAULT MANAGER */}
+      <AutoBackupManager lang={lang} />
 
       {/* DEDICATED REPOSITORY UPDATE MANAGER & CHANGELOG */}
       <UpdateManager lang={lang} />

@@ -37,6 +37,10 @@ import {
   Eye,
   EyeOff,
   Lightbulb,
+  Lock,
+  Key,
+  KeyRound,
+  Shield,
 } from "lucide-react";
 import {
   StoreData,
@@ -138,6 +142,21 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   const [simSelectedPlan, setSimSelectedPlan] = useState<StorePlan | null>(null);
   const [simCategory, setSimCategory] = useState<"self" | "tabchi" | "combo">("self");
 
+  // Store Admin Credentials & Web Panel Security Gate
+  const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
+  const [adminUsername, setAdminUsername] = useState("store_admin");
+  const [adminPassword, setAdminPassword] = useState("admin_store_2026");
+  const [newAdminUsername, setNewAdminUsername] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [savingAdminCreds, setSavingAdminCreds] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [isStorePanelLocked, setIsStorePanelLocked] = useState(false);
+  const [storeLoginUser, setStoreLoginUser] = useState("");
+  const [storeLoginPass, setStoreLoginPass] = useState("");
+  const [storeLoginError, setStoreLoginError] = useState<string | null>(null);
+  const [storeLoginLoading, setStoreLoginLoading] = useState(false);
+  const [copiedCreds, setCopiedCreds] = useState(false);
+
   const showToast = (type: "success" | "error", text: string) => {
     setToastMessage({ type, text });
     setTimeout(() => setToastMessage(null), 4000);
@@ -238,10 +257,10 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
           ordersIcon: "🟢", // success
           accountIcon: "🔵", // primary
           supportIcon: "🔴", // danger
-          selfColor: "text-emerald-400 border-emerald-500/50 bg-emerald-950/60 hover:bg-emerald-900/70 shadow-sm shadow-emerald-500/10",
-          tabchiColor: "text-blue-400 border-blue-500/50 bg-blue-950/60 hover:bg-blue-900/70 shadow-sm shadow-blue-500/10",
-          comboColor: "text-rose-400 border-rose-500/50 bg-rose-950/60 hover:bg-rose-900/70 shadow-sm shadow-rose-500/10",
-          catalogColor: "text-indigo-400 border-indigo-500/50 bg-indigo-950/60 hover:bg-indigo-900/70 shadow-sm shadow-indigo-500/10",
+          selfColor: "text-emerald-200 border-emerald-400/60 bg-emerald-500/20 hover:bg-emerald-500/30 font-bold shadow-[0_0_12px_rgba(16,185,129,0.3)] active:scale-95",
+          tabchiColor: "text-blue-200 border-blue-400/60 bg-blue-500/20 hover:bg-blue-500/30 font-bold shadow-[0_0_12px_rgba(59,130,246,0.3)] active:scale-95",
+          comboColor: "text-rose-200 border-rose-400/60 bg-rose-500/20 hover:bg-rose-500/30 font-bold shadow-[0_0_12px_rgba(244,63,94,0.3)] active:scale-95",
+          catalogColor: "text-indigo-200 border-indigo-400/60 bg-indigo-500/20 hover:bg-indigo-500/30 font-bold shadow-[0_0_12px_rgba(99,102,241,0.3)] active:scale-95",
         };
       case "cyber_neon":
       default:
@@ -307,6 +326,83 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
     const interval = setInterval(fetchStoreData, 7000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchAdminCredentials = async () => {
+    try {
+      const res = await fetch("/api/store-bot/admin-credentials");
+      const json = await res.json();
+      if (json.success && json.credentials) {
+        setAdminUsername(json.credentials.username || "store_admin");
+        if (json.credentials.password) setAdminPassword(json.credentials.password);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    fetchAdminCredentials();
+  }, []);
+
+  const handleSaveAdminCredentials = async () => {
+    if (!newAdminUsername.trim() || !newAdminPassword.trim()) {
+      showToast("error", "نام کاربری و کلمه عبور جدید را کامل وارد نمایید.");
+      return;
+    }
+    setSavingAdminCreds(true);
+    try {
+      const res = await fetch("/api/store-bot/admin-credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newUsername: newAdminUsername.trim(),
+          newPassword: newAdminPassword.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast("success", "مشخصات ورود وب پنل مدیریت ربات با موفقیت ذخیره شد ✅");
+        setAdminUsername(newAdminUsername.trim());
+        setAdminPassword(newAdminPassword.trim());
+        setNewAdminUsername("");
+        setNewAdminPassword("");
+        setIsCredentialsModalOpen(false);
+      } else {
+        showToast("error", json.message || "خطا در تغییر مشخصات");
+      }
+    } catch (err: any) {
+      showToast("error", err.message || "خطا در برقراری ارتباط با سرور");
+    } finally {
+      setSavingAdminCreds(false);
+    }
+  };
+
+  const handleStorePanelLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStoreLoginLoading(true);
+    setStoreLoginError(null);
+    try {
+      const res = await fetch("/api/store-bot/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: storeLoginUser.trim(),
+          password: storeLoginPass.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setIsStorePanelLocked(false);
+        showToast("success", "احراز هویت موفقیت‌آمیز بود. خوش آمدید!");
+        setStoreLoginUser("");
+        setStoreLoginPass("");
+      } else {
+        setStoreLoginError(json.message || "نام کاربری یا کلمه عبور نامعتبر است.");
+      }
+    } catch (_) {
+      setStoreLoginError("خطا در برقراری ارتباط با سرور");
+    } finally {
+      setStoreLoginLoading(false);
+    }
+  };
 
   // Save Bot Configuration
   const handleSaveBotSettings = async () => {
@@ -724,6 +820,38 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Store Web Admin Credentials & Security Button */}
+            <button
+              type="button"
+              onClick={() => setIsCredentialsModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-200 font-bold text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(168,85,247,0.25)] transition-all active:scale-95 cursor-pointer"
+              title="مشاهده و تغییر نام کاربری و کلمه عبور اختصاصی پنل مدیریت ربات"
+            >
+              <Key className="w-3.5 h-3.5 text-purple-400" />
+              <span>مشخصات وب پنل ادمین 🔐</span>
+              <span className="font-mono text-[10px] bg-purple-950 px-1.5 py-0.5 rounded border border-purple-800 text-purple-300">
+                {adminUsername}
+              </span>
+            </button>
+
+            {/* Quick Lock Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isStorePanelLocked;
+                setIsStorePanelLocked(next);
+                showToast("success", next ? "پنل فروشگاه قفل شد 🔒" : "پنل فروشگاه باز شد 🔓");
+              }}
+              className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer ${
+                isStorePanelLocked
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-rose-500/20 shadow-md"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+              }`}
+              title={isStorePanelLocked ? "پنل قفل است (کلیک برای بازگشایی)" : "قفل کردن پنل مدیریت با کلمه عبور"}
+            >
+              <Lock className="w-3.5 h-3.5" />
+            </button>
+
             {onOpenHelp && (
               <button
                 type="button"
