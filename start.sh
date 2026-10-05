@@ -18,10 +18,19 @@ mkdir -p "$PROJECT_DIR/data" "$LOG_DIR"
 # Check if PM2 is available
 if command -v pm2 >/dev/null 2>&1; then
   echo "🚀 Starting Telegram Self & Tabchi with PM2 Process Manager (24/7 Daemon)..."
-  if [ -f "$PROJECT_DIR/ecosystem.config.cjs" ]; then
+  if [ ! -f "dist/server.cjs" ]; then
+    npm run build:server 2>/dev/null || npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs || true
+  fi
+  if [ -f "$PROJECT_DIR/process.json" ]; then
+    pm2 start "$PROJECT_DIR/process.json"
+  elif [ -f "$PROJECT_DIR/ecosystem.config.cjs" ]; then
     pm2 start "$PROJECT_DIR/ecosystem.config.cjs"
+  elif [ -f "$PROJECT_DIR/server.cjs" ]; then
+    pm2 start "$PROJECT_DIR/server.cjs" --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
+  elif [ -f "$PROJECT_DIR/dist/server.cjs" ]; then
+    pm2 start "$PROJECT_DIR/dist/server.cjs" --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
   else
-    pm2 start dist/server.cjs --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
+    pm2 start "npx tsx server.ts" --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
   fi
   pm2 save >/dev/null 2>&1 || true
   echo "✅ Process successfully started in PM2!"

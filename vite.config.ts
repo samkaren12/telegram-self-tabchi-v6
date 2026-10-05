@@ -8,7 +8,30 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
+        'react-is': path.resolve(import.meta.dirname, 'node_modules/react-is'),
+      },
+    },
+    optimizeDeps: {
+      include: ['react-is', 'recharts'],
+    },
+    build: {
+      chunkSizeWarningLimit: 3000,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (
+              id.includes('node_modules/react/') ||
+              id.includes('node_modules/react-dom/') ||
+              id.includes('node_modules/react-is/')
+            ) {
+              return 'vendor-react';
+            }
+            if (id.includes('node_modules/recharts/')) {
+              return 'vendor-charts';
+            }
+          },
+        },
       },
     },
     server: {

@@ -547,10 +547,14 @@ export interface BatchCreatedItem {
 
 export interface BatchCreationTask {
   id: string;
+  sessionId: string;
   phone: string;
   targetType: BatchTargetType;
   count: number;
   completedCount: number;
+  failedCount?: number;
+  progressPercent: number; // 0 to 100
+  currentAction?: string;
   language: BatchNamingLanguage;
   topic: BatchThemeTopic;
   delaySeconds: number;
@@ -559,6 +563,37 @@ export interface BatchCreationTask {
   completedAt?: string;
   lastError?: string;
   items: BatchCreatedItem[];
+  broadcastTask?: BatchBroadcastTask;
+}
+
+export interface BatchBroadcastTask {
+  sessionId: string;
+  phone: string;
+  message: string;
+  targetCount: number;
+  sentCount: number;
+  failedCount: number;
+  progressPercent: number; // 0 to 100
+  delaySeconds: number;
+  status: "idle" | "running" | "completed" | "stopped" | "error";
+  startedAt?: string;
+  completedAt?: string;
+  currentChatTitle?: string;
+  lastError?: string;
+  logs?: Array<{
+    chatId: string;
+    title: string;
+    status: "success" | "failed";
+    error?: string;
+    time: string;
+  }>;
+}
+
+export interface BatchBroadcastRequest {
+  message: string;
+  delaySeconds?: number;
+  targetTypes?: ("created" | "dialogs_channels" | "dialogs_groups")[];
+  targetChatIds?: string[];
 }
 
 export interface BatchCreationRequest {
@@ -571,6 +606,8 @@ export interface BatchCreationRequest {
   customSuffix?: string;
   customNamesList?: string[];
   customAbout?: string;
+  autoBroadcastWelcome?: boolean;
+  welcomeMessage?: string;
 }
 
 // ==========================================
@@ -618,5 +655,36 @@ export interface ActivityDashboardData {
     color: string;
   }>;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  tehranTime: string;
+  accountPhone: string;
+  accountName?: string;
+  action: string;
+  actionLabel: string;
+  category: "auth" | "features" | "tabchi" | "subscription" | "batch" | "system" | "bot" | "security";
+  status: "success" | "failed" | "warning";
+  statusCode?: number;
+  durationMs?: number;
+  details?: Record<string, any>;
+  errorMessage?: string;
+  troubleshootingHint?: string;
+  ip?: string;
+  source: string;
+}
+
+export interface AuditLogSummary {
+  totalCount: number;
+  successCount: number;
+  failedCount: number;
+  warningCount: number;
+  successRate: number;
+  last24hCount: number;
+  byCategory: Record<string, number>;
+  byAccount: Record<string, number>;
+}
+
 
 

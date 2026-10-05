@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Users,
   Copy,
@@ -17,6 +17,7 @@ import {
   Bot,
   KeyRound,
   Lightbulb,
+  FilterX,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
@@ -24,6 +25,11 @@ import { ExtendSubscriptionModal } from "./ExtendSubscriptionModal";
 import { AccountBotModal } from "./AccountBotModal";
 import { CustomerCredentialsModal } from "./CustomerCredentialsModal";
 import { AccountStatusBadge } from "./AccountStatusBadge";
+import {
+  AccountsFilterToolbar,
+  AccountFiltersState,
+  defaultAccountFilters,
+} from "./AccountsFilterToolbar";
 
 interface AccountsListProps {
   accounts: TelegramAccount[];
@@ -50,6 +56,85 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [subscriptionTargetAccount, setSubscriptionTargetAccount] = useState<TelegramAccount | null>(null);
   const [botTargetAccount, setBotTargetAccount] = useState<TelegramAccount | null>(null);
   const [credentialsTargetAccount, setCredentialsTargetAccount] = useState<TelegramAccount | null>(null);
+  const [filters, setFilters] = useState<AccountFiltersState>(defaultAccountFilters);
+
+  const filteredAccounts = useMemo(() => {
+    return accounts
+      .filter((acc) => {
+        // 1. Search Query
+        if (filters.searchQuery.trim()) {
+          const q = filters.searchQuery.trim().toLowerCase();
+          const phoneMatch = acc.phone.toLowerCase().includes(q);
+          const nameMatch = `${acc.firstName || ""} ${acc.lastName || ""}`.toLowerCase().includes(q);
+          const userMatch = (acc.username || "").toLowerCase().includes(q);
+          if (!phoneMatch && !nameMatch && !userMatch) return false;
+        }
+
+        // 2. Online Status
+        if (filters.onlineStatus === "online" && !acc.isOnline) return false;
+        if (filters.onlineStatus === "offline" && acc.isOnline) return false;
+
+        // 3. Subscription Status
+        const sub = acc.subscription;
+        const isUnlimited = !sub || sub.is_unlimited;
+        const now = Date.now();
+        const expiresAt = sub?.expires_at ? new Date(sub.expires_at).getTime() : null;
+        const isExpired = !isUnlimited && expiresAt !== null && expiresAt <= now;
+        const isExpiringSoon =
+          !isUnlimited &&
+          !isExpired &&
+          expiresAt !== null &&
+          expiresAt - now <= 3 * 24 * 60 * 60 * 1000;
+        const isValid = isUnlimited || (!isExpired && expiresAt !== null && expiresAt > now);
+
+        if (filters.subscriptionStatus === "unlimited" && !isUnlimited) return false;
+        if (filters.subscriptionStatus === "active" && !isValid) return false;
+        if (filters.subscriptionStatus === "expiring_soon" && !isExpiringSoon) return false;
+        if (filters.subscriptionStatus === "expired" && !isExpired) return false;
+
+        // 4. Broadcast Load
+        const isBroadcasting =
+          acc.features?.tabchi?.status === "broadcasting" ||
+          acc.features?.broadcast?.status === "broadcasting";
+        const totalBroadcastSent =
+          (acc.features?.tabchi?.total_sent || 0) + (acc.features?.broadcast?.total_sent || 0);
+
+        if (filters.broadcastLoad === "broadcasting" && !isBroadcasting) return false;
+        if (filters.broadcastLoad === "high" && totalBroadcastSent < 500) return false;
+        if (
+          filters.broadcastLoad === "medium" &&
+          (totalBroadcastSent < 100 || totalBroadcastSent >= 500)
+        )
+          return false;
+        if (filters.broadcastLoad === "low_idle" && totalBroadcastSent >= 100) return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (filters.sortBy === "broadcast_sent") {
+          const sentA = (a.features?.tabchi?.total_sent || 0) + (a.features?.broadcast?.total_sent || 0);
+          const sentB = (b.features?.tabchi?.total_sent || 0) + (b.features?.broadcast?.total_sent || 0);
+          return sentB - sentA;
+        }
+        if (filters.sortBy === "phone") {
+          return a.phone.localeCompare(b.phone);
+        }
+        if (filters.sortBy === "expiry") {
+          const expA = a.subscription?.is_unlimited
+            ? Infinity
+            : a.subscription?.expires_at
+            ? new Date(a.subscription.expires_at).getTime()
+            : 0;
+          const expB = b.subscription?.is_unlimited
+            ? Infinity
+            : b.subscription?.expires_at
+            ? new Date(b.subscription.expires_at).getTime()
+            : 0;
+          return expA - expB;
+        }
+        return 0;
+      });
+  }, [accounts, filters]);
 
   const handleCopySession = (phone: string, sessionString: string) => {
     navigator.clipboard.writeText(sessionString);
@@ -203,9 +288,43 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         </div>
       </div>
 
+      {/* Advanced Filtering Toolbar */}
+      <AccountsFilterToolbar
+        filters={filters}
+        onChangeFilters={setFilters}
+        onResetFilters={() => setFilters(defaultAccountFilters)}
+        totalAccountsCount={accounts.length}
+        filteredAccountsCount={filteredAccounts.length}
+        lang={lang}
+      />
+
       {/* Accounts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {accounts.map((acc) => {
+      {filteredAccounts.length === 0 ? (
+        <div className="glass-panel rounded-3xl p-10 text-center border border-slate-800 space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 mx-auto">
+            <FilterX className="w-6 h-6 text-slate-500" />
+          </div>
+          <h4 className="text-sm font-bold text-white">
+            {lang === "fa"
+              ? "هیچ اکانتی با فیلترهای انتخابی مطابقت ندارد"
+              : "No accounts match the selected filters"}
+          </h4>
+          <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+            {lang === "fa"
+              ? "می‌توانید فیلترهای وضعیت اشتراک، اتصال آنلاین یا بار ترافیک برودکست را تغییر دهید یا دکمه زیر را برای نمایش همه اکانت‌ها بزنید."
+              : "Try adjusting your subscription, online status, or broadcast load filters, or click below to reset all filters."}
+          </p>
+          <button
+            type="button"
+            onClick={() => setFilters(defaultAccountFilters)}
+            className="px-4 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer active:scale-95"
+          >
+            {lang === "fa" ? "پاکسازی فیلترها و نمایش همه اکانت‌ها" : "Reset Filters and Show All"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredAccounts.map((acc) => {
           const isSelected = acc.phone === selectedPhone;
           const isExpired =
             acc.subscription &&
@@ -398,6 +517,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           );
         })}
       </div>
+    )}
 
       {/* Extend Subscription Modal */}
       <ExtendSubscriptionModal

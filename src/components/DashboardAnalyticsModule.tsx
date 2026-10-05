@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { ActivityDashboardData } from "../types";
+import { CryptoTechnicalAnalysisCard } from "./CryptoTechnicalAnalysisCard";
 
 interface DashboardAnalyticsModuleProps {
   lang: Language;
@@ -358,6 +359,9 @@ export const DashboardAnalyticsModule: React.FC<DashboardAnalyticsModuleProps> =
           </div>
         </div>
       </div>
+
+      {/* Cryptocurrency Technical Analysis & Telegram Bot Share Engine */}
+      <CryptoTechnicalAnalysisCard lang={lang} />
 
       {/* Account Activity Table with Interaction Rates */}
       <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">

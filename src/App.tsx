@@ -33,6 +33,7 @@ import { StoreBotModule } from "./components/StoreBotModule";
 import { SupportBotManager } from "./components/SupportBotManager";
 import { BatchCreatorModule } from "./components/BatchCreatorModule";
 import { DashboardAnalyticsModule } from "./components/DashboardAnalyticsModule";
+import { AuditLogDashboard } from "./components/AuditLogDashboard";
 import { ConnectAccountModal } from "./components/ConnectAccountModal";
 import { StartupLockModal } from "./components/StartupLockModal";
 import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
@@ -58,7 +59,7 @@ export default function App() {
   const [lang, setLang] = useState<Language>("fa");
   const [portalMode, setPortalMode] = useState<"admin" | "client">(getInitialPortal);
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "accounts" | "store" | "support" | "batchCreator" | "self" | "tabchi" | "logs" | "system"
+    "dashboard" | "accounts" | "store" | "support" | "batchCreator" | "self" | "tabchi" | "audit" | "logs" | "system"
   >(() => (getInitialPortal() === "client" ? "self" : "dashboard"));
 
   const [storePendingCount, setStorePendingCount] = useState<number>(0);
@@ -251,6 +252,11 @@ export default function App() {
     ? [
         { id: "self", label: t.tabs.self, icon: Clock },
         { id: "tabchi", label: t.tabs.tabchi, icon: Radio },
+        {
+          id: "batchCreator",
+          label: lang === "fa" ? "گروه‌ساز و کانال‌ساز انبوه" : "Batch Creator",
+          icon: FolderPlus,
+        },
         { id: "logs", label: t.tabs.logs, icon: Terminal },
       ]
     : [
@@ -278,13 +284,18 @@ export default function App() {
         },
         { id: "self", label: t.tabs.self, icon: Clock },
         { id: "tabchi", label: t.tabs.tabchi, icon: Radio },
+        {
+          id: "audit",
+          label: lang === "fa" ? "بازرسی وقایع (Audit Log) 🛡️" : "Audit Log",
+          icon: ShieldCheck,
+        },
         { id: "logs", label: t.tabs.logs, icon: Terminal },
         { id: "system", label: t.tabs.system, icon: Server },
       ];
 
   // Auto-switch away from owner-only tabs if customer
   useEffect(() => {
-    if (isCustomer && (activeTab === "dashboard" || activeTab === "accounts" || activeTab === "store" || activeTab === "support" || activeTab === "batchCreator" || activeTab === "system")) {
+    if (isCustomer && (activeTab === "dashboard" || activeTab === "accounts" || activeTab === "store" || activeTab === "support" || activeTab === "audit" || activeTab === "system")) {
       setActiveTab("self");
     }
   }, [isCustomer, activeTab]);
@@ -556,7 +567,7 @@ export default function App() {
             <SupportBotManager lang={lang} />
           )}
 
-          {activeTab === "batchCreator" && !isCustomer && (
+          {activeTab === "batchCreator" && (
             <BatchCreatorModule
               account={selectedAccount}
               lang={lang}
@@ -578,6 +589,14 @@ export default function App() {
               lang={lang}
               onUpdateAccount={handleUpdateAccount}
               onOpenHelp={(sec) => handleOpenHelp(sec || "tabchi")}
+            />
+          )}
+
+          {activeTab === "audit" && !isCustomer && (
+            <AuditLogDashboard
+              lang={lang}
+              accounts={visibleAccounts}
+              onOpenHelp={() => handleOpenHelp("system")}
             />
           )}
 

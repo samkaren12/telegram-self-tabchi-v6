@@ -26,6 +26,7 @@ import {
   getPublicServerIp,
 } from "./server/sslManager.js";
 import { backupService } from "./server/backupService.js";
+import { auditLogger } from "./server/auditLogger.js";
 import { exec } from "child_process";
 
 const startTime = Date.now();
@@ -46,6 +47,143 @@ async function startServer() {
       }
       req.params.phone = cleaned;
     }
+    next();
+  });
+
+  // Audit Logger Middleware: Intercepts all web commands triggered across accounts for auditing & troubleshooting
+  app.use((req, res, next) => {
+    if (req.method === "GET" || req.method === "OPTIONS" || req.method === "HEAD") {
+      return next();
+    }
+    if (!req.path.startsWith("/api/")) {
+      return next();
+    }
+    if (req.path.includes("/audit-logs") || req.path.includes("/status")) {
+      return next();
+    }
+
+    const start = Date.now();
+    const originalJson = res.json;
+    let responseBody: any = null;
+
+    res.json = function (body: any) {
+      responseBody = body;
+      return originalJson.call(this, body);
+    };
+
+    res.on("finish", () => {
+      try {
+        const durationMs = Date.now() - start;
+        const statusCode = res.statusCode;
+        const isSuccess = statusCode >= 200 && statusCode < 400 && responseBody?.success !== false;
+        const status = isSuccess ? "success" : "failed";
+
+        // Extract Account Phone
+        const phone =
+          req.params?.phone ||
+          req.body?.phone ||
+          (req.path.match(/\/api\/accounts\/([^\/]+)/)?.[1]
+            ? decodeURIComponent(req.path.match(/\/api\/accounts\/([^\/]+)/)![1])
+            : undefined) ||
+          "SYSTEM";
+
+        const account = phone && phone !== "SYSTEM" ? telegramManager.getAccount(phone) : null;
+        const accountName = account ? `${account.firstName || ""} ${account.lastName || ""}`.trim() : undefined;
+
+        // Classify Action & Category
+        let category: any = "system";
+        let action = "COMMAND_TRIGGERED";
+        let actionLabel = `اجرای دستور در مسیر ${req.path}`;
+
+        if (req.path.includes("/features")) {
+          category = "features";
+          action = "UPDATE_ACCOUNT_FEATURES";
+          actionLabel = "ویرایش تنظیمات و قابلیت‌های اکانت (Features)";
+        } else if (req.path.includes("/disconnect")) {
+          category = "auth";
+          action = "DISCONNECT_ACCOUNT";
+          actionLabel = "قطع اتصال حساب کاربری (Disconnect)";
+        } else if (req.path.includes("/reconnect")) {
+          category = "auth";
+          action = "RECONNECT_ACCOUNT";
+          actionLabel = "اتصال مجدد حساب کاربری (Reconnect)";
+        } else if (req.path.includes("/subscription")) {
+          category = "subscription";
+          action = "UPDATE_SUBSCRIPTION";
+          actionLabel = "تغییر و تمدید دوره اشتراک اکانت";
+        } else if (req.path.includes("/tabchi/start")) {
+          category = "tabchi";
+          action = "START_TABCHI";
+          actionLabel = "راه‌اندازی فرآیند ارسال خودکار تبچی";
+        } else if (req.path.includes("/tabchi/stop")) {
+          category = "tabchi";
+          action = "STOP_TABCHI";
+          actionLabel = "توقف فرآیند ارسال تبچی";
+        } else if (req.path.includes("/batch-create/stop")) {
+          category = "batch";
+          action = "STOP_BATCH_CREATE";
+          actionLabel = "توقف ساخت گروه و کانال انبوه";
+        } else if (req.path.includes("/batch-create")) {
+          category = "batch";
+          action = "START_BATCH_CREATE";
+          actionLabel = "آغاز ساخت خودکار گروه و کانال انبوه";
+        } else if (req.path.includes("/batch-broadcast")) {
+          category = "batch";
+          action = "BATCH_BROADCAST";
+          actionLabel = "ارسال همگانی به کانال‌ها و گروه‌ها (Broadcast)";
+        } else if (req.path.includes("/send-message")) {
+          category = "features";
+          action = "SEND_DIRECT_MESSAGE";
+          actionLabel = "ارسال پیام تلگرامی مستقیم";
+        } else if (req.path.includes("/pm-broadcast")) {
+          category = "features";
+          action = "PM_BROADCAST";
+          actionLabel = "ارسال پیام همگانی به چت‌های خصوصی (PV)";
+        } else if (req.path.includes("/clock/sync")) {
+          category = "features";
+          action = "SYNC_PROFILE_CLOCK";
+          actionLabel = "همگام‌سازی ساعت زنده پروفایل";
+        } else if (req.path.includes("/auth/send-code")) {
+          category = "auth";
+          action = "AUTH_SEND_CODE";
+          actionLabel = "درخواست کد تایید تلگرام برای شماره جدید";
+        } else if (req.path.includes("/auth/sign-in")) {
+          category = "auth";
+          action = "AUTH_SIGN_IN";
+          actionLabel = "تایید کد ورود و ثبت‌نام اکانت";
+        } else if (req.path.includes("/bot/")) {
+          category = "bot";
+          action = "BOT_SETTINGS_UPDATE";
+          actionLabel = "به‌روزرسانی تنظیمات ربات اختصاصی";
+        } else if (req.path.includes("/credentials")) {
+          category = "security";
+          action = "UPDATE_CREDENTIALS";
+          actionLabel = "ویرایش مشخصات ورود به پنل کاربری";
+        }
+
+        const errorMessage = !isSuccess ? responseBody?.message || `خطای سرور با کد ${statusCode}` : undefined;
+
+        auditLogger.logAudit({
+          accountPhone: phone,
+          accountName,
+          action,
+          actionLabel,
+          category,
+          status,
+          statusCode,
+          durationMs,
+          details: {
+            method: req.method,
+            path: req.path,
+            bodySummary: typeof req.body === "object" ? Object.keys(req.body).slice(0, 6) : undefined,
+          },
+          errorMessage,
+          ip: (req.headers["x-forwarded-for"] as string) || req.socket?.remoteAddress || "127.0.0.1",
+          source: "web_interface",
+        });
+      } catch (_) {}
+    });
+
     next();
   });
 
@@ -748,7 +886,7 @@ async function startServer() {
   app.post("/api/accounts/:phone/batch-create", async (req, res) => {
     try {
       const task = await telegramManager.startBatchCreation(req.params.phone, req.body);
-      return res.json({ success: true, task, message: "فرآیند ساخت خودکار آغاز شد." });
+      return res.json({ success: true, task, sessionId: task.sessionId, message: "فرآیند ساخت خودکار آغاز شد." });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }
@@ -768,6 +906,74 @@ async function startServer() {
   app.get("/api/accounts/:phone/batch-create", (req, res) => {
     try {
       const task = telegramManager.getBatchCreationTask(req.params.phone);
+      return res.json({ success: true, task });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Track task by Session ID (Live progress & status tracking)
+  app.get("/api/batch-tasks/sessions/:sessionId", (req, res) => {
+    try {
+      const sessionId = req.params.sessionId;
+      const result = telegramManager.getBatchTaskBySession(sessionId);
+      if (!result) {
+        return res.status(404).json({ success: false, message: "نشستی با این شناسه یافت نشد." });
+      }
+      return res.json({
+        success: true,
+        sessionId: result.sessionId,
+        type: result.type,
+        progressPercent: result.progressPercent,
+        status: result.status,
+        task: result.task,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // List all recent batch sessions (for session history & switching)
+  app.get("/api/batch-tasks/sessions", (req, res) => {
+    try {
+      const phone = typeof req.query.phone === "string" ? req.query.phone : undefined;
+      const sessions = telegramManager.getAllBatchSessions(phone);
+      return res.json({ success: true, sessions });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Start Batch Group/Channel Broadcast
+  app.post("/api/accounts/:phone/batch-broadcast", async (req, res) => {
+    try {
+      const task = await telegramManager.startBatchBroadcast(req.params.phone, req.body);
+      return res.json({
+        success: true,
+        task,
+        sessionId: task.sessionId,
+        message: "فرآیند برودکست به گروه‌ها و کانال‌ها آغاز شد.",
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Stop Batch Group/Channel Broadcast
+  app.post("/api/accounts/:phone/batch-broadcast/stop", (req, res) => {
+    try {
+      const sessionId = typeof req.body.sessionId === "string" ? req.body.sessionId : undefined;
+      const task = telegramManager.stopBatchBroadcast(req.params.phone, sessionId);
+      return res.json({ success: true, task, message: "فرآیند برودکست متوقف شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Get current batch broadcast status for account
+  app.get("/api/accounts/:phone/batch-broadcast", (req, res) => {
+    try {
+      const task = telegramManager.getBatchBroadcastTask(req.params.phone);
       return res.json({ success: true, task });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
@@ -1234,6 +1440,96 @@ async function startServer() {
       return res.send(quote.chart_svg);
     } catch (err: any) {
       return res.status(400).send(`<svg><text>Error generating chart</text></svg>`);
+    }
+  });
+
+  // Share crypto technical analysis snippet / image via Telegram Bot
+  app.post("/api/analytics/crypto/share", async (req, res) => {
+    try {
+      const { symbol, textSnippet, photoDataUrl, chatId } = req.body;
+      if (!symbol || !textSnippet) {
+        return res.status(400).json({ success: false, message: "نماد ارز و متن تحلیل الزامی است." });
+      }
+      const result = await telegramManager.shareCryptoAnalysisViaBot({
+        symbol,
+        textSnippet,
+        photoDataUrl,
+        chatId,
+      });
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // AUDIT LOG DASHBOARD API ENDPOINTS
+  // ==========================================
+
+  // Get filtered Audit Logs with summary metrics & pagination
+  app.get("/api/audit-logs", (req, res) => {
+    try {
+      const phone = typeof req.query.phone === "string" ? req.query.phone : undefined;
+      const category = typeof req.query.category === "string" ? req.query.category : undefined;
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      const limit = Number(req.query.limit) || 50;
+      const page = Number(req.query.page) || 1;
+
+      const result = auditLogger.getLogs({ phone, category, status, search, limit, page });
+      return res.json({ success: true, ...result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Clear Audit Logs
+  app.post("/api/audit-logs/clear", (req, res) => {
+    try {
+      auditLogger.clearLogs();
+      return res.json({ success: true, message: "تمامی لاگ‌های بازرسی با موفقیت پاکسازی شدند." });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Trigger a diagnostic / simulated audit event for testing
+  app.post("/api/audit-logs/simulate", (req, res) => {
+    try {
+      const { type, phone } = req.body;
+      const targetPhone = phone || "+989123456789";
+      let entry;
+
+      if (type === "error") {
+        entry = auditLogger.logAudit({
+          accountPhone: targetPhone,
+          accountName: "اکانت آزمایشی",
+          action: "DIAGNOSTIC_SIMULATED_ERROR",
+          actionLabel: "شبیه‌سازی خطای اتصال به تلگرام (FLOOD_WAIT Diagnostic)",
+          category: "tabchi",
+          status: "failed",
+          statusCode: 429,
+          durationMs: 820,
+          errorMessage: "FLOOD_WAIT_30: Too Many Requests from Telegram Server",
+          details: { simulated: true, trigger: "admin_diagnostic" },
+        });
+      } else {
+        entry = auditLogger.logAudit({
+          accountPhone: targetPhone,
+          accountName: "اکانت آزمایشی",
+          action: "DIAGNOSTIC_VERIFICATION",
+          actionLabel: "تست سلامت و اعتبارسنجی سرور بازرسی (Audit Health Check)",
+          category: "system",
+          status: "success",
+          statusCode: 200,
+          durationMs: 45,
+          details: { simulated: true, trigger: "admin_diagnostic" },
+        });
+      }
+
+      return res.json({ success: true, message: "رویداد تستی با موفقیت در سیستم ثبت گردید.", entry });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   });
 

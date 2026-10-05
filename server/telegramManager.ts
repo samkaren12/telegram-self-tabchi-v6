@@ -20,6 +20,8 @@ import {
   BatchCreationTask,
   BatchCreationRequest,
   BatchCreatedItem,
+  BatchBroadcastTask,
+  BatchBroadcastRequest,
   ActivityDashboardData,
   AccountActivityStat,
 } from "../src/types.js";
@@ -156,9 +158,11 @@ interface AccountWorker {
   tabchiAbortController?: AbortController;
   pmBroadcastAbortController?: AbortController;
   batchCreationAbortController?: AbortController;
+  batchBroadcastAbortController?: AbortController;
   isBroadcasting?: boolean;
   isPmBroadcasting?: boolean;
   isCreatingBatch?: boolean;
+  isBatchBroadcasting?: boolean;
   meId?: string;
   scriptMessageIds?: Set<string>;
 }
@@ -281,6 +285,8 @@ export class TelegramManager {
   private accountBots: Map<string, { polling: boolean; lastUpdateId: number }> = new Map();
   private detectedAppUrl: string = "";
   private batchCreationTasks: Map<string, BatchCreationTask> = new Map();
+  private batchTasksBySession: Map<string, BatchCreationTask> = new Map();
+  private batchBroadcastTasksBySession: Map<string, BatchBroadcastTask> = new Map();
   private ownerCredentials: { username: string; passwordHash: string; updatedAt: string } = {
     username: "samkaren12",
     passwordHash: "samkaren12", // supports both plaintext match & updated values
@@ -2620,10 +2626,101 @@ export class TelegramManager {
   // BATCH GROUP & CHANNEL CREATOR ENGINE (گروه‌ساز و کانال‌ساز انبوه)
   // =============================================================
 
+  // =============================================================
+  // BATCH GROUP & CHANNEL CREATOR & BROADCAST ENGINE (گروه‌ساز، کانال‌ساز و برودکست انبوه)
+  // =============================================================
+
   public getBatchCreationTask(phone: string): BatchCreationTask | null {
     const account = this.getAccount(phone);
     const key = account ? account.phone : phone;
     return this.batchCreationTasks.get(key) || null;
+  }
+
+  public getBatchTaskBySession(sessionId: string): {
+    found: boolean;
+    sessionId: string;
+    type: "creation" | "broadcast";
+    task: BatchCreationTask | BatchBroadcastTask | null;
+    progressPercent: number;
+    status: string;
+  } | null {
+    if (this.batchTasksBySession.has(sessionId)) {
+      const task = this.batchTasksBySession.get(sessionId)!;
+      return {
+        found: true,
+        sessionId,
+        type: "creation",
+        task,
+        progressPercent: task.progressPercent ?? 0,
+        status: task.status,
+      };
+    }
+
+    if (this.batchBroadcastTasksBySession.has(sessionId)) {
+      const broadcastTask = this.batchBroadcastTasksBySession.get(sessionId)!;
+      return {
+        found: true,
+        sessionId,
+        type: "broadcast",
+        task: broadcastTask,
+        progressPercent: broadcastTask.progressPercent ?? 0,
+        status: broadcastTask.status,
+      };
+    }
+
+    return null;
+  }
+
+  public getAllBatchSessions(phone?: string) {
+    const list: Array<{
+      sessionId: string;
+      type: "creation" | "broadcast";
+      phone: string;
+      status: string;
+      progressPercent: number;
+      totalCount: number;
+      completedCount: number;
+      startedAt?: string;
+      completedAt?: string;
+      title?: string;
+      currentAction?: string;
+    }> = [];
+
+    for (const [sId, task] of this.batchTasksBySession.entries()) {
+      if (phone && task.phone !== phone) continue;
+      list.push({
+        sessionId: sId,
+        type: "creation",
+        phone: task.phone,
+        status: task.status,
+        progressPercent: task.progressPercent ?? 0,
+        totalCount: task.count,
+        completedCount: task.completedCount,
+        startedAt: task.startedAt,
+        completedAt: task.completedAt,
+        title: `ساخت ${task.count} ${task.targetType === "channel" ? "کانال" : "گروه"} (${task.topic})`,
+        currentAction: task.currentAction,
+      });
+    }
+
+    for (const [sId, bTask] of this.batchBroadcastTasksBySession.entries()) {
+      if (phone && bTask.phone !== phone) continue;
+      list.push({
+        sessionId: sId,
+        type: "broadcast",
+        phone: bTask.phone,
+        status: bTask.status,
+        progressPercent: bTask.progressPercent ?? 0,
+        totalCount: bTask.targetCount,
+        completedCount: bTask.sentCount,
+        startedAt: bTask.startedAt,
+        completedAt: bTask.completedAt,
+        title: `برودکست همگانی به ${bTask.targetCount} چت/کانال`,
+        currentAction: bTask.currentChatTitle ? `ارسال به ${bTask.currentChatTitle}` : undefined,
+      });
+    }
+
+    return list.sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""));
   }
 
   public stopBatchCreation(phone: string): BatchCreationTask | null {
@@ -2640,6 +2737,7 @@ export class TelegramManager {
     if (task) {
       task.status = "stopped";
       task.completedAt = new Date().toISOString();
+      task.currentAction = "فرآیند توسط کاربر متوقف شد.";
       this.addLog("warn", "system", "فرآیند ساخت انبوه توسط کاربر متوقف شد.", key);
     }
     return task || null;
@@ -2679,12 +2777,18 @@ export class TelegramManager {
     worker.batchCreationAbortController = abortController;
     worker.isCreatingBatch = true;
 
+    const sessionId = `batch_sess_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
     const task: BatchCreationTask = {
       id: `task-batch-${Date.now()}`,
+      sessionId,
       phone: key,
       targetType,
       count,
       completedCount: 0,
+      failedCount: 0,
+      progressPercent: 0,
+      currentAction: `آماده‌سازی برای ساخت ${count} مورد...`,
       language,
       topic,
       delaySeconds,
@@ -2694,11 +2798,14 @@ export class TelegramManager {
     };
 
     this.batchCreationTasks.set(key, task);
+    this.batchTasksBySession.set(sessionId, task);
+
     this.addLog(
       "info",
       "system",
-      `آغاز عملیات ساخت خودکار ${count} عدد ${targetType === "channel" ? "کانال" : "گروه"} با زبان ${language.toUpperCase()}`,
-      key
+      `آغاز عملیات ساخت خودکار ${count} عدد ${targetType === "channel" ? "کانال" : "گروه"} (شناسه نشست: ${sessionId})`,
+      key,
+      { sessionId, targetType, count }
     );
 
     // Asynchronous background creation loop
@@ -2708,11 +2815,13 @@ export class TelegramManager {
           if (abortController.signal.aborted) {
             task.status = "stopped";
             task.completedAt = new Date().toISOString();
+            task.currentAction = "فرآیند متوقف شد.";
             break;
           }
 
           const itemData = generatedList[i];
           const aboutText = request.customAbout?.trim() || itemData.about;
+          task.currentAction = `در حال ساخت ${targetType === "channel" ? "کانال" : "گروه"} (${i + 1}/${count}): ${itemData.title}`;
 
           try {
             let createdChat: any = null;
@@ -2770,6 +2879,15 @@ export class TelegramManager {
                   inviteLink = linkRes?.link;
                 }
               } catch (_) {}
+
+              // Auto-broadcast welcome message if requested
+              if (request.autoBroadcastWelcome && request.welcomeMessage && request.welcomeMessage.trim()) {
+                try {
+                  await worker.client.sendMessage(createdChat, {
+                    message: request.welcomeMessage.trim(),
+                  });
+                } catch (_) {}
+              }
             }
 
             const createdItem: BatchCreatedItem = {
@@ -2786,13 +2904,14 @@ export class TelegramManager {
 
             task.items.unshift(createdItem);
             task.completedCount++;
+            task.progressPercent = Math.min(100, Math.round(((i + 1) / count) * 100));
 
             this.addLog(
               "success",
               "system",
               `ساخت موفق (${i + 1}/${count}): ${itemData.title}`,
               key,
-              { id: createdChat?.id, link: inviteLink }
+              { id: createdChat?.id, link: inviteLink, progress: task.progressPercent }
             );
           } catch (createErr: any) {
             const errStr = createErr?.message || createErr?.errorMessage || String(createErr);
@@ -2808,11 +2927,14 @@ export class TelegramManager {
               error: errStr,
             };
             task.items.unshift(failedItem);
+            task.failedCount = (task.failedCount || 0) + 1;
+            task.progressPercent = Math.min(100, Math.round(((i + 1) / count) * 100));
 
             this.addLog("warn", "system", `خطا در ایجاد مورد (${i + 1}/${count}): ${errStr}`, key);
 
             if (isFlood) {
               const waitSec = Number(errStr.match(/\d+/)?.[0] || 60);
+              task.currentAction = `محدودیت FloodWait: توقف به مدت ${waitSec} ثانیه...`;
               this.addLog(
                 "warn",
                 "system",
@@ -2825,12 +2947,15 @@ export class TelegramManager {
 
           // Delay between creations to protect account from rate limits
           if (i < count - 1 && !abortController.signal.aborted) {
+            task.currentAction = `مکث ${delaySeconds} ثانیه‌ای ضد اسپم بین ساخت...`;
             await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
           }
         }
 
         if (task.status === "running") {
           task.status = "completed";
+          task.progressPercent = 100;
+          task.currentAction = `ساخت کامل شد. ${task.completedCount} مورد ایجاد گردید.`;
           task.completedAt = new Date().toISOString();
           this.addLog(
             "success",
@@ -2842,6 +2967,7 @@ export class TelegramManager {
       } catch (err: any) {
         task.status = "error";
         task.lastError = err?.message || String(err);
+        task.currentAction = `خطا در فرآیند: ${task.lastError}`;
         this.addLog("error", "system", `خطای کلی در عملیات ساخت انبوه: ${task.lastError}`, key);
       } finally {
         worker.isCreatingBatch = false;
@@ -2850,6 +2976,236 @@ export class TelegramManager {
     })();
 
     return task;
+  }
+
+  // -------------------------------------------------------------
+  // GROUP / CHANNEL BROADCAST ENGINE (ارسال همگانی به کانال‌ها و گروه‌ها)
+  // -------------------------------------------------------------
+
+  public getBatchBroadcastTask(phone: string): BatchBroadcastTask | null {
+    const account = this.getAccount(phone);
+    const key = account ? account.phone : phone;
+    // Return latest broadcast task for this phone
+    let latest: BatchBroadcastTask | null = null;
+    for (const task of this.batchBroadcastTasksBySession.values()) {
+      if (task.phone === key) {
+        if (!latest || (task.startedAt || "") > (latest.startedAt || "")) {
+          latest = task;
+        }
+      }
+    }
+    return latest;
+  }
+
+  public stopBatchBroadcast(phone: string, sessionId?: string): BatchBroadcastTask | null {
+    const account = this.getAccount(phone);
+    const key = account ? account.phone : phone;
+    const worker = this.workers.get(key);
+
+    if (worker?.batchBroadcastAbortController) {
+      worker.batchBroadcastAbortController.abort();
+      worker.isBatchBroadcasting = false;
+    }
+
+    let targetTask: BatchBroadcastTask | null = null;
+    if (sessionId && this.batchBroadcastTasksBySession.has(sessionId)) {
+      targetTask = this.batchBroadcastTasksBySession.get(sessionId)!;
+    } else {
+      targetTask = this.getBatchBroadcastTask(key);
+    }
+
+    if (targetTask) {
+      targetTask.status = "stopped";
+      targetTask.completedAt = new Date().toISOString();
+      this.addLog("warn", "broadcast", "فرآیند برودکست به کانال‌ها و گروه‌ها متوقف شد.", key);
+    }
+
+    return targetTask;
+  }
+
+  public async startBatchBroadcast(phone: string, request: BatchBroadcastRequest): Promise<BatchBroadcastTask> {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت مورد نظر یافت نشد.");
+
+    const key = account.phone;
+    const worker = this.workers.get(key);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت تلگرام در وضعیت آنلاین نیست.");
+    }
+
+    if (worker.isBatchBroadcasting) {
+      throw new Error("یک فرآیند برودکست به گروه‌ها/کانال‌ها هم‌اکنون برای این اکانت در حال اجرا است.");
+    }
+
+    const message = request.message?.trim();
+    if (!message) {
+      throw new Error("متن پیام برای ارسال همگانی نمی‌تواند خالی باشد.");
+    }
+
+    const delaySeconds = Math.max(1, Number(request.delaySeconds) || 4);
+
+    // Collect destination targets
+    let targetList: Array<{ id: string; title: string; entity: any }> = [];
+
+    // If explicit chat IDs provided
+    if (request.targetChatIds && request.targetChatIds.length > 0) {
+      for (const cId of request.targetChatIds) {
+        targetList.push({ id: cId, title: `Chat ${cId}`, entity: cId });
+      }
+    } else {
+      // 1. Check newly created items from current account's batch task
+      const currentBatchTask = this.batchCreationTasks.get(key);
+      if (currentBatchTask?.items && currentBatchTask.items.length > 0) {
+        for (const it of currentBatchTask.items) {
+          if (it.status === "success" && (it.telegramId || it.username)) {
+            targetList.push({
+              id: String(it.telegramId || it.username),
+              title: it.title,
+              entity: it.telegramId || it.username,
+            });
+          }
+        }
+      }
+
+      // 2. Also query dialogs if needed
+      if (targetList.length === 0) {
+        try {
+          const dialogs = await worker.client.getDialogs({ limit: 50 });
+          for (const d of dialogs) {
+            if (d.isChannel || d.isGroup) {
+              targetList.push({
+                id: String(d.id),
+                title: d.title || `Chat ${d.id}`,
+                entity: d.entity,
+              });
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (targetList.length === 0) {
+      throw new Error("هیچ گروه یا کانال مقصدی برای ارسال پیام یافت نشد.");
+    }
+
+    const abortController = new AbortController();
+    worker.batchBroadcastAbortController = abortController;
+    worker.isBatchBroadcasting = true;
+
+    const sessionId = `bcast_sess_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    const broadcastTask: BatchBroadcastTask = {
+      sessionId,
+      phone: key,
+      message,
+      targetCount: targetList.length,
+      sentCount: 0,
+      failedCount: 0,
+      progressPercent: 0,
+      delaySeconds,
+      status: "running",
+      startedAt: new Date().toISOString(),
+      logs: [],
+    };
+
+    this.batchBroadcastTasksBySession.set(sessionId, broadcastTask);
+
+    // Attach to current batch creation task if available
+    const existingCreationTask = this.batchCreationTasks.get(key);
+    if (existingCreationTask) {
+      existingCreationTask.broadcastTask = broadcastTask;
+    }
+
+    this.addLog(
+      "info",
+      "broadcast",
+      `شروع برودکست همگانی به ${targetList.length} کانال/گروه (شناسه نشست: ${sessionId})`,
+      key,
+      { sessionId, targetCount: targetList.length }
+    );
+
+    // Background asynchronous broadcast loop
+    (async () => {
+      try {
+        for (let i = 0; i < targetList.length; i++) {
+          if (abortController.signal.aborted) {
+            broadcastTask.status = "stopped";
+            broadcastTask.completedAt = new Date().toISOString();
+            break;
+          }
+
+          const target = targetList[i];
+          broadcastTask.currentChatTitle = target.title;
+
+          try {
+            await worker.client.sendMessage(target.entity, { message });
+            broadcastTask.sentCount++;
+            broadcastTask.logs?.unshift({
+              chatId: target.id,
+              title: target.title,
+              status: "success",
+              time: new Date().toISOString(),
+            });
+            this.addLog(
+              "success",
+              "broadcast",
+              `ارسال به (${i + 1}/${targetList.length}): ${target.title}`,
+              key
+            );
+          } catch (sendErr: any) {
+            const errStr = sendErr?.message || String(sendErr);
+            broadcastTask.failedCount++;
+            broadcastTask.logs?.unshift({
+              chatId: target.id,
+              title: target.title,
+              status: "failed",
+              error: errStr,
+              time: new Date().toISOString(),
+            });
+            this.addLog(
+              "warn",
+              "broadcast",
+              `عدم موفقیت در ارسال به ${target.title}: ${errStr}`,
+              key
+            );
+
+            if (errStr.includes("FLOOD_WAIT")) {
+              const waitSec = Number(errStr.match(/\d+/)?.[0] || 60);
+              await new Promise((r) => setTimeout(r, waitSec * 1000));
+            }
+          }
+
+          broadcastTask.progressPercent = Math.min(
+            100,
+            Math.round(((i + 1) / targetList.length) * 100)
+          );
+
+          if (i < targetList.length - 1 && !abortController.signal.aborted) {
+            await new Promise((r) => setTimeout(r, delaySeconds * 1000));
+          }
+        }
+
+        if (broadcastTask.status === "running") {
+          broadcastTask.status = "completed";
+          broadcastTask.progressPercent = 100;
+          broadcastTask.completedAt = new Date().toISOString();
+          this.addLog(
+            "success",
+            "broadcast",
+            `برودکست همگانی به کانال‌ها و گروه‌ها به پایان رسید. مجموع ارسال موفق: ${broadcastTask.sentCount}`,
+            key
+          );
+        }
+      } catch (err: any) {
+        broadcastTask.status = "error";
+        broadcastTask.lastError = err?.message || String(err);
+      } finally {
+        worker.isBatchBroadcasting = false;
+        worker.batchBroadcastAbortController = undefined;
+      }
+    })();
+
+    return broadcastTask;
   }
 
 
@@ -3047,6 +3403,95 @@ export class TelegramManager {
     } catch (_) {
       return null;
     }
+  }
+
+  public async shareCryptoAnalysisViaBot(options: {
+    symbol: string;
+    textSnippet: string;
+    photoDataUrl?: string;
+    chatId?: number | string;
+  }): Promise<{ success: boolean; message: string; details?: any }> {
+    const token = this.botSettings.bot_token;
+    if (!token) {
+      throw new Error("ربات تلگرام پیکربندی نشده است. لطفاً ابتدا توکن ربات را در تنظیمات ربات وارد نمایید.");
+    }
+
+    const targetChatId = options.chatId || this.botSettings.owner_id;
+    if (!targetChatId || targetChatId === 0) {
+      throw new Error("شناسه چت یا مالک ربات برای ارسال یافت نشد. لطفاً در ربات دکمه /start را بزنید تا اکانت مالک شناسایی شود.");
+    }
+
+    // If photoDataUrl is provided (data:image/png;base64,...), try to sendPhoto via multipart form-data
+    if (options.photoDataUrl && options.photoDataUrl.startsWith("data:image")) {
+      try {
+        const matches = options.photoDataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const buffer = Buffer.from(matches[2], "base64");
+          const boundary = `----WebKitFormBoundary${Math.random().toString(36).substring(2)}`;
+          const crlf = "\r\n";
+          const body = Buffer.concat([
+            Buffer.from(
+              `--${boundary}${crlf}` +
+                `Content-Disposition: form-data; name="chat_id"${crlf}${crlf}` +
+                `${targetChatId}${crlf}` +
+                `--${boundary}${crlf}` +
+                `Content-Disposition: form-data; name="caption"${crlf}${crlf}` +
+                `${options.textSnippet.slice(0, 1024)}${crlf}` +
+                `--${boundary}${crlf}` +
+                `Content-Disposition: form-data; name="parse_mode"${crlf}${crlf}` +
+                `HTML${crlf}` +
+                `--${boundary}${crlf}` +
+                `Content-Disposition: form-data; name="photo"; filename="analysis_${options.symbol}.png"${crlf}` +
+                `Content-Type: image/png${crlf}${crlf}`
+            ),
+            buffer,
+            Buffer.from(`${crlf}--${boundary}--${crlf}`),
+          ]);
+
+          const photoRes = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+            method: "POST",
+            headers: {
+              "Content-Type": `multipart/form-data; boundary=${boundary}`,
+            },
+            body,
+          });
+
+          const photoJson: any = await photoRes.json();
+          if (photoJson.ok) {
+            this.addLog("success", "bot", `تحلیل تصویری نماد ${options.symbol} به تلگرام ارسال شد.`);
+            return {
+              success: true,
+              message: `تحلیل تصویری نماد ${options.symbol} با موفقیت به تلگرام ارسال شد.`,
+              details: photoJson.result,
+            };
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Fallback: Send formatted text snippet
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: targetChatId,
+        text: options.textSnippet,
+        parse_mode: "HTML",
+        disable_web_page_preview: false,
+      }),
+    });
+
+    const json: any = await res.json();
+    if (!json.ok) {
+      throw new Error(json.description || "خطا در ارسال پیام به ربات تلگرام");
+    }
+
+    this.addLog("success", "bot", `اسنیپت تحلیل تکنیکال نماد ${options.symbol} به تلگرام ارسال گردید.`);
+    return {
+      success: true,
+      message: `تحلیل تکنیکال نماد ${options.symbol} با موفقیت به ربات تلگرام ارسال گردید.`,
+      details: json.result,
+    };
   }
 
   private async answerCallbackQuery(

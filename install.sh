@@ -160,16 +160,28 @@ echo -e "${BLUE}▶ [4/6] Installing project packages via npm...${NC}"
 npm config set legacy-peer-deps true 2>/dev/null || true
 npm install --legacy-peer-deps || npm install --force
 
-# Build production bundle
-echo -e "${BLUE}▶ [5/6] Building high-performance production distribution...${NC}"
-if [ -f "dist/server.cjs" ] && [ -f "dist/index.html" ]; then
-  echo -e "${GREEN}✓ Verified pre-compiled production distribution.${NC}"
+# Guarantee react-is and recharts transitive resolver
+if [ ! -d "node_modules/react-is" ]; then
+  npm install react-is --legacy-peer-deps 2>/dev/null || true
 fi
-if ! npm run build 2>/dev/null; then
-  echo -e "${YELLOW}⚡ Refreshing native architecture bindings for Node $(node -v 2>/dev/null)...${NC}"
-  rm -rf node_modules package-lock.json
-  npm install --legacy-peer-deps
-  npm run build || true
+
+# Build production bundle (compile server first to ensure dist/server.cjs is always ready)
+echo -e "${BLUE}▶ [5/6] Building high-performance production distribution...${NC}"
+mkdir -p "$PROJECT_DIR/dist"
+echo -e "${CYAN}⚡ Compiling server backend daemon (dist/server.cjs)...${NC}"
+npm run build:server 2>/dev/null || npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs || true
+
+echo -e "${CYAN}⚡ Compiling client frontend web interface...${NC}"
+npm run build:client 2>/dev/null || npx vite build 2>/dev/null || npm run build 2>/dev/null || true
+
+# Verify dist/server.cjs exists
+if [ ! -f "dist/server.cjs" ]; then
+  echo -e "${YELLOW}⚡ Compiling server engine directly via esbuild...${NC}"
+  npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs || true
+fi
+
+if [ -f "dist/server.cjs" ]; then
+  echo -e "${GREEN}✓ Production server engine compiled successfully (dist/server.cjs).${NC}"
 fi
 
 # Install PM2 Process Manager for 24/7 background execution
@@ -194,10 +206,17 @@ fi
 # Start with PM2
 if command -v pm2 >/dev/null 2>&1; then
   pm2 delete telegram-self-tabchi-v6 >/dev/null 2>&1 || true
-  if [ -f "$PROJECT_DIR/ecosystem.config.cjs" ]; then
+  if [ -f "$PROJECT_DIR/process.json" ]; then
+    pm2 start "$PROJECT_DIR/process.json"
+  elif [ -f "$PROJECT_DIR/ecosystem.config.cjs" ]; then
     pm2 start "$PROJECT_DIR/ecosystem.config.cjs"
+  elif [ -f "$PROJECT_DIR/server.cjs" ]; then
+    pm2 start "$PROJECT_DIR/server.cjs" --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
+  elif [ -f "$PROJECT_DIR/dist/server.cjs" ]; then
+    pm2 start "$PROJECT_DIR/dist/server.cjs" --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
   else
-    pm2 start dist/server.cjs --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
+    echo -e "${YELLOW}⚡ Starting via TSX engine fallback...${NC}"
+    pm2 start "npx tsx server.ts" --name "telegram-self-tabchi-v6" --node-args="--max-old-space-size=1024"
   fi
   pm2 save >/dev/null 2>&1 || true
 else

@@ -119,7 +119,7 @@ do_start_restart() {
     sleep 1
     ./start.sh
   elif command -v pm2 >/dev/null 2>&1; then
-    pm2 restart telegram-self-tabchi-v6 2>/dev/null || pm2 start dist/server.cjs --name "telegram-self-tabchi-v6"
+    pm2 restart telegram-self-tabchi-v6 2>/dev/null || pm2 start process.json 2>/dev/null || pm2 start server.cjs --name "telegram-self-tabchi-v6"
   else
     npm run build
     nohup node dist/server.cjs > data/logs/server.log 2>&1 &
@@ -164,7 +164,8 @@ do_update() {
   npm install --legacy-peer-deps --no-audit 2>/dev/null || npm install
 
   echo -e "${BLUE}[3/4] کامپایل و بیلد مجدد پروژه (npm run build)...${NC}"
-  npm run build
+  npm run build:server || npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs || true
+  npm run build:client || npx vite build || true
 
   echo -e "${BLUE}[4/4] ری‌استارت پروسه سرور در PM2...${NC}"
   if command -v pm2 >/dev/null 2>&1; then
