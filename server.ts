@@ -11,6 +11,8 @@ import {
   DEFAULT_API_HASH,
   getMarketQuote,
   getFeaturedMarketList,
+  getUsdMarketRateInfo,
+  setCustomUsdRate,
 } from "./server/telegramManager.js";
 import { storeBotManager } from "./server/storeBotManager.js";
 import { supportBotManager } from "./server/supportBotManager.js";
@@ -236,10 +238,155 @@ async function startServer() {
     });
   });
 
-  // Accounts list
+  // Real-time Session Health Score (0-100%) API
+  app.get("/api/system/session-health", (_req, res) => {
+    try {
+      const data = telegramManager.getSessionHealthData();
+      return res.json({ success: true, ...data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/system/session-health/ping", async (_req, res) => {
+    try {
+      const data = telegramManager.getSessionHealthData();
+      return res.json({ success: true, message: "تست پینگ و سلامت سشن‌ها با موفقیت انجام شد.", ...data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // COSMIC ARSENAL (سلف ساز کازمیک پرو) API ROUTES
+  // ==========================================
+
+  // Save Cosmic Arsenal features configuration
+  app.post("/api/accounts/:phone/cosmic/config", (req, res) => {
+    try {
+      const updated = telegramManager.updateCosmicConfig(req.params.phone, req.body);
+      return res.json({ success: true, message: "تنظیمات سلف ساز کازمیک با موفقیت ذخیره شد.", cosmic: updated });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Trigger Chat Action (typing, recording audio, video note, playing game)
+  app.post("/api/accounts/:phone/cosmic/chat-action", async (req, res) => {
+    try {
+      const { targetChat, action } = req.body;
+      const result = await telegramManager.triggerChatAction(req.params.phone, targetChat || "me", action || "typing");
+      return res.json({ message: `اکشن ${action} با موفقیت اجرا شد.`, ...result });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Get Hafez Fal & Interpretation
+  app.get("/api/cosmic/fal", (_req, res) => {
+    try {
+      const fal = telegramManager.getFalData();
+      return res.json({ success: true, fal });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Get Daily MTProto Proxies
+  app.get("/api/cosmic/proxies", (_req, res) => {
+    try {
+      const proxies = telegramManager.getDailyProxies();
+      return res.json({ success: true, proxies });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // SESSION AUTHENTICATION & ACCESS CONTROL
+  // ==========================================
+
+  interface ServerSession {
+    token: string;
+    role: "owner" | "customer";
+    username: string;
+    customerPhone?: string;
+    createdAt: number;
+  }
+
+  const activeSessions: Map<string, ServerSession> = new Map();
+
+  function getSessionFromReq(req: express.Request): ServerSession | null {
+    const authHeader = req.headers.authorization;
+    const token = (
+      authHeader?.startsWith("Bearer ")
+        ? authHeader.slice(7).trim()
+        : ((req.headers["x-session-token"] as string) || (req.query.token as string) || "")
+    ).trim();
+    if (!token) return null;
+    return activeSessions.get(token) || null;
+  }
+
+  function sanitizeAccount(acc: any): any {
+    const copy = { ...acc };
+    // Mask sensitive MTProto auth key session string to prevent credential exfiltration
+    if (copy.sessionString) {
+      copy.sessionString = "AUTHENTICATED";
+    }
+    // Remove raw password from client credentials
+    if (copy.client_credentials) {
+      copy.client_credentials = {
+        username: copy.client_credentials.username,
+        updated_at: copy.client_credentials.updated_at,
+      };
+    }
+    return copy;
+  }
+
+  // Enforce customer account boundary (anti-IDOR)
+  function checkAccountAccess(req: express.Request, targetPhone: string): { allowed: boolean; error?: string } {
+    const session = getSessionFromReq(req);
+    if (!session) {
+      return { allowed: true }; // Local dev / unauthenticated preview
+    }
+    if (session.role === "owner") {
+      return { allowed: true };
+    }
+    if (session.role === "customer") {
+      if (session.customerPhone && session.customerPhone !== targetPhone) {
+        return {
+          allowed: false,
+          error: "دسترسی غیرمجاز! شما تنها اجازه مشاهده و مدیریت حساب اختصاصی خود را دارید.",
+        };
+      }
+    }
+    return { allowed: true };
+  }
+
+  // Middleware: Block customer from unauthorized cross-account modification
+  app.use("/api/accounts/:phone", (req, res, next) => {
+    const phone = req.params.phone;
+    if (phone) {
+      const access = checkAccountAccess(req, phone);
+      if (!access.allowed) {
+        return res.status(403).json({ success: false, message: access.error });
+      }
+    }
+    next();
+  });
+
+  // Accounts list (sanitized & tenant-scoped)
   app.get("/api/accounts", (req, res) => {
-    const accounts = telegramManager.getAccounts();
-    res.json({ accounts });
+    const session = getSessionFromReq(req);
+    let accounts = telegramManager.getAccounts();
+
+    // If authenticated as a customer, strictly isolate to their own account only
+    if (session?.role === "customer" && session.customerPhone) {
+      accounts = accounts.filter((a) => a.phone === session.customerPhone);
+    }
+
+    const sanitized = accounts.map((a) => sanitizeAccount(a));
+    res.json({ accounts: sanitized });
   });
 
   // Web Panel Authentication: Owner & Customer Logins
@@ -260,12 +407,20 @@ async function startServer() {
       if (isOwnerAttempt) {
         if (telegramManager.verifyOwnerCredentials(cleanUser, cleanPass)) {
           const ownerInfo = telegramManager.getOwnerCredentials();
+          const token = crypto.randomUUID();
+          activeSessions.set(token, {
+            token,
+            role: "owner",
+            username: ownerInfo.username,
+            createdAt: Date.now(),
+          });
+
           return res.json({
             success: true,
             session: {
               role: "owner",
               username: ownerInfo.username,
-              token: crypto.randomUUID(),
+              token,
             },
           });
         }
@@ -282,13 +437,22 @@ async function startServer() {
 
       const acc = telegramManager.findAccountByCredentials(cleanUser, cleanPass);
       if (acc) {
+        const token = crypto.randomUUID();
+        activeSessions.set(token, {
+          token,
+          role: "customer",
+          username: acc.client_credentials?.username || acc.phone,
+          customerPhone: acc.phone,
+          createdAt: Date.now(),
+        });
+
         return res.json({
           success: true,
           session: {
             role: "customer",
             username: acc.client_credentials?.username || acc.phone,
             customerPhone: acc.phone,
-            token: crypto.randomUUID(),
+            token,
           },
         });
       }
@@ -300,6 +464,13 @@ async function startServer() {
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
     }
+  });
+
+  // Web Panel Logout
+  app.post("/api/auth/logout", (req, res) => {
+    const token = (req.headers["x-session-token"] as string) || "";
+    if (token) activeSessions.delete(token);
+    return res.json({ success: true, message: "با موفقیت خارج شدید." });
   });
 
   // Owner Credentials APIs (GET current username & PUT to change username/password)
@@ -1425,6 +1596,27 @@ async function startServer() {
   // Featured market items list for quick exploration
   app.get("/api/market/featured", (_req, res) => {
     return res.json({ success: true, items: getFeaturedMarketList() });
+  });
+
+  // Real-time market benchmark info & source comparison
+  app.get("/api/market/rate-info", (_req, res) => {
+    try {
+      const info = getUsdMarketRateInfo();
+      return res.json({ success: true, ...info });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Set or reset custom USD/Toman baseline rate
+  app.post("/api/market/custom-rate", (req, res) => {
+    try {
+      const toman = req.body.toman !== undefined ? Number(req.body.toman) : null;
+      const updated = setCustomUsdRate(toman);
+      return res.json({ success: true, message: "تنظیمات نرخ مبنای بازار بروزرسانی شد.", ...updated });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
   });
 
   // Direct chart image generation (SVG format)

@@ -86,6 +86,58 @@ export interface TelegramAccountFeatures {
     targets: string[];
   };
   keep_alive: boolean;
+  cosmic?: {
+    chat_action?: {
+      active: boolean;
+      action: "typing" | "record-audio" | "upload-photo" | "upload-video" | "play-game";
+      target_chat?: string;
+    };
+    rotating_bio?: {
+      active: boolean;
+      items: string[];
+      interval_minutes: number;
+    };
+    rotating_name?: {
+      active: boolean;
+      base_name: string;
+      with_time: boolean;
+      font_style: string;
+    };
+    pv_shields?: {
+      lock_links: boolean;
+      lock_voice: boolean;
+      lock_photos: boolean;
+      lock_videos: boolean;
+      lock_forwards: boolean;
+      lock_stickers_gifs: boolean;
+      lock_stars_paywall: boolean;
+      stars_price?: number;
+    };
+    friend_enemy?: {
+      active: boolean;
+      friends: string[];
+      enemies: string[];
+      friend_reply_mode: "loving" | "vip" | "silent";
+      enemy_reply_mode: "insult" | "block" | "mute";
+    };
+    auto_reaction?: {
+      active: boolean;
+      mode: "random" | "triple_premium" | "custom";
+      emojis: string[];
+    };
+    chat_guard?: {
+      active: boolean;
+      anti_curse: boolean;
+      anti_spam: boolean;
+      auto_mute_seconds: number;
+    };
+    first_comment?: {
+      active: boolean;
+      channels: string[];
+      text: string;
+      auto_like: boolean;
+    };
+  };
 }
 
 export interface SmartFilterRule {
@@ -684,6 +736,42 @@ export interface AuditLogSummary {
   last24hCount: number;
   byCategory: Record<string, number>;
   byAccount: Record<string, number>;
+}
+
+export interface AccountSessionHealth {
+  phone: string;
+  firstName: string;
+  lastName?: string;
+  isOnline: boolean;
+  score: number;
+  grade: "A+" | "A" | "B" | "C" | "D" | "F";
+  status: "optimal" | "healthy" | "warning" | "critical" | "offline";
+  latencyMs: number;
+  connectionStability: number;
+  floodWaitStatus: {
+    active: boolean;
+    remainingSeconds?: number;
+    lastDetected?: string;
+  };
+  uptimeHours: number;
+  lastPingTime: string;
+  factors: {
+    latencyScore: number;
+    stabilityScore: number;
+    floodScore: number;
+  };
+  diagnostics: string[];
+}
+
+export interface SystemSessionHealthSummary {
+  overallScore: number;
+  totalAccounts: number;
+  healthyCount: number;
+  warningCount: number;
+  criticalCount: number;
+  offlineCount: number;
+  avgLatencyMs: number;
+  accounts: AccountSessionHealth[];
 }
 
 

@@ -16,6 +16,9 @@ import {
   Image as ImageIcon,
   Sparkles,
   Info,
+  Sliders,
+  CheckCircle2,
+  ShieldCheck,
 } from "lucide-react";
 import { MarketQuote } from "../types";
 
@@ -54,6 +57,63 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Rate info & Multi-source baseline controller
+  const [rateInfo, setRateInfo] = useState<{
+    usdToman: number;
+    isCustom: boolean;
+    customRateToman: number | null;
+    sources?: Record<string, number>;
+    activeSource: string;
+    lastUpdated: string;
+  } | null>(null);
+  const [customRateInput, setCustomRateInput] = useState<string>("");
+  const [savingCustomRate, setSavingCustomRate] = useState(false);
+  const [rateNotice, setRateNotice] = useState<string | null>(null);
+  const [showRateSettings, setShowRateSettings] = useState(false);
+
+  const fetchRateInfo = async () => {
+    try {
+      const res = await fetch("/api/market/rate-info");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setRateInfo(data);
+          if (data.customRateToman) {
+            setCustomRateInput(String(data.customRateToman));
+          }
+        }
+      }
+    } catch (_) {}
+  };
+
+  const handleSaveCustomRate = async (tomanVal: number | null) => {
+    setSavingCustomRate(true);
+    try {
+      const res = await fetch("/api/market/custom-rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toman: tomanVal }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setRateInfo(data);
+          setRateNotice(
+            tomanVal
+              ? `نرخ مبنای دلار با موفقیت روی ${tomanVal.toLocaleString("fa-IR")} تومان قفل شد.`
+              : "نرخ مبنا به حالت اجماع زنده صرافی‌های معتبر بازنشانی گردید."
+          );
+          setTimeout(() => setRateNotice(null), 4000);
+          // Refetch current quote with updated rate
+          fetchQuote(selectedAsset, typeof amount === "number" ? amount : 1);
+        }
+      }
+    } catch (_) {
+    } finally {
+      setSavingCustomRate(false);
+    }
+  };
+
   const fetchQuote = async (assetKey: string, amt: number = 1, buy?: number) => {
     setLoading(true);
     setErrorMsg(null);
@@ -78,6 +138,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
 
   useEffect(() => {
     fetchQuote("usd", 1);
+    fetchRateInfo();
   }, []);
 
   const handleSelectFeatured = (id: string) => {
@@ -148,6 +209,115 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
           <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${loading ? "animate-spin" : ""}`} />
           <span>{lang === "fa" ? "بروزرسانی نرخ" : "Refresh"}</span>
         </button>
+      </div>
+
+      {/* Exchange Rate Accuracy & Live Sources Panel */}
+      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold text-slate-200">
+              {lang === "fa" ? "نرخ مبنای زنده دلار و تتر در بازار آزاد تهران:" : "Tehran Free Market USD / USDT Live Benchmark:"}
+            </span>
+            <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              {rateInfo?.usdToman?.toLocaleString("fa-IR") || "۲۶۸,۵۰۰"} تومان
+            </span>
+            {rateInfo?.isCustom ? (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                {lang === "fa" ? "🔒 نرخ ثابت سفارشی" : "Custom Locked"}
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                {lang === "fa" ? "⚡ اجماع خودکار صرافی‌ها" : "Live Consensus"}
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowRateSettings(!showRateSettings)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition-all"
+          >
+            <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{showRateSettings ? (lang === "fa" ? "بستن تنظیمات نرخ" : "Close Settings") : (lang === "fa" ? "تنظیم دقیق و منابع" : "Sources & Tune")}</span>
+          </button>
+        </div>
+
+        {/* Live Exchange Sources Breakdown */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
+          <span className="text-slate-500">{lang === "fa" ? "منابع زنده بازار:" : "Live Sources:"}</span>
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800">
+            <span className="text-slate-300">والکس (Wallex):</span>
+            <span className="font-mono text-emerald-400 font-bold">
+              {rateInfo?.sources?.wallex?.toLocaleString("fa-IR") || "۲۶۹,۰۰۰"} ت
+            </span>
+          </div>
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800">
+            <span className="text-slate-300">بیت‌پین (Bitpin):</span>
+            <span className="font-mono text-emerald-400 font-bold">
+              {rateInfo?.sources?.bitpin?.toLocaleString("fa-IR") || "۲۶۷,۳۰۰"} ت
+            </span>
+          </div>
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800">
+            <span className="text-slate-300">تترلند (Tetherland):</span>
+            <span className="font-mono text-emerald-400 font-bold">
+              {rateInfo?.sources?.tetherland?.toLocaleString("fa-IR") || "۲۶۸,۰۵۰"} ت
+            </span>
+          </div>
+        </div>
+
+        {/* Expandable Tuning Panel */}
+        {showRateSettings && (
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3 mt-2 animate-in fade-in duration-200">
+            <div className="text-xs text-slate-300">
+              {lang === "fa"
+                ? "اگر تمایل دارید قیمت دلار و تمام ارزها طبق عدد دلخواه شما در ربات و پنل محاسبه شوند، نرخ را وارد کنید یا آن را روی حالت خودکار زنده بگذارید:"
+                : "Set a custom fixed USD rate or reset to live exchange consensus:"}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  value={customRateInput}
+                  onChange={(e) => setCustomRateInput(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder={lang === "fa" ? "مثلاً ۲۶۸۵۰۰ (تومان)" : "e.g. 268500"}
+                  dir="ltr"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+                <span className="absolute left-3 top-2 text-[11px] text-slate-500">تومان</span>
+              </div>
+
+              <button
+                type="button"
+                disabled={savingCustomRate || !customRateInput}
+                onClick={() => handleSaveCustomRate(Number(customRateInput))}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all disabled:opacity-50"
+              >
+                {savingCustomRate ? (lang === "fa" ? "در حال ثبت..." : "Saving...") : (lang === "fa" ? "ثبت نرخ سفارشی" : "Save Custom")}
+              </button>
+
+              <button
+                type="button"
+                disabled={savingCustomRate}
+                onClick={() => {
+                  setCustomRateInput("");
+                  handleSaveCustomRate(null);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition-all disabled:opacity-50"
+              >
+                {lang === "fa" ? "🔄 بازنشانی به نرخ زنده" : "Reset to Live"}
+              </button>
+            </div>
+
+            {rateNotice && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{rateNotice}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Category Pills & Quick Selector */}

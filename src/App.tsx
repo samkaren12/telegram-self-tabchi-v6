@@ -131,6 +131,7 @@ export default function App() {
   const t = translations[lang];
 
   const handleLogout = () => {
+    fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     sessionStorage.removeItem("hacker_v6_authenticated");
     sessionStorage.removeItem("hacker_v6_session");
     setAuthSession(null);

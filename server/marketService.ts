@@ -285,51 +285,117 @@ const ALIASES: Record<string, string> = {
 // -------------------------------------------------------------
 
 // Real-world free-market benchmark in Iran (USDT / Free Market USD to Toman)
-// Default baseline rate is 228,600 Tomans (2,286,000 IRR)
-let cachedUsdIrr = 2286000; // 228,600 Tomans
+// Baseline accurate rate is ~268,500 Tomans (2,685,000 IRR)
+let cachedUsdIrr = 2685000;
 let customUsdRateToman: number | null = null; // Owner manual override if desired
 let lastRatesFetch = 0;
+let cachedSources: { wallex?: number; bitpin?: number; tetherland?: number } = {
+  wallex: 269000,
+  bitpin: 267300,
+  tetherland: 268050,
+};
 let cachedFiatRates: Record<string, number> = {}; // Relative to USD (1 USD = X Currency)
 let cachedCryptoPrices: Record<string, { usd: number; change24h: number }> = {};
-let cachedGoldOunceUsd = 4365.0;
+let cachedGoldOunceUsd = 4169.0;
+
+export function getUsdMarketRateInfo() {
+  return {
+    usdIrr: cachedUsdIrr,
+    usdToman: Math.round(cachedUsdIrr / 10),
+    isCustom: customUsdRateToman !== null,
+    customRateToman: customUsdRateToman,
+    sources: cachedSources,
+    activeSource: customUsdRateToman !== null ? "custom" : "consensus",
+    lastUpdated: new Date(lastRatesFetch || Date.now()).toISOString(),
+  };
+}
 
 export function setCustomUsdRate(toman: number | null) {
   customUsdRateToman = toman && toman > 1000 ? Math.round(toman) : null;
   if (customUsdRateToman) {
     cachedUsdIrr = customUsdRateToman * 10;
+  } else {
+    // Reset to consensus
+    const valid = Object.values(cachedSources).filter((v): v is number => typeof v === "number" && v > 30000);
+    if (valid.length > 0) {
+      const avg = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+      cachedUsdIrr = avg * 10;
+    }
   }
+  return getUsdMarketRateInfo();
 }
 
 /**
- * Refreshes live market rates from global APIs:
- * - Free market USD/Toman live rate from Wallex orderbook (Tehran live market)
+ * Refreshes live market rates from global & Iranian exchanges:
+ * - Free market USD / USDT live rate aggregated from Wallex, Bitpin, and Tetherland
  * - 160+ world fiat currencies from Open Exchange Rates
  * - Binance PAXG (Gold Ounce backed 1:1)
  * - CoinGecko / Binance Crypto
  */
 async function refreshMarketRates(): Promise<void> {
   const now = Date.now();
-  if (now - lastRatesFetch < 45 * 1000 && Object.keys(cachedFiatRates).length > 0) {
+  if (now - lastRatesFetch < 30 * 1000 && Object.keys(cachedFiatRates).length > 0) {
     return;
   }
 
-  // 1. Fetch REAL-TIME Free Market USD / USDT rate in Tomans from Wallex
+  // 1. Fetch REAL-TIME Free Market USD / USDT rate in Tomans from multiple Iranian exchanges
   if (!customUsdRateToman) {
+    const fetchedRates: number[] = [];
+
+    // Source A: Wallex
     try {
       const wallexRes = await fetch("https://api.wallex.ir/v1/markets", {
         headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(4000),
       });
       if (wallexRes.ok) {
         const wallexData: any = await wallexRes.json();
         const usdtSymbol = wallexData?.result?.symbols?.USDTTMN;
         const livePrice = parseFloat(usdtSymbol?.stats?.lastPrice || usdtSymbol?.stats?.askPrice || "0");
         if (livePrice && livePrice > 30000 && livePrice < 1000000) {
-          cachedUsdIrr = Math.round(livePrice * 10);
+          cachedSources.wallex = Math.round(livePrice);
+          fetchedRates.push(cachedSources.wallex);
         }
       }
-    } catch (_) {
-      // Fallback: keep cached rate (228,600 Tomans baseline)
+    } catch (_) {}
+
+    // Source B: Bitpin
+    try {
+      const bitpinRes = await fetch("https://api.bitpin.ir/v1/mkt/markets/", {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (bitpinRes.ok) {
+        const bitpinData: any = await bitpinRes.json();
+        const usdt = bitpinData.results?.find((m: any) => m.code === "USDT_IRT");
+        const livePrice = parseFloat(usdt?.price || "0");
+        if (livePrice && livePrice > 30000 && livePrice < 1000000) {
+          cachedSources.bitpin = Math.round(livePrice);
+          fetchedRates.push(cachedSources.bitpin);
+        }
+      }
+    } catch (_) {}
+
+    // Source C: Tetherland
+    try {
+      const tetherlandRes = await fetch("https://api.tetherland.com/currencies", {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (tetherlandRes.ok) {
+        const tetherlandData: any = await tetherlandRes.json();
+        const livePrice = parseFloat(tetherlandData?.data?.currencies?.USDT?.price || "0");
+        if (livePrice && livePrice > 30000 && livePrice < 1000000) {
+          cachedSources.tetherland = Math.round(livePrice);
+          fetchedRates.push(cachedSources.tetherland);
+        }
+      }
+    } catch (_) {}
+
+    if (fetchedRates.length > 0) {
+      // Calculate precise consensus average
+      const consensusRate = Math.round(fetchedRates.reduce((a, b) => a + b, 0) / fetchedRates.length);
+      cachedUsdIrr = consensusRate * 10;
     }
   }
 
@@ -342,7 +408,6 @@ async function refreshMarketRates(): Promise<void> {
       const data: any = await res.json();
       if (data?.rates) {
         cachedFiatRates = data.rates;
-        // Do NOT use data.rates.IRR as it is official subsidized/bank rate and doesn't match real bazaar
       }
     }
   } catch (_) {}
@@ -655,37 +720,37 @@ export async function getMarketQuote(
       unitUsd = Number(gram24Usd.toFixed(2));
       change24h = 0.65;
     } else if (matchedKey === "mithqal") {
-      // 1 Mithqal = 4.6083 grams 17/18K gold
+      // 1 Mithqal = 4.3318 grams 17/18K gold (standard bazaar mazaneh)
       const gram24Usd = cachedGoldOunceUsd / 31.1034768;
       const gram18Usd = gram24Usd * (750 / 999.9);
-      unitUsd = Number((gram18Usd * 4.6083).toFixed(2));
+      unitUsd = Number((gram18Usd * 4.3318).toFixed(2));
       change24h = 0.65;
     } else if (matchedKey === "emami") {
-      // Emami Coin = 8.133g 21.6K (900) + market premium (bubbles ~22%)
+      // Emami Coin = 8.133g 21.6K (900/1000) = 7.3197g pure 24K gold
       const gram24Usd = cachedGoldOunceUsd / 31.1034768;
-      const goldValue = 8.133 * gram24Usd * (900 / 999.9);
-      const coinWithBubble = goldValue * 1.23;
+      const goldValue = 7.3197 * gram24Usd;
+      const coinWithBubble = goldValue * 1.038; // standard market premium
       unitUsd = Number(coinWithBubble.toFixed(2));
       change24h = 0.85;
     } else if (matchedKey === "bahar") {
       const gram24Usd = cachedGoldOunceUsd / 31.1034768;
-      const goldValue = 8.133 * gram24Usd * (900 / 999.9);
-      unitUsd = Number((goldValue * 1.14).toFixed(2));
+      const goldValue = 7.3197 * gram24Usd;
+      unitUsd = Number((goldValue * 0.945).toFixed(2));
       change24h = 0.75;
     } else if (matchedKey === "nim") {
       const gram24Usd = cachedGoldOunceUsd / 31.1034768;
-      const goldValue = 4.066 * gram24Usd * (900 / 999.9);
-      unitUsd = Number((goldValue * 1.28).toFixed(2));
+      const goldValue = 3.6598 * gram24Usd;
+      unitUsd = Number((goldValue * 1.12).toFixed(2));
       change24h = 0.9;
     } else if (matchedKey === "rob") {
       const gram24Usd = cachedGoldOunceUsd / 31.1034768;
-      const goldValue = 2.033 * gram24Usd * (900 / 999.9);
-      unitUsd = Number((goldValue * 1.45).toFixed(2));
+      const goldValue = 1.8299 * gram24Usd;
+      unitUsd = Number((goldValue * 1.35).toFixed(2));
       change24h = 1.1;
     } else if (matchedKey === "gerami") {
       const gram24Usd = cachedGoldOunceUsd / 31.1034768;
-      const goldValue = 1.011 * gram24Usd * (900 / 999.9);
-      unitUsd = Number((goldValue * 1.8).toFixed(2));
+      const goldValue = 0.9149 * gram24Usd;
+      unitUsd = Number((goldValue * 1.74).toFixed(2));
       change24h = 0.5;
     } else if (known.category === "crypto" && known.coingeckoId) {
       const cached = cachedCryptoPrices[known.coingeckoId];
@@ -698,7 +763,7 @@ export async function getMarketQuote(
       const rateToUsd = cachedFiatRates[upper];
       if (rateToUsd && rateToUsd > 0) {
         // 1 USD = rateToUsd -> 1 Currency = 1 / rateToUsd USD
-        unitUsd = Number((1 / rateToUsd).toFixed(4));
+        unitUsd = 1 / rateToUsd;
         change24h = 0.15;
       }
     }
@@ -707,7 +772,7 @@ export async function getMarketQuote(
     const upper = cleanQuery.toUpperCase();
     if (cachedFiatRates[upper]) {
       const rate = cachedFiatRates[upper];
-      unitUsd = Number((1 / rate).toFixed(4));
+      unitUsd = 1 / rate;
       symbol = upper;
       name_fa = `ارز ${upper}`;
       name_en = `${upper} Currency`;
@@ -722,20 +787,9 @@ export async function getMarketQuote(
     }
   }
 
-  // Calculate Toman & IRR
+  // Calculate Toman & IRR accurately
   let unitToman = Math.round(unitUsd * usdToTomanRate);
   let unitIrr = unitToman * 10;
-
-  // For specific Iranian coins, ensure realistic Toman scale
-  if (matchedKey === "emami" && unitToman < 50000000) {
-    unitToman = 61200000;
-    unitIrr = unitToman * 10;
-    unitUsd = Number((unitToman / usdToTomanRate).toFixed(2));
-  } else if (matchedKey === "gold18" && unitToman < 3000000) {
-    unitToman = 5650000;
-    unitIrr = unitToman * 10;
-    unitUsd = Number((unitToman / usdToTomanRate).toFixed(2));
-  }
 
   const totalUsd = Number((unitUsd * amount).toFixed(amount < 1 ? 6 : 2));
   const totalToman = Math.round(unitToman * amount);

@@ -46,6 +46,7 @@ import { transformFont } from "../utils/fontStyler";
 import { formatTehranTime } from "../utils/tehranTime";
 import { MarketEngineCard } from "./MarketEngineCard";
 import { SmartFiltersManager } from "./SmartFiltersManager";
+import { CosmicArsenalModule } from "./CosmicArsenalModule";
 
 interface SelfModuleProps {
   account: TelegramAccount | null;
@@ -64,8 +65,8 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
 
   // Active sub-tab
   const [activeSubTab, setActiveSubTab] = useState<
-    "clock" | "lockPv" | "mediaSaver" | "autoReply" | "smartFilters" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
-  >("clock");
+    "cosmic" | "clock" | "lockPv" | "mediaSaver" | "autoReply" | "smartFilters" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
+  >("cosmic");
 
   // Lock PV State
   const [lockPvActive, setLockPvActive] = useState<boolean>(false);
@@ -707,6 +708,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
       {/* SUB-TABS NAVIGATION */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800/80">
         {[
+          { id: "cosmic", label: lang === "fa" ? "سلف ساز کازمیک پرو 🚀" : "Cosmic Arsenal", icon: Flame, color: "text-amber-400" },
           { id: "clock", label: t.self.tabs.clock, icon: Clock, color: "text-cyan-400" },
           { id: "lockPv", label: lang === "fa" ? "قفل پیوی 🔒" : "Lock PV", icon: ShieldAlert, color: "text-rose-400" },
           { id: "mediaSaver", label: lang === "fa" ? "ذخیره‌ساز رسانه و تایم‌دار 📸" : "Media Saver", icon: Camera, color: "text-emerald-400" },
@@ -736,6 +738,15 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
           );
         })}
       </div>
+
+      {/* 0. SUB-TAB: COSMIC ARSENAL SUPER-SUITE */}
+      {activeSubTab === "cosmic" && (
+        <CosmicArsenalModule
+          account={account}
+          lang={lang}
+          onUpdateAccount={onUpdateAccount}
+        />
+      )}
 
       {/* 1. SUB-TAB: PROFILE CLOCK */}
       {activeSubTab === "clock" && (

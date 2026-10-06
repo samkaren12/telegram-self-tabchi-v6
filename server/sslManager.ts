@@ -228,8 +228,19 @@ function inspectCertStatus(status: SslStatus): SslStatus {
  */
 export async function generateServerIpSsl(customIp?: string, customDomain?: string): Promise<SslStatus> {
   ensureDir(SSL_DATA_DIR);
-  const serverIp = customIp || (await getPublicServerIp());
-  const selectedDomain = customDomain && customDomain.trim() ? customDomain.trim().toLowerCase() : `${serverIp}.nip.io`;
+  const rawIp = customIp || (await getPublicServerIp());
+  // Strictly sanitize IP to prevent shell injection
+  const serverIp = /^[0-9a-fA-F.:]+$/.test(rawIp.trim()) ? rawIp.trim() : "127.0.0.1";
+
+  // Strictly sanitize domain name to valid RFC hostname characters only
+  let selectedDomain = `${serverIp}.nip.io`;
+  if (customDomain && customDomain.trim()) {
+    const cleanDom = customDomain.trim().toLowerCase();
+    if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(cleanDom)) {
+      selectedDomain = cleanDom;
+    }
+  }
+
   const nipDomain = `${serverIp}.nip.io`;
   const sslipDomain = `${serverIp}.sslip.io`;
 

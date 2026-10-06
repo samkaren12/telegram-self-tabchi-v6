@@ -33,6 +33,7 @@ import { SystemHealth } from "../types";
 import { UpdateManager } from "./UpdateManager";
 import { SslBackgroundServiceManager } from "./SslBackgroundServiceManager";
 import { AutoBackupManager } from "./AutoBackupManager";
+import { SessionHealthScoreCard } from "./SessionHealthScoreCard";
 
 interface SystemStatusProps {
   health: SystemHealth | null;
@@ -333,6 +334,9 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Real-time Session Health Score (0-100%) Card */}
+      <SessionHealthScoreCard lang={lang} />
 
       {/* BotFather Remote Controller Section */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
