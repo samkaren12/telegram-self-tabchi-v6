@@ -155,6 +155,8 @@ interface LoginSession {
 interface AccountWorker {
   client: TelegramClient;
   timeTimer?: NodeJS.Timeout;
+  bioTimer?: NodeJS.Timeout;
+  nameTimer?: NodeJS.Timeout;
   tabchiAbortController?: AbortController;
   pmBroadcastAbortController?: AbortController;
   batchCreationAbortController?: AbortController;
@@ -254,6 +256,7 @@ import {
   getUsdMarketRateInfo,
   setCustomUsdRate,
 } from "./marketService";
+import { translateText } from "./translationService";
 
 export {
   getMarketQuote,
@@ -1119,6 +1122,12 @@ export class TelegramManager {
       if (worker.timeTimer) {
         clearInterval(worker.timeTimer);
       }
+      if (worker.bioTimer) {
+        clearInterval(worker.bioTimer);
+      }
+      if (worker.nameTimer) {
+        clearInterval(worker.nameTimer);
+      }
       if (worker.tabchiAbortController) {
         worker.tabchiAbortController.abort();
       }
@@ -1290,6 +1299,65 @@ export class TelegramManager {
               this.addLog("info", "tools", `استعلام قیمت واقعی ارسال شد: ${quote.asset}`, phone);
               return;
             } catch (_) {}
+          }
+        }
+
+        // 1C. OWNER SMART CHAT TOOL: REAL-TIME TRANSLATOR (.tr / .translate / ترجمه)
+        if (incomingText) {
+          const lower = incomingText.toLowerCase().trim();
+          const isTrCommand =
+            lower.startsWith(".tr ") ||
+            lower.startsWith("/tr ") ||
+            lower === ".tr" ||
+            lower.startsWith(".translate ") ||
+            lower.startsWith(".ترجمه ") ||
+            lower.startsWith("ترجمه ");
+
+          if (isTrCommand) {
+            const cleanCmd = incomingText
+              .replace(/^(\.tr|\/tr|\.translate|\.ترجمه|ترجمه)\s*/i, "")
+              .trim();
+
+            const parts = cleanCmd.split(/\s+/);
+            const targetLang = parts[0]?.toLowerCase() || "en";
+            let textToTranslate = parts.slice(1).join(" ").trim();
+
+            // If replied to a message, translate the replied message
+            if (!textToTranslate && message.replyToMsgId) {
+              try {
+                const msgs = await client.getMessages(message.chatId!, { ids: [message.replyToMsgId] });
+                textToTranslate = msgs[0]?.message || "";
+              } catch (_) {}
+            }
+
+            if (textToTranslate) {
+              try {
+                const trResult = await translateText(textToTranslate, targetLang);
+                const outMsg =
+                  `🌐 <b>ترجمه (${trResult.fromLang.toUpperCase()} ➔ ${trResult.toLang.toUpperCase()}):</b>\n` +
+                  `━━━━━━━━━━━━━━━━━━━━\n` +
+                  `${trResult.translatedText}\n` +
+                  `━━━━━━━━━━━━━━━━━━━━\n` +
+                  `⚡ <i>Telegram Self Multi-Language Translator</i>`;
+
+                try {
+                  await message.edit({
+                    text: outMsg,
+                    parseMode: "html",
+                  });
+                } catch (_) {
+                  await client.sendMessage(message.chatId!, {
+                    message: outMsg,
+                    replyTo: message.id,
+                    parseMode: "html",
+                  });
+                }
+                this.addLog("info", "self", `ترجمه متن به زبان ${targetLang} ارسال شد.`, phone);
+                return;
+              } catch (trErr: any) {
+                // Ignore or log error
+              }
+            }
           }
         }
 
@@ -5434,6 +5502,246 @@ export class TelegramManager {
       { server: "194.31.55.90", port: 443, secret: "ee000000000000000000000000000000007777772e676f6f676c652e636f6d", pingMs: 52, country: "🇫🇮 فنلاند" },
       { server: "45.133.178.65", port: 8080, secret: "dd00000000000000000000000000000000", pingMs: 65, country: "🇫🇷 فرانسه" },
     ];
+  }
+
+  // =============================================================
+  // SAMKAREN PRO (COSMIC ARSENAL) ENGINE - 100% REAL STATS & TOOLS
+  // =============================================================
+
+  public async getRecentProfileVisitors(phone: string) {
+    const account = this.getAccount(phone);
+    if (!account) {
+      throw new Error("حساب تلگرام یافت نشد.");
+    }
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client.connected) {
+      return {
+        connected: false,
+        visitors: [],
+        message: "حساب کاربری آفلاین است. برای تحلیل زنده تعاملات و بازدیدهای ۲۴ ساعت گذشته، ابتدا اکانت را آنلاین نمایید.",
+        totalInteractions: 0,
+        scanTimestamp: new Date().toISOString(),
+      };
+    }
+
+    try {
+      const dialogs = await worker.client.getDialogs({ limit: 40 });
+      const now = Date.now();
+      const past24hSeconds = Math.floor((now - 24 * 3600 * 1000) / 1000);
+
+      const visitors: any[] = [];
+      for (const d of dialogs) {
+        if (!d.isUser) continue;
+        const lastMsgDate = d.date || 0;
+        const isPast24h = lastMsgDate >= past24hSeconds;
+        const entity = d.entity as any;
+        const unread = Number(d.unreadCount || 0);
+
+        if (isPast24h || unread > 0) {
+          const rawId = d.id ? String(d.id) : "";
+          const isOut = Boolean(d.message?.out);
+          const type = unread > 0 ? "پیام جدید / خوانده نشده" : isOut ? "گفتگوی دوطرفه" : "پیام ورودی / مراجعه به پیوی";
+          visitors.push({
+            id: rawId,
+            name: d.name || d.title || (entity?.firstName ? `${entity.firstName} ${entity.lastName || ""}`.trim() : "کاربر تلگرام"),
+            username: entity?.username ? `@${entity.username}` : null,
+            phone: entity?.phone ? `+${entity.phone}` : null,
+            isBot: Boolean(entity?.bot),
+            isPremium: Boolean(entity?.premium),
+            isVerified: Boolean(entity?.verified),
+            unreadCount: unread,
+            lastMessagePreview: typeof d.message?.message === "string" ? d.message.message.slice(0, 80) : "",
+            interactionType: type,
+            timestamp: lastMsgDate ? new Date(lastMsgDate * 1000).toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+
+      visitors.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      return {
+        connected: true,
+        visitors,
+        totalInteractions: visitors.length,
+        totalDialogsScanned: dialogs.length,
+        scanTimestamp: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      return {
+        connected: true,
+        visitors: [],
+        message: `خطا در دریافت دیالوگ‌ها: ${err?.message}`,
+        totalInteractions: 0,
+        scanTimestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  public async getEntityIntelligence(phone: string, query: string) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("حساب تلگرام یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت تلگرام آفلاین است. لطفاً اکانت را روشن نمایید.");
+    }
+
+    const cleanQuery = query.trim().replace(/^https?:\/\/t\.me\//i, "");
+    if (!cleanQuery) throw new Error("شناسه کاربری، لینک یا آیدی الزامی است.");
+
+    try {
+      const entity = (cleanQuery.toLowerCase() === "me"
+        ? await worker.client.getMe()
+        : await worker.client.getEntity(cleanQuery)) as any;
+
+      const isUser = Boolean(entity.className === "User" || (entity as any).firstName !== undefined);
+      const isChannel = Boolean(entity.className === "Channel" || (entity as any).broadcast);
+      const isChat = Boolean(entity.className === "Chat");
+      const isSupergroup = Boolean(entity.megagroup);
+
+      let entityType = "user";
+      if (isChannel && !isSupergroup) entityType = "channel";
+      else if (isSupergroup) entityType = "supergroup";
+      else if (isChat) entityType = "group";
+
+      const numericId = String(entity.id || "");
+      const fullId = isChannel || isSupergroup ? `-100${numericId}` : isChat ? `-${numericId}` : numericId;
+
+      return {
+        success: true,
+        entityType,
+        numericId: fullId,
+        rawId: numericId,
+        title: entity.title || [entity.firstName, entity.lastName].filter(Boolean).join(" ") || "بدون عنوان",
+        username: entity.username ? `@${entity.username}` : null,
+        phone: entity.phone ? `+${entity.phone}` : null,
+        isBot: Boolean(entity.bot),
+        isPremium: Boolean(entity.premium),
+        isVerified: Boolean(entity.verified),
+        isScam: Boolean(entity.scam),
+        isFake: Boolean(entity.fake),
+        participantsCount: entity.participantsCount ?? null,
+        accessHash: entity.accessHash ? String(entity.accessHash) : null,
+        creator: Boolean(entity.creator),
+      };
+    } catch (err: any) {
+      throw new Error(`یافت نشد یا دسترسی وجود ندارد: ${err?.message}`);
+    }
+  }
+
+  public async getDeepAccountStats(phone: string) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("حساب یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    const isOnline = Boolean(worker?.client?.connected);
+
+    let dialogsCount = 0;
+    let groupsCount = 0;
+    let channelsCount = 0;
+    let usersCount = 0;
+    let unreadCount = 0;
+    let dcId = 0;
+
+    if (isOnline && worker) {
+      try {
+        const dialogs = await worker.client.getDialogs({});
+        dialogsCount = dialogs.length;
+        for (const d of dialogs) {
+          if (d.isGroup || (d.entity as any)?.megagroup) groupsCount++;
+          else if (d.isChannel) channelsCount++;
+          else if (d.isUser) usersCount++;
+          if (d.unreadCount && d.unreadCount > 0) unreadCount += d.unreadCount;
+        }
+        const me = (await worker.client.getMe()) as any;
+        dcId = me?.photo?.dcId || 2;
+      } catch (_) {}
+    }
+
+    return {
+      phone: account.phone,
+      firstName: account.firstName,
+      lastName: account.lastName,
+      username: account.username,
+      userId: account.userId,
+      isOnline,
+      dcId,
+      dialogsCount,
+      groupsCount,
+      channelsCount,
+      usersCount,
+      unreadCount,
+      tabchiSent: account.features?.tabchi?.total_sent || 0,
+      autoRepliesSent: account.features?.auto_reply?.last_replied_at ? 1 : 0,
+    };
+  }
+
+  public async configureBioRotator(phone: string, active: boolean, items: string[], intervalMinutes: number) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("حساب یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+
+    if (worker?.bioTimer) {
+      clearInterval(worker.bioTimer);
+      worker.bioTimer = undefined;
+    }
+
+    if (!active || !items || items.length === 0) {
+      this.addLog("info", "cosmic", "بیو چرخشی متوقف شد.", phone);
+      return { active: false };
+    }
+
+    if (!worker || !worker.client.connected) {
+      return { active: true, warning: "اکانت آفلاین است. پس از اتصال، چرخش بیو فعال خواهد شد." };
+    }
+
+    let currentIndex = 0;
+    const rotateBio = async () => {
+      try {
+        const item = items[currentIndex % items.length];
+        currentIndex++;
+        await worker.client.invoke(new Api.account.UpdateProfile({ about: item }));
+        this.addLog("info", "cosmic", `بیوگرافی به: «${item}» بروزرسانی شد.`, phone);
+      } catch (err: any) {
+        if (!String(err).includes("FLOOD_WAIT")) {
+          this.addLog("warn", "cosmic", `خطای تغییر بیو: ${err?.message}`, phone);
+        }
+      }
+    };
+
+    await rotateBio();
+    const intervalMs = Math.max(1, intervalMinutes || 5) * 60 * 1000;
+    worker.bioTimer = setInterval(rotateBio, intervalMs);
+    this.addLog("success", "cosmic", `بیو چرخشی با فاصله هر ${intervalMinutes} دقیقه فعال شد.`, phone);
+    return { active: true, intervalMinutes, totalItems: items.length };
+  }
+
+  public async configureNameRotator(phone: string, active: boolean, baseName: string, fontStyle: string) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("حساب یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+
+    if (worker?.nameTimer) {
+      clearInterval(worker.nameTimer);
+      worker.nameTimer = undefined;
+    }
+
+    if (!active || !baseName) {
+      this.addLog("info", "cosmic", "اسم چرخشی متوقف شد.", phone);
+      return { active: false };
+    }
+
+    if (!worker || !worker.client.connected) {
+      return { active: true, warning: "اکانت آفلاین است." };
+    }
+
+    const styledName = transformFont(baseName, fontStyle as any);
+    try {
+      await worker.client.invoke(new Api.account.UpdateProfile({ firstName: styledName }));
+      this.addLog("success", "cosmic", `نام اکانت با استایل «${fontStyle}» به ${styledName} تغییر یافت.`, phone);
+    } catch (err: any) {
+      this.addLog("warn", "cosmic", `خطای تغییر نام: ${err?.message}`, phone);
+    }
+
+    return { active: true, styledName };
   }
 
   private async handleAccountBotMessage(phone: string, msg: any) {

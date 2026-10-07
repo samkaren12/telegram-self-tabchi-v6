@@ -28,6 +28,7 @@ import {
   getPublicServerIp,
 } from "./server/sslManager.js";
 import { backupService } from "./server/backupService.js";
+import { translateText, SUPPORTED_LANGUAGES } from "./server/translationService.js";
 import { auditLogger } from "./server/auditLogger.js";
 import { exec } from "child_process";
 
@@ -297,6 +298,135 @@ async function startServer() {
     try {
       const proxies = telegramManager.getDailyProxies();
       return res.json({ success: true, proxies });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Profile Stalker (فضول پروفایل) - Real inspection of dialogs & interactions
+  app.get("/api/cosmic/profile-stalker", async (req, res) => {
+    try {
+      const phone = (req.query.phone as string) || "";
+      if (!phone) {
+        return res.status(400).json({ success: false, message: "شماره تلفن اکانت الزامی است." });
+      }
+      const data = await telegramManager.getRecentProfileVisitors(phone);
+      return res.json({ success: true, ...data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Entity & ID Intelligence (استخراج آیدی و اطلاعات هوشمند)
+  app.get("/api/cosmic/entity-info", async (req, res) => {
+    try {
+      const phone = (req.query.phone as string) || "";
+      const query = (req.query.query as string) || "";
+      if (!phone || !query) {
+        return res.status(400).json({ success: false, message: "شماره تلفن اکانت و شناسه کاربری الزامی است." });
+      }
+      const info = await telegramManager.getEntityIntelligence(phone, query);
+      return res.json(info);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Deep Account Real Stats (اطلاعات و آمار دقیق اکانت)
+  app.get("/api/cosmic/account-stats", async (req, res) => {
+    try {
+      const phone = (req.query.phone as string) || "";
+      if (!phone) {
+        return res.status(400).json({ success: false, message: "شماره تلفن اکانت الزامی است." });
+      }
+      const stats = await telegramManager.getDeepAccountStats(phone);
+      return res.json({ success: true, stats });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Rotating Bio Controller (بیو چرخشی زنده)
+  app.post("/api/cosmic/rotator/bio", async (req, res) => {
+    try {
+      const { phone, active, items, intervalMinutes } = req.body;
+      if (!phone) {
+        return res.status(400).json({ success: false, message: "شماره تلفن اکانت الزامی است." });
+      }
+      const result = await telegramManager.configureBioRotator(
+        phone,
+        Boolean(active),
+        Array.isArray(items) ? items : [],
+        Number(intervalMinutes) || 5
+      );
+      return res.json({ success: true, ...result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Rotating Name Controller (اسم چرخشی زنده)
+  app.post("/api/cosmic/rotator/name", async (req, res) => {
+    try {
+      const { phone, active, baseName, fontStyle } = req.body;
+      if (!phone) {
+        return res.status(400).json({ success: false, message: "شماره تلفن اکانت الزامی است." });
+      }
+      const result = await telegramManager.configureNameRotator(
+        phone,
+        Boolean(active),
+        String(baseName || ""),
+        String(fontStyle || "bold")
+      );
+      return res.json({ success: true, ...result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Music Search Engine (سرچ آهنگ آنلاین با استریم زنده)
+  app.get("/api/cosmic/music-search", async (req, res) => {
+    try {
+      const query = ((req.query.q as string) || "").trim();
+      if (!query) {
+        return res.status(400).json({ success: false, message: "نام آهنگ یا خواننده الزامی است." });
+      }
+      const searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=25`;
+      const apiRes = await fetch(searchUrl);
+      if (!apiRes.ok) {
+        throw new Error(`خطا در ارتباط با سرور موسیقی (${apiRes.status})`);
+      }
+      const data = (await apiRes.json()) as any;
+      const tracks = (data.results || []).map((t: any) => ({
+        id: t.trackId,
+        title: t.trackName,
+        artist: t.artistName,
+        album: t.collectionName || "",
+        previewUrl: t.previewUrl,
+        artwork: t.artworkUrl100 ? t.artworkUrl100.replace("100x100bb", "400x400bb") : null,
+        durationSeconds: Math.round((t.trackTimeMillis || 0) / 1000),
+        releaseYear: t.releaseDate ? new Date(t.releaseDate).getFullYear() : null,
+        genre: t.primaryGenreName,
+      }));
+      return res.json({ success: true, tracks, total: tracks.length });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Translation Endpoints
+  app.get("/api/translate/languages", (_req, res) => {
+    return res.json({ success: true, languages: SUPPORTED_LANGUAGES });
+  });
+
+  app.post("/api/translate", async (req, res) => {
+    try {
+      const { text, to, from } = req.body;
+      if (!text || !text.trim()) {
+        return res.status(400).json({ success: false, message: "متن جهت ترجمه الزامی است." });
+      }
+      const result = await translateText(text, to || "en", from);
+      return res.json({ success: true, ...result });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
     }

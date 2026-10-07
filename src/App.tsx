@@ -141,9 +141,10 @@ export default function App() {
   // Fetch accounts and system health
   const fetchData = async () => {
     try {
+      const headers = authSession?.token ? { "x-session-token": authSession.token } : undefined;
       const [accRes, statusRes] = await Promise.all([
-        fetch("/api/accounts"),
-        fetch("/api/status"),
+        fetch("/api/accounts", { headers }),
+        fetch("/api/status", { headers }),
       ]);
 
       if (accRes.ok) {

@@ -199,6 +199,7 @@ export interface AuthSession {
   username: string;
   customerPhone?: string;
   accountName?: string;
+  token?: string;
 }
 
 export interface TelegramAccount {
@@ -294,7 +295,7 @@ export interface LogEntry {
   timestamp: string;
   level: "info" | "success" | "warn" | "error";
   accountPhone?: string;
-  module: "auth" | "self" | "self_time" | "auto_reply" | "smart_filters" | "tabchi" | "mandatory_join" | "tools" | "broadcast" | "bot" | "system";
+  module: "auth" | "self" | "self_time" | "auto_reply" | "smart_filters" | "tabchi" | "mandatory_join" | "tools" | "broadcast" | "bot" | "system" | "cosmic";
   message: string;
   details?: any;
 }
