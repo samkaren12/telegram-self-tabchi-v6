@@ -291,6 +291,62 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // Sync state when account or account.features.cosmic changes
+  useEffect(() => {
+    if (!account?.features) return;
+    const cosmic = account.features.cosmic;
+    if (cosmic) {
+      if (cosmic.chat_action) {
+        setActionActive(Boolean(cosmic.chat_action.active));
+        if (cosmic.chat_action.action) setCurrentAction(cosmic.chat_action.action);
+        if (cosmic.chat_action.target_chat) setActionTargetChat(cosmic.chat_action.target_chat);
+      }
+      if (cosmic.rotating_bio) {
+        setRotatorBioActive(Boolean(cosmic.rotating_bio.active));
+        if (Array.isArray(cosmic.rotating_bio.items) && cosmic.rotating_bio.items.length > 0) {
+          setRotatorBioItems(cosmic.rotating_bio.items);
+        }
+        if (cosmic.rotating_bio.interval_minutes) {
+          setRotatorBioInterval(cosmic.rotating_bio.interval_minutes);
+        }
+      }
+      if (cosmic.rotating_name) {
+        setRotatorNameActive(Boolean(cosmic.rotating_name.active));
+        if (cosmic.rotating_name.base_name) setBaseName(cosmic.rotating_name.base_name);
+        if (cosmic.rotating_name.font_style) setSelectedFontStyle(cosmic.rotating_name.font_style);
+      }
+      if (cosmic.pv_shields) {
+        setLockLinks(Boolean(cosmic.pv_shields.lock_links));
+        setLockVoice(Boolean(cosmic.pv_shields.lock_voice));
+        setLockPhotos(Boolean(cosmic.pv_shields.lock_photos));
+        setLockVideos(Boolean(cosmic.pv_shields.lock_videos));
+        setLockForwards(Boolean(cosmic.pv_shields.lock_forwards));
+        setLockGifsStickers(Boolean(cosmic.pv_shields.lock_stickers_gifs));
+        setLockStarsPaywall(Boolean(cosmic.pv_shields.lock_stars_paywall));
+        if (cosmic.pv_shields.stars_price !== undefined) {
+          setStarsPrice(cosmic.pv_shields.stars_price);
+        }
+      }
+      if (cosmic.friend_enemy) {
+        if (cosmic.friend_enemy.friend_reply_mode) setFriendReplyMode(cosmic.friend_enemy.friend_reply_mode);
+        if (cosmic.friend_enemy.enemy_reply_mode) setEnemyReplyMode(cosmic.friend_enemy.enemy_reply_mode);
+        if (Array.isArray(cosmic.friend_enemy.friends)) {
+          setFriendsList(cosmic.friend_enemy.friends.join("\n"));
+        }
+        if (Array.isArray(cosmic.friend_enemy.enemies)) {
+          setEnemiesList(cosmic.friend_enemy.enemies.join("\n"));
+        }
+      }
+      if (cosmic.chat_guard) {
+        setChatGuardActive(Boolean(cosmic.chat_guard.active));
+        setAntiCurse(Boolean(cosmic.chat_guard.anti_curse));
+        if (cosmic.chat_guard.auto_mute_seconds) {
+          setAutoMuteSeconds(cosmic.chat_guard.auto_mute_seconds);
+        }
+      }
+    }
+  }, [account?.phone, account?.features?.cosmic]);
+
   // Save All Cosmic Settings
   const handleSaveCosmicConfig = async () => {
     if (!account) return;
@@ -1580,15 +1636,20 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
           </div>
 
           {/* Stars Paywall Lock */}
-          <div className="p-4 bg-gradient-to-r from-amber-950/20 to-slate-950 rounded-2xl border border-amber-500/30 flex items-center justify-between">
+          <div className="p-4 bg-gradient-to-r from-amber-950/20 to-slate-950 rounded-2xl border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
                 <span className="text-xs font-bold text-white">قفل پیوی با تلگرام استارز (Stars Paywall)</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
+                  واریز مستقیم به شماره: {account?.phone || "این اکانت"}
+                </span>
               </div>
-              <p className="text-[11px] text-slate-400">کاربران برای پیام دادن به پیوی باید ستاره (Stars) پرداخت کنند.</p>
+              <p className="text-[11px] text-slate-400">
+                کاربران برای پیام دادن به پیوی باید ستاره (Stars) پرداخت کنند؛ پس از واریز، استارز مستقیماً به شماره اکانت شما اضافه شده و پیوی برای کاربر باز می‌شود.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-end sm:self-auto">
               <input
                 type="number"
                 min={1}

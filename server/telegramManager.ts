@@ -140,6 +140,52 @@ export function defaultFeatures(): TelegramAccountFeatures {
       targets: [],
     },
     keep_alive: true,
+    cosmic: {
+      chat_action: {
+        active: false,
+        action: "typing",
+        target_chat: "me",
+      },
+      rotating_bio: {
+        active: false,
+        items: [
+          "سکوت زیباترین پاسخ است... 🖤",
+          "بر بلندای قله ایستاده‌ام ⚡",
+          "زمان همه چیز را ثابت خواهد کرد ⏳",
+          "سام‌کارن پرو | امنیت و قدرت مطلق 🚀",
+        ],
+        interval_minutes: 5,
+      },
+      rotating_name: {
+        active: false,
+        base_name: "Telegram User",
+        with_time: true,
+        font_style: "bold",
+      },
+      pv_shields: {
+        lock_links: false,
+        lock_voice: false,
+        lock_photos: false,
+        lock_videos: false,
+        lock_forwards: false,
+        lock_stickers_gifs: false,
+        lock_stars_paywall: false,
+        stars_price: 5,
+      },
+      friend_enemy: {
+        active: false,
+        friends: ["@friend1", "@best_buddy"],
+        enemies: ["@enemy1", "@hater"],
+        friend_reply_mode: "loving",
+        enemy_reply_mode: "insult",
+      },
+      chat_guard: {
+        active: true,
+        anti_curse: true,
+        anti_spam: true,
+        auto_mute_seconds: 60,
+      },
+    },
   };
 }
 
@@ -257,8 +303,10 @@ import {
   setCustomUsdRate,
   getArzDigitalMarketTable,
   formatArzDigitalTelegramBoard,
+  convertCurrencyPair,
+  parseCurrencyConversionQuery,
 } from "./marketService";
-import { translateText } from "./translationService";
+import { translateText, resolveLanguageCode, detectLanguage } from "./translationService";
 
 export {
   getMarketQuote,
@@ -405,6 +453,50 @@ export class TelegramManager {
                 tabchi: {
                   ...defaultFeatures().tabchi,
                   ...(typedAcc.features.tabchi || {}),
+                },
+                cosmic: {
+                  ...defaultFeatures().cosmic,
+                  ...(typedAcc.features.cosmic || {}),
+                  chat_action: {
+                    active: typedAcc.features.cosmic?.chat_action?.active ?? defaultFeatures().cosmic!.chat_action!.active,
+                    action: typedAcc.features.cosmic?.chat_action?.action ?? defaultFeatures().cosmic!.chat_action!.action,
+                    target_chat: typedAcc.features.cosmic?.chat_action?.target_chat ?? defaultFeatures().cosmic!.chat_action!.target_chat,
+                  },
+                  rotating_bio: {
+                    active: typedAcc.features.cosmic?.rotating_bio?.active ?? defaultFeatures().cosmic!.rotating_bio!.active,
+                    items: typedAcc.features.cosmic?.rotating_bio?.items ?? defaultFeatures().cosmic!.rotating_bio!.items,
+                    interval_minutes: typedAcc.features.cosmic?.rotating_bio?.interval_minutes ?? defaultFeatures().cosmic!.rotating_bio!.interval_minutes,
+                  },
+                  rotating_name: {
+                    active: typedAcc.features.cosmic?.rotating_name?.active ?? defaultFeatures().cosmic!.rotating_name!.active,
+                    base_name: typedAcc.features.cosmic?.rotating_name?.base_name ?? defaultFeatures().cosmic!.rotating_name!.base_name,
+                    with_time: typedAcc.features.cosmic?.rotating_name?.with_time ?? defaultFeatures().cosmic!.rotating_name!.with_time,
+                    font_style: typedAcc.features.cosmic?.rotating_name?.font_style ?? defaultFeatures().cosmic!.rotating_name!.font_style,
+                  },
+                  pv_shields: {
+                    lock_links: typedAcc.features.cosmic?.pv_shields?.lock_links ?? defaultFeatures().cosmic!.pv_shields!.lock_links,
+                    lock_voice: typedAcc.features.cosmic?.pv_shields?.lock_voice ?? defaultFeatures().cosmic!.pv_shields!.lock_voice,
+                    lock_photos: typedAcc.features.cosmic?.pv_shields?.lock_photos ?? defaultFeatures().cosmic!.pv_shields!.lock_photos,
+                    lock_videos: typedAcc.features.cosmic?.pv_shields?.lock_videos ?? defaultFeatures().cosmic!.pv_shields!.lock_videos,
+                    lock_forwards: typedAcc.features.cosmic?.pv_shields?.lock_forwards ?? defaultFeatures().cosmic!.pv_shields!.lock_forwards,
+                    lock_stickers_gifs: typedAcc.features.cosmic?.pv_shields?.lock_stickers_gifs ?? defaultFeatures().cosmic!.pv_shields!.lock_stickers_gifs,
+                    lock_stars_paywall: typedAcc.features.cosmic?.pv_shields?.lock_stars_paywall ?? defaultFeatures().cosmic!.pv_shields!.lock_stars_paywall,
+                    stars_price: typedAcc.features.cosmic?.pv_shields?.stars_price ?? defaultFeatures().cosmic!.pv_shields!.stars_price,
+                    paid_stars_users: typedAcc.features.cosmic?.pv_shields?.paid_stars_users ?? [],
+                  },
+                  friend_enemy: {
+                    active: typedAcc.features.cosmic?.friend_enemy?.active ?? defaultFeatures().cosmic!.friend_enemy!.active,
+                    friends: typedAcc.features.cosmic?.friend_enemy?.friends ?? defaultFeatures().cosmic!.friend_enemy!.friends,
+                    enemies: typedAcc.features.cosmic?.friend_enemy?.enemies ?? defaultFeatures().cosmic!.friend_enemy!.enemies,
+                    friend_reply_mode: typedAcc.features.cosmic?.friend_enemy?.friend_reply_mode ?? defaultFeatures().cosmic!.friend_enemy!.friend_reply_mode,
+                    enemy_reply_mode: typedAcc.features.cosmic?.friend_enemy?.enemy_reply_mode ?? defaultFeatures().cosmic!.friend_enemy!.enemy_reply_mode,
+                  },
+                  chat_guard: {
+                    active: typedAcc.features.cosmic?.chat_guard?.active ?? defaultFeatures().cosmic!.chat_guard!.active,
+                    anti_curse: typedAcc.features.cosmic?.chat_guard?.anti_curse ?? defaultFeatures().cosmic!.chat_guard!.anti_curse,
+                    anti_spam: typedAcc.features.cosmic?.chat_guard?.anti_spam ?? defaultFeatures().cosmic!.chat_guard!.anti_spam,
+                    auto_mute_seconds: typedAcc.features.cosmic?.chat_guard?.auto_mute_seconds ?? defaultFeatures().cosmic!.chat_guard!.auto_mute_seconds,
+                  },
                 },
               };
             }
@@ -1247,9 +1339,43 @@ export class TelegramManager {
           }
         }
 
-        // 1B. OWNER SMART CHAT TOOL: REAL WORLD MARKET, CURRENCY & GOLD QUOTE WITH CHART
+        // 1B. OWNER SMART CHAT TOOL: REAL WORLD MARKET, CURRENCY & GOLD QUOTE WITH CHART & PAIR CONVERTER
         if (account.features.tools?.market_active && incomingText) {
           const lower = incomingText.toLowerCase().trim();
+
+          // 1B-1: Check for Currency Pair Conversion (e.g. "۲ دلار ترون تبدیل کن", "5 usd to trx", "تبدیل ۱۰ ترون به تتر")
+          const convQuery = parseCurrencyConversionQuery(incomingText);
+          if (convQuery) {
+            try {
+              const convResult = await convertCurrencyPair(
+                convQuery.fromAsset,
+                convQuery.toAsset,
+                convQuery.amount
+              );
+              try {
+                await message.edit({
+                  text: convResult.formattedMessage,
+                  parseMode: "html",
+                });
+              } catch (_) {
+                await client.sendMessage(message.chatId!, {
+                  message: convResult.formattedMessage,
+                  replyTo: message.id,
+                  parseMode: "html",
+                });
+              }
+              this.addLog(
+                "info",
+                "tools",
+                `تبدیل زنده ارز (${convQuery.amount} ${convQuery.fromAsset} به ${convQuery.toAsset}) انجام شد.`,
+                phone
+              );
+              return;
+            } catch (convErr: any) {
+              // Fall through to regular market quote or ignore
+            }
+          }
+
           const isTriggerCommand =
             lower.startsWith(".price") || lower.startsWith("/price") ||
             lower.startsWith(".quote") || lower.startsWith(".قیمت") || lower.startsWith("قیمت") ||
@@ -1306,10 +1432,10 @@ export class TelegramManager {
           }
         }
 
-        // 1C. OWNER SMART CHAT TOOL: REAL-TIME TRANSLATOR (.tr / .translate / ترجمه)
+        // 1C. OWNER SMART CHAT TOOL: REAL-TIME TRANSLATOR (.tr / .translate / ترجمه / "متن به انگلیسی")
         if (incomingText) {
           const lower = incomingText.toLowerCase().trim();
-          const isTrCommand =
+          const isExplicitTrCommand =
             lower.startsWith(".tr ") ||
             lower.startsWith("/tr ") ||
             lower === ".tr" ||
@@ -1317,14 +1443,27 @@ export class TelegramManager {
             lower.startsWith(".ترجمه ") ||
             lower.startsWith("ترجمه ");
 
-          if (isTrCommand) {
-            const cleanCmd = incomingText
-              .replace(/^(\.tr|\/tr|\.translate|\.ترجمه|ترجمه)\s*/i, "")
-              .trim();
+          // Natural phrase support: e.g. "سلام روز بخیر به انگلیسی" or "how are you به فارسی"
+          const naturalTrMatch = incomingText.match(
+            /^(.+?)\s+(?:به|to)\s+(انگلیسی|فارسی|عربی|ترکی|آلمانی|فرانسوی|روسی|اسپانیایی|ایتالیایی|چینی|ژاپنی|کره‌ای|english|persian|arabic|turkish|german|french|russian|spanish|en|fa|ar|tr|de|fr|ru|es)$/i
+          );
 
-            const parts = cleanCmd.split(/\s+/);
-            const targetLang = parts[0]?.toLowerCase() || "en";
-            let textToTranslate = parts.slice(1).join(" ").trim();
+          if (isExplicitTrCommand || naturalTrMatch) {
+            let targetLang = "en";
+            let textToTranslate = "";
+
+            if (naturalTrMatch) {
+              textToTranslate = naturalTrMatch[1].trim();
+              targetLang = resolveLanguageCode(naturalTrMatch[2].trim());
+            } else {
+              const cleanCmd = incomingText
+                .replace(/^(\.tr|\/tr|\.translate|\.ترجمه|ترجمه)\s*/i, "")
+                .trim();
+
+              const parts = cleanCmd.split(/\s+/);
+              targetLang = resolveLanguageCode(parts[0] || "en");
+              textToTranslate = parts.slice(1).join(" ").trim();
+            }
 
             // If replied to a message, translate the replied message
             if (!textToTranslate && message.replyToMsgId) {
@@ -1337,26 +1476,29 @@ export class TelegramManager {
             if (textToTranslate) {
               try {
                 const trResult = await translateText(textToTranslate, targetLang);
-                const outMsg =
-                  `🌐 <b>ترجمه (${trResult.fromLang.toUpperCase()} ➔ ${trResult.toLang.toUpperCase()}):</b>\n` +
-                  `━━━━━━━━━━━━━━━━━━━━\n` +
-                  `${trResult.translatedText}\n` +
-                  `━━━━━━━━━━━━━━━━━━━━\n` +
-                  `⚡ <i>Telegram Self Multi-Language Translator</i>`;
+                // When owner typed a sentence followed by "به انگلیسی" or similar natural syntax,
+                // replace the message directly with the pure translated text, or structured card if command was used.
+                const outMsg = naturalTrMatch
+                  ? trResult.translatedText
+                  : `🌐 <b>ترجمه (${trResult.fromLang.toUpperCase()} ➔ ${trResult.toLang.toUpperCase()}):</b>\n` +
+                    `━━━━━━━━━━━━━━━━━━━━\n` +
+                    `${trResult.translatedText}\n` +
+                    `━━━━━━━━━━━━━━━━━━━━\n` +
+                    `⚡ <i>Telegram Self Multi-Language Translator</i>`;
 
                 try {
                   await message.edit({
                     text: outMsg,
-                    parseMode: "html",
+                    parseMode: naturalTrMatch ? undefined : "html",
                   });
                 } catch (_) {
                   await client.sendMessage(message.chatId!, {
                     message: outMsg,
                     replyTo: message.id,
-                    parseMode: "html",
+                    parseMode: naturalTrMatch ? undefined : "html",
                   });
                 }
-                this.addLog("info", "self", `ترجمه متن به زبان ${targetLang} ارسال شد.`, phone);
+                this.addLog("info", "self", `ترجمه متن به زبان ${targetLang} ارسال شد: "${textToTranslate}" ➔ "${trResult.translatedText}"`, phone);
                 return;
               } catch (trErr: any) {
                 // Ignore or log error
@@ -1481,6 +1623,164 @@ export class TelegramManager {
             }
           }
         } catch (_) {}
+      }
+
+      // ==============================================================
+      // 1B. COSMIC & SAMKAREN PRO: PV SHIELDS, STARS PAYWALL & FRIEND/ENEMY
+      // ==============================================================
+      const cosmicConfig = account.features.cosmic;
+      if (cosmicConfig) {
+        const senderUsername = (sender as any).username ? `@${(sender as any).username.toLowerCase()}` : "";
+        const senderName = `${(sender as any).firstName || ""} ${(sender as any).lastName || ""}`.trim() || senderId;
+
+        // --- FRIEND & ENEMY MATRIX ---
+        if (cosmicConfig.friend_enemy?.active) {
+          const fe = cosmicConfig.friend_enemy;
+          const friends = (fe.friends || []).map((f: string) => f.toLowerCase().trim());
+          const enemies = (fe.enemies || []).map((e: string) => e.toLowerCase().trim());
+
+          const isEnemy = enemies.some((e: string) => 
+            e && (e === senderId || (senderUsername && e === senderUsername) || e === `@${senderId}`)
+          );
+
+          if (isEnemy) {
+            try {
+              if (fe.enemy_reply_mode === "block") {
+                await client.invoke(
+                  new Api.contacts.Block({
+                    id: await client.getInputEntity(message.chatId!),
+                  })
+                );
+                this.addLog("warn", "cosmic", `کاربر دشمن [${senderName} | ${senderUsername || senderId}] بلاک شد.`, phone);
+                return;
+              } else if (fe.enemy_reply_mode === "insult") {
+                const enemyPhrases = [
+                  "پیام شما به دلیل قرار داشتن در لیست دشمنان نادیده گرفته شد ⛔",
+                  "وقت من ارزشمندتر از هم‌کلامی با شماست 👋",
+                  "سکوت در برابر نادان بهترین پاسخ است 🛑",
+                  "حساب شما به زودی مسدود خواهد شد ⚠️",
+                ];
+                const insultMsg = enemyPhrases[Math.floor(Math.random() * enemyPhrases.length)];
+                await client.sendMessage(message.chatId!, {
+                  message: insultMsg,
+                  replyTo: message.id,
+                });
+                this.addLog("info", "cosmic", `پاسخ دشمن به کاربر ${senderName} ارسال شد.`, phone);
+                return;
+              }
+            } catch (enemyErr: any) {
+              this.addLog("warn", "cosmic", `خطا در پردازش لیست دشمن: ${enemyErr?.message}`, phone);
+            }
+          }
+
+          const isFriend = friends.some((f: string) => 
+            f && (f === senderId || (senderUsername && f === senderUsername) || f === `@${senderId}`)
+          );
+
+          if (isFriend && fe.friend_reply_mode === "loving") {
+            try {
+              const friendPhrases = [
+                "سلام رفیق قدیمی و با معرفت! همیشه به یادت هستم ❤️",
+                "درود بر دوست گرامی! امری داشتی در خدمتم 🌟",
+                "سلام عزیزم، پیامتو دریافت کردم و به زودی پاسخ میدم 😊",
+                "بهترین‌ها برای تو رفیق شفیق! خوشحالم پیام دادی 💫",
+              ];
+              const lovingMsg = friendPhrases[Math.floor(Math.random() * friendPhrases.length)];
+              await client.sendMessage(message.chatId!, {
+                message: lovingMsg,
+                replyTo: message.id,
+              });
+              this.addLog("success", "cosmic", `پاسخ محبت‌آمیز رفاقتی به دوست VIP [${senderName}] ارسال شد ❤️`, phone);
+            } catch (_) {}
+          }
+        }
+
+        // --- PV SHIELDS (LOCK LINKS, VOICE, PHOTOS, VIDEOS, FORWARDS, STICKERS/GIFS) ---
+        if (cosmicConfig.pv_shields) {
+          const shields = cosmicConfig.pv_shields;
+          let shieldViolation: string | null = null;
+
+          const hasLinks = incomingText && /(https?:\/\/|t\.me\/|telegram\.me\/|www\.)/i.test(incomingText);
+          const isForward = Boolean((message as any).fwdFrom || message.forward);
+          const media = message.media;
+          const isPhoto = Boolean((media as any)?.photo || media?.className === "MessageMediaPhoto");
+          const isDocument = Boolean((media as any)?.document || media?.className === "MessageMediaDocument");
+          let isVoice = false;
+          let isVideo = false;
+          let isStickerOrGif = false;
+
+          if (isDocument && (media as any)?.document) {
+            const mime = (media as any).document.mimeType || "";
+            if (mime.startsWith("audio/") || mime.includes("ogg")) isVoice = true;
+            if (mime.startsWith("video/")) isVideo = true;
+            if (mime.includes("gif") || mime.includes("webp") || mime.includes("sticker")) isStickerOrGif = true;
+          }
+
+          if (shields.lock_links && hasLinks) {
+            shieldViolation = "ارسال لینک در این گفتگو قفل است 🔗";
+          } else if (shields.lock_voice && isVoice) {
+            shieldViolation = "ارسال ویس و پیام صوتی در این گفتگو قفل است 🎙️";
+          } else if (shields.lock_photos && isPhoto) {
+            shieldViolation = "ارسال عکس در این گفتگو قفل است 📸";
+          } else if (shields.lock_videos && isVideo) {
+            shieldViolation = "ارسال ویدیو در این گفتگو قفل است 🎬";
+          } else if (shields.lock_forwards && isForward) {
+            shieldViolation = "ارسال پیام فوروارد شده در این گفتگو قفل است 🔄";
+          } else if (shields.lock_stickers_gifs && isStickerOrGif) {
+            shieldViolation = "ارسال استیکر و گیف در این گفتگو قفل است 🎭";
+          }
+
+          if (shieldViolation) {
+            try {
+              await client.deleteMessages(message.chatId!, [message.id], { revoke: true });
+              await client.sendMessage(message.chatId!, {
+                message: `⛔ اخطار: ${shieldViolation}`,
+              });
+              this.addLog("warn", "cosmic", `پیام نقض سپر (${shieldViolation}) از ${senderName} حذف شد.`, phone);
+              return;
+            } catch (shieldErr: any) {
+              this.addLog("warn", "cosmic", `خطا در اجرای سپر پیوی: ${shieldErr?.message}`, phone);
+            }
+          }
+
+          // --- TELEGRAM STARS PAYWALL LOCK ---
+          if (shields.lock_stars_paywall) {
+            const requiredStars = Number(shields.stars_price) || 5;
+            if (!shields.paid_stars_users) {
+              shields.paid_stars_users = [];
+            }
+
+            const hasPaid = shields.paid_stars_users.includes(senderId);
+            if (!hasPaid) {
+              const starsNotice =
+                `⭐ <b>قفل پیوی با تلگرام استارز (Stars Paywall)</b>\n` +
+                `━━━━━━━━━━━━━━━━━━━━\n` +
+                `👤 کاربر گرامی <b>${senderName}</b>,\n` +
+                `این چت خصوصی مشمول قفل ستاره تلگرام است.\n` +
+                `جهت ارسال پیام و ارتباط در پیوی، لطفاً مقدار <b>${requiredStars} ستاره (Stars)</b> به عنوان هدیه یا حق اشتراک ارسال کنید.\n` +
+                `📞 ستاره‌های دریافتی به شماره اکانت <code>${phone}</code> واریز و شارژ می‌شوند.\n` +
+                `━━━━━━━━━━━━━━━━━━━━\n` +
+                `⚠️ پیام شما حذف گردید. پس از پرداخت استارز، پیام بعدی شما مستقیماً دریافت خواهد شد.`;
+
+              try {
+                await client.deleteMessages(message.chatId!, [message.id], { revoke: true });
+                await client.sendMessage(message.chatId!, {
+                  message: starsNotice,
+                  parseMode: "html",
+                });
+                this.addLog(
+                  "info",
+                  "cosmic",
+                  `قفل استارز (${requiredStars} ⭐) به کاربر ${senderName} (${senderId}) اعلام و پیام وی حذف شد. واریزی به شماره ${phone}`,
+                  phone
+                );
+                return;
+              } catch (starsErr: any) {
+                this.addLog("warn", "cosmic", `خطا در پردازش قفل استارز: ${starsErr?.message}`, phone);
+              }
+            }
+          }
+        }
       }
 
       // ==============================================================

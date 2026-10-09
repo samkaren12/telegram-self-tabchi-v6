@@ -35,6 +35,56 @@ export const SUPPORTED_LANGUAGES: Record<string, { nameFa: string; nameEn: strin
   ku: { nameFa: "کردی", nameEn: "Kurdish", flag: "☀️" },
 };
 
+export function resolveLanguageCode(query: string): string {
+  if (!query) return "en";
+  const clean = query.trim().toLowerCase().replace(/^(به|to)\s*/, "");
+  
+  if (SUPPORTED_LANGUAGES[clean]) return clean;
+
+  const faMap: Record<string, string> = {
+    "انگلیسی": "en",
+    "انگیلیسی": "en",
+    "فارسی": "fa",
+    "پارسی": "fa",
+    "عربی": "ar",
+    "ترکی": "tr",
+    "ترکی استانبولی": "tr",
+    "آلمانی": "de",
+    "المانی": "de",
+    "فرانسوی": "fr",
+    "فرانسه": "fr",
+    "روسی": "ru",
+    "اسپانیایی": "es",
+    "ایتالیایی": "it",
+    "چینی": "zh",
+    "ژاپنی": "ja",
+    "کره‌ای": "ko",
+    "کره ای": "ko",
+    "هندی": "hi",
+    "اردو": "ur",
+    "هلندی": "nl",
+    "پرتغالی": "pt",
+    "سوئدی": "sv",
+    "سویدی": "sv",
+    "لهستانی": "pl",
+    "اوکراینی": "uk",
+    "آذربایجانی": "az",
+    "اذربایجانی": "az",
+    "آذری": "az",
+    "کردی": "ku",
+  };
+
+  if (faMap[clean]) return faMap[clean];
+
+  for (const [code, info] of Object.entries(SUPPORTED_LANGUAGES)) {
+    if (info.nameFa.toLowerCase() === clean || info.nameEn.toLowerCase() === clean) {
+      return code;
+    }
+  }
+
+  return "en";
+}
+
 /**
  * Detects whether the text is mostly Persian/Arabic script or Latin
  */

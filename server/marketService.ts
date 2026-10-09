@@ -1582,3 +1582,227 @@ export async function evaluateMathWithMarketRates(
   }
 }
 
+/**
+ * Currency Pair Conversion Result
+ */
+export interface CurrencyConversionResult {
+  amountFrom: number;
+  fromAsset: string;
+  fromNameFa: string;
+  fromSymbol: string;
+  fromUnitUsd: number;
+  fromUnitToman: number;
+  fromTotalToman: number;
+  fromTotalUsd: number;
+
+  amountTo: number;
+  toAsset: string;
+  toNameFa: string;
+  toSymbol: string;
+  toUnitUsd: number;
+  toUnitToman: number;
+
+  rate: number; // 1 From = rate To
+  inverseRate: number; // 1 To = inverseRate From
+  formattedMessage: string;
+}
+
+/**
+ * Parse conversion phrases like:
+ * "۲ دلار ترون تبدیل کن"
+ * "تبدیل ۲ دلار به ترون"
+ * "2 usd to trx"
+ * "۵۰۰ تتر به تومان"
+ * "۱۰ ترون به دلار"
+ */
+export function parseCurrencyConversionQuery(text: string): {
+  amount: number;
+  fromAsset: string;
+  toAsset: string;
+} | null {
+  if (!text) return null;
+  const normalized = normalizeDigits(text).trim();
+  const lower = normalized.toLowerCase();
+
+  // Must have convert keyword or "به" or "to"
+  const hasConvertKeyword =
+    lower.includes("تبدیل") ||
+    lower.includes("convert") ||
+    lower.includes(" to ") ||
+    lower.includes("به") ||
+    lower.includes("چند تا") ||
+    lower.includes("چند");
+
+  if (!hasConvertKeyword) return null;
+
+  // Extract amount
+  const amountMatch = normalized.match(/(?<![a-zA-Z])(\d+(?:\.\d+)?)/);
+  const amount = amountMatch ? parseFloat(amountMatch[1]) : 1.0;
+
+  // Known currency tokens pattern
+  const assetPattern =
+    "(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|تومان|تومن|ریال|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)";
+
+  // Pattern 1: [amount] [from] [to] تبدیل کن / [amount] [from] به [to]
+  // e.g. "۲ دلار ترون تبدیل کن" or "۲ دلار به ترون"
+  const regex1 = new RegExp(
+    `(?:تبدیل\\s+)?(?:${amountMatch ? amountMatch[1] : "\\d+"})?\\s*${assetPattern}\\s+(?:به\\s+|to\\s+)?${assetPattern}`,
+    "i"
+  );
+  const m1 = normalized.match(regex1);
+  if (m1 && m1[1] && m1[2] && m1[1].toLowerCase() !== m1[2].toLowerCase()) {
+    return {
+      amount,
+      fromAsset: m1[1].trim(),
+      toAsset: m1[2].trim(),
+    };
+  }
+
+  // Pattern 2: تبدیل [from] به [to]
+  const regex2 = new RegExp(
+    `(?:تبدیل\\s+)?${assetPattern}\\s+(?:به\\s+|to\\s+)${assetPattern}`,
+    "i"
+  );
+  const m2 = normalized.match(regex2);
+  if (m2 && m2[1] && m2[2] && m2[1].toLowerCase() !== m2[2].toLowerCase()) {
+    return {
+      amount,
+      fromAsset: m2[1].trim(),
+      toAsset: m2[2].trim(),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Converts any currency pair accurately using live market prices
+ */
+export async function convertCurrencyPair(
+  fromQuery: string,
+  toQuery: string,
+  amount: number = 1.0
+): Promise<CurrencyConversionResult> {
+  const isTomanFrom = /^(تومان|تومن|toman)$/i.test(fromQuery.trim());
+  const isIrrFrom = /^(ریال|irr|rial)$/i.test(fromQuery.trim());
+  const isTomanTo = /^(تومان|تومن|toman)$/i.test(toQuery.trim());
+  const isIrrTo = /^(ریال|irr|rial)$/i.test(toQuery.trim());
+
+  let fromQuote: DetailedMarketQuote;
+  let toQuote: DetailedMarketQuote;
+
+  if (isTomanFrom || isIrrFrom) {
+    const divider = isIrrFrom ? 10 : 1;
+    const actualToman = amount / divider;
+    const rateInfo = getUsdMarketRateInfo();
+    const usdVal = actualToman / rateInfo.usdToman;
+    fromQuote = {
+      asset: isIrrFrom ? "ریال ایران (IRR)" : "تومان ایران (IRT)",
+      symbol: isIrrFrom ? "IRR" : "IRT",
+      name_fa: isIrrFrom ? "ریال ایران" : "تومان ایران",
+      name_en: isIrrFrom ? "Iranian Rial" : "Iranian Toman",
+      category: "fiat",
+      amount,
+      unit_usd: 1 / (rateInfo.usdToman * divider),
+      total_usd: usdVal,
+      unit_toman: 1 / divider,
+      total_toman: actualToman,
+      unit_irr: divider === 10 ? 1 : 10,
+      total_irr: actualToman * 10,
+      change_24h_percent: 0,
+      high_24h_toman: actualToman,
+      low_24h_toman: actualToman,
+      high_24h_usd: usdVal,
+      low_24h_usd: usdVal,
+      trend: "neutral",
+      updated_at: new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" }),
+    };
+  } else {
+    fromQuote = await getMarketQuote(fromQuery, amount);
+  }
+
+  if (isTomanTo || isIrrTo) {
+    const multiplier = isIrrTo ? 10 : 1;
+    toQuote = {
+      asset: isIrrTo ? "ریال ایران (IRR)" : "تومان ایران (IRT)",
+      symbol: isIrrTo ? "IRR" : "IRT",
+      name_fa: isIrrTo ? "ریال ایران" : "تومان ایران",
+      name_en: isIrrTo ? "Iranian Rial" : "Iranian Toman",
+      category: "fiat",
+      amount: 1,
+      unit_usd: 1 / (getUsdMarketRateInfo().usdToman * (isIrrTo ? 10 : 1)),
+      total_usd: 1 / (getUsdMarketRateInfo().usdToman * (isIrrTo ? 10 : 1)),
+      unit_toman: isIrrTo ? 0.1 : 1,
+      total_toman: isIrrTo ? 0.1 : 1,
+      unit_irr: isIrrTo ? 1 : 10,
+      total_irr: isIrrTo ? 1 : 10,
+      change_24h_percent: 0,
+      high_24h_toman: 1,
+      low_24h_toman: 1,
+      high_24h_usd: 1,
+      low_24h_usd: 1,
+      trend: "neutral",
+      updated_at: new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" }),
+    };
+  } else {
+    toQuote = await getMarketQuote(toQuery, 1);
+  }
+
+  // Calculate destination amount: Total USD from source / Unit USD of destination
+  const totalUsdFrom = fromQuote.total_usd;
+  const unitUsdTo = toQuote.unit_usd;
+  const amountTo = unitUsdTo > 0 ? totalUsdFrom / unitUsdTo : 0;
+  const singleRate = unitUsdTo > 0 ? fromQuote.unit_usd / unitUsdTo : 0;
+  const inverseRate = singleRate > 0 ? 1 / singleRate : 0;
+
+  const formattedAmountTo =
+    amountTo >= 1000
+      ? amountTo.toLocaleString("fa-IR", { maximumFractionDigits: 2 })
+      : amountTo < 0.001
+      ? amountTo.toFixed(6)
+      : amountTo.toLocaleString("fa-IR", { maximumFractionDigits: 4 });
+
+  const formattedSingleRate =
+    singleRate >= 1000
+      ? singleRate.toLocaleString("fa-IR", { maximumFractionDigits: 2 })
+      : singleRate < 0.001
+      ? singleRate.toFixed(6)
+      : singleRate.toLocaleString("fa-IR", { maximumFractionDigits: 4 });
+
+  const tehranTime = new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" });
+
+  const formattedMessage =
+    `🔄 <b>تبدیل هوشمند ارز و رمزارز:</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📥 <b>مبدا:</b> <b>${amount.toLocaleString("fa-IR")} ${fromQuote.name_fa}</b> (${fromQuote.symbol})\n` +
+    `💵 <b>معادل دلاری:</b> <code>$${totalUsdFrom.toLocaleString("en-US", { maximumFractionDigits: 2 })}</code>\n` +
+    `🇮🇷 <b>معادل تومانی:</b> <b>${fromQuote.total_toman.toLocaleString("fa-IR")} تومان</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📤 <b>حاصل تبدیل:</b> <b>${formattedAmountTo} ${toQuote.name_fa}</b> (<code>${toQuote.symbol}</code>)\n` +
+    `📊 <b>نرخ تبدیل:</b> ۱ ${fromQuote.symbol} = <code>${formattedSingleRate}</code> ${toQuote.symbol}\n` +
+    `🕒 <b>زمان محاسبه:</b> <i>${tehranTime}</i>\n` +
+    `⚡ <i>Telegram Self Currency Converter</i>`;
+
+  return {
+    amountFrom: amount,
+    fromAsset: fromQuote.asset,
+    fromNameFa: fromQuote.name_fa,
+    fromSymbol: fromQuote.symbol,
+    fromUnitUsd: fromQuote.unit_usd,
+    fromUnitToman: fromQuote.unit_toman,
+    fromTotalToman: fromQuote.total_toman,
+    fromTotalUsd: totalUsdFrom,
+
+    amountTo,
+    toAsset: toQuote.asset,
+    toNameFa: toQuote.name_fa,
+    toSymbol: toQuote.symbol,
+    toUnitUsd: toQuote.unit_usd,
+    toUnitToman: toQuote.unit_toman,
+
+    rate: singleRate,
+    inverseRate,
+    formattedMessage,
+  };
+}
+

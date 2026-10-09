@@ -112,6 +112,7 @@ export interface TelegramAccountFeatures {
       lock_stickers_gifs: boolean;
       lock_stars_paywall: boolean;
       stars_price?: number;
+      paid_stars_users?: string[];
     };
     friend_enemy?: {
       active: boolean;
