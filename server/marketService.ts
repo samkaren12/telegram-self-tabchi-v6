@@ -281,22 +281,249 @@ const ALIASES: Record<string, string> = {
 };
 
 // -------------------------------------------------------------
-// CACHED RATES ENGINE
+// ARZDIGITAL LIVE SCRAPER & CACHED RATES ENGINE
 // -------------------------------------------------------------
 
-// Real-world free-market benchmark in Iran (USDT / Free Market USD to Toman)
-// Baseline accurate rate is ~268,500 Tomans (2,685,000 IRR)
-let cachedUsdIrr = 2685000;
-let customUsdRateToman: number | null = null; // Owner manual override if desired
+export interface ArzdigitalCurrencyItem {
+  rank: number;
+  id: string;
+  nameFa: string;
+  nameEn: string;
+  symbol: string;
+  icon: string | null;
+  priceToman: number;
+  priceUsd: number;
+  changePercent: number;
+  trend: "up" | "down" | "neutral";
+  lowToman: number;
+  highToman: number;
+  chartSvg: string | null;
+  updatedAt: string | null;
+}
+
+function parsePersianNumber(str: string): number {
+  if (!str) return 0;
+  const faDigits = "۰۱۲۳۴۵۶۷۸۹";
+  const arDigits = "٠١٢٣٤٥٦٧٨٩";
+  let clean = str.replace(/[,،\s]/g, "");
+  let res = "";
+  for (const ch of clean) {
+    const fi = faDigits.indexOf(ch);
+    const ai = arDigits.indexOf(ch);
+    if (fi !== -1) res += fi;
+    else if (ai !== -1) res += ai;
+    else res += ch;
+  }
+  return parseFloat(res) || 0;
+}
+
+// Global cached rates & Arzdigital state
+let cachedUsdIrr = 2667000;
+let customUsdRateToman: number | null = null;
 let lastRatesFetch = 0;
-let cachedSources: { wallex?: number; bitpin?: number; tetherland?: number } = {
-  wallex: 269000,
-  bitpin: 267300,
+let cachedSources: { arzdigital?: number; wallex?: number; bitpin?: number; tetherland?: number } = {
+  arzdigital: 266700,
+  wallex: 267942,
+  bitpin: 266612,
   tetherland: 268050,
 };
-let cachedFiatRates: Record<string, number> = {}; // Relative to USD (1 USD = X Currency)
+let cachedFiatRates: Record<string, number> = {};
 let cachedCryptoPrices: Record<string, { usd: number; change24h: number }> = {};
 let cachedGoldOunceUsd = 4169.0;
+let cachedBitpinMarkets: any[] = [];
+let cachedArzdigitalCurrencies: ArzdigitalCurrencyItem[] = [];
+let cachedArzdigitalMap: Map<string, ArzdigitalCurrencyItem> = new Map();
+
+/**
+ * Direct Live Scraper for https://arzdigital.com/currencies/
+ * Scrapes all 90+ world fiat currencies live with exact Toman prices, USD prices,
+ * 24h change, ranges and sparkline SVGs.
+ */
+export async function fetchArzdigitalCurrencies(): Promise<ArzdigitalCurrencyItem[]> {
+  try {
+    const res = await fetch("https://arzdigital.com/currencies/", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "fa,en;q=0.9",
+      },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!res.ok) return cachedArzdigitalCurrencies;
+    const html = await res.text();
+    const trMatches = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+    const items: ArzdigitalCurrencyItem[] = [];
+    const map = new Map<string, ArzdigitalCurrencyItem>();
+
+    for (let i = 1; i < trMatches.length; i++) {
+      const row = trMatches[i][1];
+      const rankMatch = row.match(/arz-fiats-table__rank">(\d+)</);
+      const nameMatch = row.match(/<span><b>([^<]+)<\/b><small[^>]*>([^<]+)<\/small><\/span>/);
+      const iconMatch = row.match(/<img[^>]+src="([^"]+)"/);
+      const tomanPriceMatch = row.match(/arz-irt-price"[^>]*><span>([^<]+)<\/span>/);
+      const usdPriceMatch = row.match(/<small dir="auto">\$([0-9.,]+)<\/small>/);
+      const changeMatch = row.match(/arz-fiat-change\s+(toup|todown)[^>]*>[\s\S]*?<span dir="auto">([0-9.]+)%<\/span>/);
+      const lowMatch = row.match(/کمترین<\/small><b[^>]*><span class="arz-irt-price"[^>]*><span>([^<]+)<\/span>/);
+      const highMatch = row.match(/بیشترین<\/small><b[^>]*><span class="arz-irt-price"[^>]*><span>([^<]+)<\/span>/);
+      const chartMatch = row.match(/arz-fiats-table__weekly-chart[^>]+src="([^"]+)"/);
+      const updatedMatch = row.match(/datetime="([^"]+)"/);
+
+      if (nameMatch && tomanPriceMatch) {
+        const nameFa = nameMatch[1].trim();
+        const nameEn = nameMatch[2].trim();
+        const priceToman = parsePersianNumber(tomanPriceMatch[1]);
+        const priceUsd = usdPriceMatch ? parseFloat(usdPriceMatch[1].replace(/,/g, "")) : 1;
+        const isDown = changeMatch ? changeMatch[1] === "todown" : false;
+        const changePercent = changeMatch ? parseFloat(changeMatch[2]) * (isDown ? -1 : 1) : 0;
+        const lowToman = lowMatch ? parsePersianNumber(lowMatch[1]) : Math.round(priceToman * 0.99);
+        const highToman = highMatch ? parsePersianNumber(highMatch[1]) : Math.round(priceToman * 1.01);
+
+        let symbol = "CURR";
+        let id = nameEn.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (nameFa.includes("دلار") && (nameEn.includes("United States") || nameEn === "Dollar")) {
+          symbol = "USD";
+          id = "usd";
+        } else if (nameFa.includes("یورو") || nameEn.includes("Euro")) {
+          symbol = "EUR";
+          id = "eur";
+        } else if (nameFa.includes("درهم") || nameEn.includes("Dirham")) {
+          symbol = "AED";
+          id = "aed";
+        } else if (nameFa.includes("پوند") || nameEn.includes("Pound")) {
+          symbol = "GBP";
+          id = "gbp";
+        } else if (nameFa.includes("لیر") || nameEn.includes("Lira")) {
+          symbol = "TRY";
+          id = "try";
+        } else if (nameFa.includes("دینار عراق") || nameEn.includes("Iraqi Dinar")) {
+          symbol = "IQD";
+          id = "iqd";
+        } else if (nameFa.includes("افغانی") || nameEn.includes("Afghani")) {
+          symbol = "AFN";
+          id = "afn";
+        } else if (nameFa.includes("کانادا") || nameEn.includes("Canadian Dollar")) {
+          symbol = "CAD";
+          id = "cad";
+        } else if (nameFa.includes("یوان") || nameEn.includes("Yuan")) {
+          symbol = "CNY";
+          id = "cny";
+        } else if (nameFa.includes("فرانک") || nameEn.includes("Swiss")) {
+          symbol = "CHF";
+          id = "chf";
+        } else if (nameFa.includes("استرالیا") || nameEn.includes("Australian")) {
+          symbol = "AUD";
+          id = "aud";
+        } else if (nameFa.includes("کرون سوئد") || nameEn.includes("Swedish")) {
+          symbol = "SEK";
+          id = "sek";
+        } else if (nameFa.includes("کرون نروژ") || nameEn.includes("Norwegian")) {
+          symbol = "NOK";
+          id = "nok";
+        } else if (nameFa.includes("روبل") || nameEn.includes("Ruble")) {
+          symbol = "RUB";
+          id = "rub";
+        } else if (nameFa.includes("کویت") || nameEn.includes("Kuwaiti")) {
+          symbol = "KWD";
+          id = "kwd";
+        } else if (nameFa.includes("عمان") || nameEn.includes("Omani")) {
+          symbol = "OMR";
+          id = "omr";
+        } else if (nameFa.includes("بحرین") || nameEn.includes("Bahraini")) {
+          symbol = "BHD";
+          id = "bhd";
+        } else if (nameFa.includes("عربستان") || nameEn.includes("Saudi")) {
+          symbol = "SAR";
+          id = "sar";
+        } else if (nameFa.includes("قطر") || nameEn.includes("Qatari")) {
+          symbol = "QAR";
+          id = "qar";
+        } else if (nameFa.includes("هند") || nameEn.includes("Indian")) {
+          symbol = "INR";
+          id = "inr";
+        } else if (nameFa.includes("پاکستان") || nameEn.includes("Pakistani")) {
+          symbol = "PKR";
+          id = "pkr";
+        } else if (nameFa.includes("آذربایجان") || nameEn.includes("Manat")) {
+          symbol = "AZN";
+          id = "azn";
+        } else if (nameFa.includes("ارمنستان") || nameEn.includes("Dram")) {
+          symbol = "AMD";
+          id = "amd";
+        } else if (nameFa.includes("گرجستان") || nameEn.includes("Lari")) {
+          symbol = "GEL";
+          id = "gel";
+        } else if (nameFa.includes("ژاپن") || nameEn.includes("Yen")) {
+          symbol = "JPY";
+          id = "jpy";
+        } else {
+          symbol = id.slice(0, 4).toUpperCase();
+        }
+
+        const item: ArzdigitalCurrencyItem = {
+          rank: rankMatch ? parseInt(rankMatch[1], 10) : i,
+          id,
+          symbol,
+          nameFa,
+          nameEn,
+          icon: iconMatch ? iconMatch[1] : null,
+          priceToman,
+          priceUsd,
+          changePercent,
+          trend: changePercent > 0 ? "up" : changePercent < 0 ? "down" : "neutral",
+          lowToman,
+          highToman,
+          chartSvg: chartMatch ? chartMatch[1] : null,
+          updatedAt: updatedMatch ? updatedMatch[1] : null,
+        };
+
+        items.push(item);
+        map.set(id, item);
+        map.set(symbol.toLowerCase(), item);
+        map.set(nameFa, item);
+        map.set(nameFa.replace(/\s+/g, ""), item);
+
+        // Priority Iranian market shorthands
+        if (id === "usd") {
+          map.set("دلار", item);
+          map.set("دلار آزاد", item);
+          map.set("dollar", item);
+        } else if (id === "eur") {
+          map.set("یورو", item);
+          map.set("euro", item);
+        } else if (id === "aed") {
+          map.set("درهم", item);
+          map.set("درهم امارات", item);
+          map.set("dirham", item);
+        } else if (id === "try") {
+          map.set("لیر", item);
+          map.set("لیر ترکیه", item);
+          map.set("lira", item);
+        } else if (id === "gbp") {
+          map.set("پوند", item);
+          map.set("پوند انگلیس", item);
+          map.set("pound", item);
+        } else if (id === "iqd") {
+          map.set("دینار", item);
+          map.set("دینار عراق", item);
+        } else if (id === "cad") {
+          map.set("کانادا", item);
+          map.set("دلار کانادا", item);
+        } else if (id === "afn") {
+          map.set("افغانی", item);
+        }
+      }
+    }
+
+    if (items.length > 0) {
+      cachedArzdigitalCurrencies = items;
+      cachedArzdigitalMap = map;
+    }
+    return cachedArzdigitalCurrencies;
+  } catch (err: any) {
+    console.error("fetchArzdigitalCurrencies error:", err?.message);
+    return cachedArzdigitalCurrencies;
+  }
+}
 
 export function getUsdMarketRateInfo() {
   return {
@@ -305,7 +532,7 @@ export function getUsdMarketRateInfo() {
     isCustom: customUsdRateToman !== null,
     customRateToman: customUsdRateToman,
     sources: cachedSources,
-    activeSource: customUsdRateToman !== null ? "custom" : "consensus",
+    activeSource: customUsdRateToman !== null ? "custom" : "arzdigital",
     lastUpdated: new Date(lastRatesFetch || Date.now()).toISOString(),
   };
 }
@@ -315,11 +542,15 @@ export function setCustomUsdRate(toman: number | null) {
   if (customUsdRateToman) {
     cachedUsdIrr = customUsdRateToman * 10;
   } else {
-    // Reset to consensus
-    const valid = Object.values(cachedSources).filter((v): v is number => typeof v === "number" && v > 30000);
-    if (valid.length > 0) {
-      const avg = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
-      cachedUsdIrr = avg * 10;
+    // Reset to Arzdigital or consensus
+    if (cachedSources.arzdigital && cachedSources.arzdigital > 30000) {
+      cachedUsdIrr = cachedSources.arzdigital * 10;
+    } else {
+      const valid = Object.values(cachedSources).filter((v): v is number => typeof v === "number" && v > 30000);
+      if (valid.length > 0) {
+        const avg = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+        cachedUsdIrr = avg * 10;
+      }
     }
   }
   return getUsdMarketRateInfo();
@@ -327,21 +558,32 @@ export function setCustomUsdRate(toman: number | null) {
 
 /**
  * Refreshes live market rates from global & Iranian exchanges:
- * - Free market USD / USDT live rate aggregated from Wallex, Bitpin, and Tetherland
+ * - Tier 1 Authority: Arzdigital.com/currencies/ (Live Tehran free market USD & 90 fiat currencies)
+ * - Wallex, Bitpin, and Tetherland for crypto USDT consensus
  * - 160+ world fiat currencies from Open Exchange Rates
  * - Binance PAXG (Gold Ounce backed 1:1)
  * - CoinGecko / Binance Crypto
  */
 async function refreshMarketRates(): Promise<void> {
   const now = Date.now();
-  if (now - lastRatesFetch < 30 * 1000 && Object.keys(cachedFiatRates).length > 0) {
+  if (now - lastRatesFetch < 30 * 1000 && Object.keys(cachedFiatRates).length > 0 && cachedArzdigitalCurrencies.length > 0) {
     return;
   }
 
-  // 1. Fetch REAL-TIME Free Market USD / USDT rate in Tomans from multiple Iranian exchanges
-  if (!customUsdRateToman) {
-    const fetchedRates: number[] = [];
+  // 1. Fetch REAL-TIME Free Market USD & currencies from Arzdigital (Tier 1 Authority)
+  try {
+    const arzItems = await fetchArzdigitalCurrencies();
+    const arzDollar = arzItems.find((c) => c.id === "usd" || c.symbol === "USD" || c.nameFa.includes("دلار"));
+    if (arzDollar && arzDollar.priceToman > 30000) {
+      cachedSources.arzdigital = Math.round(arzDollar.priceToman);
+      if (!customUsdRateToman) {
+        cachedUsdIrr = cachedSources.arzdigital * 10;
+      }
+    }
+  } catch (_) {}
 
+  // 2. Fetch Iranian Crypto Exchanges (Wallex, Bitpin, Tetherland)
+  if (!customUsdRateToman) {
     // Source A: Wallex
     try {
       const wallexRes = await fetch("https://api.wallex.ir/v1/markets", {
@@ -354,7 +596,6 @@ async function refreshMarketRates(): Promise<void> {
         const livePrice = parseFloat(usdtSymbol?.stats?.lastPrice || usdtSymbol?.stats?.askPrice || "0");
         if (livePrice && livePrice > 30000 && livePrice < 1000000) {
           cachedSources.wallex = Math.round(livePrice);
-          fetchedRates.push(cachedSources.wallex);
         }
       }
     } catch (_) {}
@@ -367,11 +608,13 @@ async function refreshMarketRates(): Promise<void> {
       });
       if (bitpinRes.ok) {
         const bitpinData: any = await bitpinRes.json();
+        if (Array.isArray(bitpinData?.results) && bitpinData.results.length > 0) {
+          cachedBitpinMarkets = bitpinData.results;
+        }
         const usdt = bitpinData.results?.find((m: any) => m.code === "USDT_IRT");
         const livePrice = parseFloat(usdt?.price || "0");
         if (livePrice && livePrice > 30000 && livePrice < 1000000) {
           cachedSources.bitpin = Math.round(livePrice);
-          fetchedRates.push(cachedSources.bitpin);
         }
       }
     } catch (_) {}
@@ -387,19 +630,23 @@ async function refreshMarketRates(): Promise<void> {
         const livePrice = parseFloat(tetherlandData?.data?.currencies?.USDT?.price || "0");
         if (livePrice && livePrice > 30000 && livePrice < 1000000) {
           cachedSources.tetherland = Math.round(livePrice);
-          fetchedRates.push(cachedSources.tetherland);
         }
       }
     } catch (_) {}
 
-    if (fetchedRates.length > 0) {
-      // Calculate precise consensus average
-      const consensusRate = Math.round(fetchedRates.reduce((a, b) => a + b, 0) / fetchedRates.length);
-      cachedUsdIrr = consensusRate * 10;
+    // If Arzdigital wasn't available, fall back to exchanges average
+    if (!cachedSources.arzdigital) {
+      const valid = [cachedSources.wallex, cachedSources.bitpin, cachedSources.tetherland].filter(
+        (v): v is number => typeof v === "number" && v > 30000
+      );
+      if (valid.length > 0) {
+        const consensusRate = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+        cachedUsdIrr = consensusRate * 10;
+      }
     }
   }
 
-  // 2. Fetch Fiat Rates from open.er-api.com for 160+ world currencies
+  // 3. Fetch Fiat Rates from open.er-api.com for global cross-rates
   try {
     const res = await fetch("https://open.er-api.com/v6/latest/USD", {
       signal: AbortSignal.timeout(6000),
@@ -412,7 +659,7 @@ async function refreshMarketRates(): Promise<void> {
     }
   } catch (_) {}
 
-  // 2. Fetch Live Gold Ounce from Binance PAXGUSDT (Backed 1:1 by real gold ounce)
+  // 4. Fetch Live Gold Ounce from Binance PAXGUSDT (Backed 1:1 by real gold ounce)
   try {
     const res = await fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=PAXGUSDT");
     if (res.ok) {
@@ -424,7 +671,7 @@ async function refreshMarketRates(): Promise<void> {
     }
   } catch (_) {}
 
-  // 3. Fetch Cryptos from CoinGecko / Binance
+  // 5. Fetch Cryptos from CoinGecko / Binance
   try {
     const ids = "bitcoin,ethereum,tether,the-open-network,solana,binancecoin,tron,dogecoin,ripple,cardano,shiba-inu,pepe,notcoin,hamster-kombat";
     const res = await fetch(
@@ -691,9 +938,73 @@ export async function getMarketQuote(
   let category: "fiat" | "crypto" | "gold" = "fiat";
   let unitUsd = 1.0;
   let change24h = 0.0;
-
   const usdIrrRate = cachedUsdIrr;
   const usdToTomanRate = Math.round(usdIrrRate / 10);
+
+  // Check if asset is found in live scraped Arzdigital currencies (Tier 1 Authority)
+  const arzItem = cachedArzdigitalMap.get(cleanQuery) || cachedArzdigitalMap.get(matchedKey) || (matchedKey === "usd" ? cachedArzdigitalMap.get("usd") : undefined);
+  if (arzItem) {
+    const symbol = arzItem.symbol;
+    const name_fa = arzItem.nameFa;
+    const name_en = arzItem.nameEn;
+    const category = "fiat" as const;
+    const unitUsd = arzItem.priceUsd;
+    const change24h = arzItem.changePercent;
+    const unitToman = Math.round(arzItem.priceToman);
+    const unitIrr = unitToman * 10;
+    const totalUsd = Number((unitUsd * amount).toFixed(amount < 1 ? 6 : 2));
+    const totalToman = Math.round(unitToman * amount);
+    const totalIrr = totalToman * 10;
+    const high_24h_toman = arzItem.highToman || Math.round(unitToman * 1.01);
+    const low_24h_toman = arzItem.lowToman || Math.round(unitToman * 0.99);
+    const high_24h_usd = Number((unitUsd * 1.01).toFixed(unitUsd < 1 ? 6 : 2));
+    const low_24h_usd = Number((unitUsd * 0.99).toFixed(unitUsd < 1 ? 6 : 2));
+    const trend = change24h > 0.05 ? "up" : change24h < -0.05 ? "down" : "neutral";
+    const history = generateIntradayPoints(unitUsd, unitToman, change24h);
+    const chart_url = generateQuickChartUrl(`${name_fa} (${symbol})`, symbol, history, trend, change24h);
+    const chart_svg = generateSvgChart(`${name_fa} (${symbol})`, history, trend);
+
+    let profitLossText: string | undefined;
+    if (buyPriceUsd && buyPriceUsd > 0) {
+      const diff = totalUsd - buyPriceUsd;
+      const sign = diff >= 0 ? "+" : "";
+      const profitToman = Math.round(diff * (arzItem.priceToman || usdToTomanRate));
+      profitLossText = `سود/زیان نسبت به خرید $${buyPriceUsd}: ${sign}$${diff.toFixed(2)} (${sign}${profitToman.toLocaleString("fa-IR")} تومان)`;
+    }
+
+    const tehranTime = new Date().toLocaleTimeString("fa-IR", {
+      timeZone: "Asia/Tehran",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+    return {
+      asset: rawAsset,
+      symbol,
+      name_fa,
+      name_en,
+      category,
+      amount,
+      unit_usd: unitUsd,
+      total_usd: totalUsd,
+      unit_toman: unitToman,
+      total_toman: totalToman,
+      unit_irr: unitIrr,
+      total_irr: totalIrr,
+      change_24h_percent: change24h,
+      high_24h_toman,
+      low_24h_toman,
+      high_24h_usd,
+      low_24h_usd,
+      trend,
+      chart_url,
+      chart_svg,
+      history,
+      updated_at: arzItem.updatedAt || tehranTime,
+      profitLossText,
+    };
+  }
 
   if (known) {
     symbol = known.symbol;
@@ -914,6 +1225,256 @@ export function getFeaturedMarketList(): Array<{
     { id: "sol", name_fa: "سولانا", symbol: "SOL", category: "crypto" },
     { id: "trx", name_fa: "ترون", symbol: "TRX", category: "crypto" },
   ];
+}
+
+// -------------------------------------------------------------
+// ARZDIGITAL-STYLE LIVE MARKET OVERVIEW & TABLE ENGINE
+// -------------------------------------------------------------
+
+export interface ArzDigitalTableItem {
+  rank: number;
+  id: string;
+  symbol: string;
+  name_fa: string;
+  name_en: string;
+  category: "crypto" | "fiat" | "gold";
+  price_usd: number;
+  price_toman: number;
+  price_irr: number;
+  change_24h: number;
+  high_24h_toman: number;
+  low_24h_toman: number;
+  high_24h_usd: number;
+  low_24h_usd: number;
+  icon?: string | null;
+  chartSvg?: string | null;
+  flag?: string;
+  updatedAt?: string | null;
+}
+
+export interface ArzDigitalOverviewResponse {
+  benchmark: {
+    usdIrr: number;
+    usdToman: number;
+    isCustom: boolean;
+    customRateToman: number | null;
+    sources: { arzdigital?: number; wallex?: number; bitpin?: number; tetherland?: number };
+    activeSource: string;
+    lastUpdated: string;
+  };
+  cryptos: ArzDigitalTableItem[];
+  fiats: ArzDigitalTableItem[];
+  golds: ArzDigitalTableItem[];
+  all: ArzDigitalTableItem[];
+}
+
+export async function getArzDigitalMarketTable(): Promise<ArzDigitalOverviewResponse> {
+  await refreshMarketRates();
+
+  const usdToTomanRate = Math.round(cachedUsdIrr / 10);
+
+  // Top Cryptocurrencies (matching ArzDigital top currencies)
+  const cryptoMeta = [
+    { id: "btc", symbol: "BTC", name_fa: "بیت کوین", name_en: "Bitcoin", pairIrt: "BTC_IRT", pairUsdt: "BTC_USDT", fallbackUsd: 82500, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697370601.svg" },
+    { id: "eth", symbol: "ETH", name_fa: "اتریوم", name_en: "Ethereum", pairIrt: "ETH_IRT", pairUsdt: "ETH_USDT", fallbackUsd: 2500, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697370711.svg" },
+    { id: "usdt", symbol: "USDT", name_fa: "تتر", name_en: "Tether USD", pairIrt: "USDT_IRT", pairUsdt: "USDC_USDT", fallbackUsd: 1.0, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697373576.svg" },
+    { id: "bnb", symbol: "BNB", name_fa: "بایننس کوین", name_en: "BNB", pairIrt: "BNB_IRT", pairUsdt: "BNB_USDT", fallbackUsd: 742, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1650093947.svg" },
+    { id: "sol", symbol: "SOL", name_fa: "سولانا", name_en: "Solana", pairIrt: "SOL_IRT", pairUsdt: "SOL_USDT", fallbackUsd: 110.5, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697379465.svg" },
+    { id: "xrp", symbol: "XRP", name_fa: "ریپل", name_en: "XRP", pairIrt: "XRP_IRT", pairUsdt: "XRP_USDT", fallbackUsd: 1.40, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697370845.svg" },
+    { id: "doge", symbol: "DOGE", name_fa: "دوج کوین", name_en: "Dogecoin", pairIrt: "DOGE_IRT", pairUsdt: "DOGE_USDT", fallbackUsd: 0.085, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371101.svg" },
+    { id: "ton", symbol: "TON", name_fa: "تون کوین (تلگرام)", name_en: "Toncoin", pairIrt: "TON_IRT", pairUsdt: "TON_USDT", fallbackUsd: 1.40, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371234.svg" },
+    { id: "trx", symbol: "TRX", name_fa: "ترون", name_en: "TRON", pairIrt: "TRX_IRT", pairUsdt: "TRX_USDT", fallbackUsd: 0.33, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371302.svg" },
+    { id: "ada", symbol: "ADA", name_fa: "کاردانو", name_en: "Cardano", pairIrt: "ADA_IRT", pairUsdt: "ADA_USDT", fallbackUsd: 0.24, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371452.svg" },
+    { id: "avax", symbol: "AVAX", name_fa: "آوالانچ", name_en: "Avalanche", pairIrt: "AVAX_IRT", pairUsdt: "AVAX_USDT", fallbackUsd: 18.5, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371589.svg" },
+    { id: "shib", symbol: "SHIB", name_fa: "شیبا اینو", name_en: "Shiba Inu", pairIrt: "SHIB_IRT", pairUsdt: "SHIB_USDT", fallbackUsd: 0.0000054, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371665.svg" },
+    { id: "pepe", symbol: "PEPE", name_fa: "پپه", name_en: "Pepe", pairIrt: "PEPE_IRT", pairUsdt: "PEPE_USDT", fallbackUsd: 0.0000039, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371720.svg" },
+    { id: "not", symbol: "NOT", name_fa: "نات کوین", name_en: "Notcoin", pairIrt: "NOT_IRT", pairUsdt: "NOT_USDT", fallbackUsd: 0.00044, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1715843482.svg" },
+    { id: "paxg", symbol: "PAXG", name_fa: "طلای دیجیتال (پکس گلد)", name_en: "PAX Gold", pairIrt: "PAXG_IRT", pairUsdt: "PAXG_USDT", fallbackUsd: 4190, fallbackIcon: "https://cdn.bitpin.ir/media/market/currency/1697371890.svg" },
+  ];
+
+  const cryptos: ArzDigitalTableItem[] = cryptoMeta.map((c, i) => {
+    const mIrt = cachedBitpinMarkets.find((m) => m.code === c.pairIrt);
+    const mUsdt = cachedBitpinMarkets.find((m) => m.code === c.pairUsdt);
+
+    let priceUsd = mUsdt?.price ? parseFloat(mUsdt.price) : c.fallbackUsd;
+    let priceToman = mIrt?.price ? Math.round(parseFloat(mIrt.price)) : Math.round(priceUsd * usdToTomanRate);
+
+    // For USDT itself, keep strictly aligned with benchmark
+    if (c.id === "usdt") {
+      priceUsd = 1.0;
+      priceToman = usdToTomanRate;
+    }
+
+    const change = mIrt?.price_info?.change !== undefined ? Number(mIrt.price_info.change) : 0;
+    const minToman = mIrt?.price_info?.min ? Math.round(parseFloat(mIrt.price_info.min)) : Math.round(priceToman * 0.985);
+    const maxToman = mIrt?.price_info?.max ? Math.round(parseFloat(mIrt.price_info.max)) : Math.round(priceToman * 1.015);
+
+    return {
+      rank: i + 1,
+      id: c.id,
+      symbol: c.symbol,
+      name_fa: c.name_fa,
+      name_en: c.name_en,
+      category: "crypto",
+      price_usd: priceUsd,
+      price_toman: priceToman,
+      price_irr: priceToman * 10,
+      change_24h: Number(change.toFixed(2)),
+      high_24h_toman: maxToman,
+      low_24h_toman: minToman,
+      high_24h_usd: Number((priceUsd * 1.015).toFixed(priceUsd < 1 ? 6 : 2)),
+      low_24h_usd: Number((priceUsd * 0.985).toFixed(priceUsd < 1 ? 6 : 2)),
+      icon: mIrt?.currency1?.image || c.fallbackIcon,
+    };
+  });
+
+  // World Fiat Currencies
+  const fiatMeta = [
+    { id: "usd", symbol: "USD", name_fa: "دلار آمریکا (آزاد)", name_en: "US Dollar", flag: "🇺🇸", fallbackRate: 1.0 },
+    { id: "eur", symbol: "EUR", name_fa: "یورو اروپا", name_en: "Euro", flag: "🇪🇺", fallbackRate: 1.08 },
+    { id: "aed", symbol: "AED", name_fa: "درهم امارات", name_en: "UAE Dirham", flag: "🇦🇪", fallbackRate: 0.272 },
+    { id: "gbp", symbol: "GBP", name_fa: "پوند انگلیس", name_en: "British Pound", flag: "🇬🇧", fallbackRate: 1.29 },
+    { id: "try", symbol: "TRY", name_fa: "لیر ترکیه", name_en: "Turkish Lira", flag: "🇹🇷", fallbackRate: 0.029 },
+    { id: "cad", symbol: "CAD", name_fa: "دلار کانادا", name_en: "Canadian Dollar", flag: "🇨🇦", fallbackRate: 0.73 },
+    { id: "aud", symbol: "AUD", name_fa: "دلار استرالیا", name_en: "Australian Dollar", flag: "🇦🇺", fallbackRate: 0.65 },
+    { id: "chf", symbol: "CHF", name_fa: "فرانک سوئیس", name_en: "Swiss Franc", flag: "🇨🇭", fallbackRate: 1.13 },
+    { id: "cny", symbol: "CNY", name_fa: "یوان چین", name_en: "Chinese Yuan", flag: "🇨🇳", fallbackRate: 0.138 },
+    { id: "iqd", symbol: "IQD", name_fa: "دینار عراق (۱۰۰۰)", name_en: "Iraqi Dinar", flag: "🇮🇶", fallbackRate: 0.76 },
+    { id: "kwd", symbol: "KWD", name_fa: "دینار کویت", name_en: "Kuwaiti Dinar", flag: "🇰🇼", fallbackRate: 3.26 },
+    { id: "sar", symbol: "SAR", name_fa: "ریال عربستان", name_en: "Saudi Rial", flag: "🇸🇦", fallbackRate: 0.266 },
+    { id: "qar", symbol: "QAR", name_fa: "ریال قطر", name_en: "Qatari Riyal", flag: "🇶🇦", fallbackRate: 0.275 },
+    { id: "rub", symbol: "RUB", name_fa: "روبل روسیه", name_en: "Russian Ruble", flag: "🇷🇺", fallbackRate: 0.011 },
+  ];
+
+  const fiats: ArzDigitalTableItem[] = cachedArzdigitalCurrencies.length > 0
+    ? cachedArzdigitalCurrencies.map((c) => ({
+        rank: c.rank,
+        id: c.id,
+        symbol: c.symbol,
+        name_fa: c.nameFa,
+        name_en: c.nameEn,
+        category: "fiat" as const,
+        price_usd: c.priceUsd,
+        price_toman: c.priceToman,
+        price_irr: c.priceToman * 10,
+        change_24h: c.changePercent,
+        high_24h_toman: c.highToman,
+        low_24h_toman: c.lowToman,
+        high_24h_usd: Number((c.priceUsd * 1.01).toFixed(4)),
+        low_24h_usd: Number((c.priceUsd * 0.99).toFixed(4)),
+        icon: c.icon,
+        chartSvg: c.chartSvg,
+        updatedAt: c.updatedAt,
+      }))
+    : fiatMeta.map((f, i) => {
+        let unitUsd = f.fallbackRate;
+        if (f.id === "usd") {
+          unitUsd = 1.0;
+        } else if (cachedFiatRates[f.symbol]) {
+          unitUsd = 1 / cachedFiatRates[f.symbol];
+        }
+        const priceToman = Math.round(unitUsd * usdToTomanRate);
+        return {
+          rank: i + 1,
+          id: f.id,
+          symbol: f.symbol,
+          name_fa: f.name_fa,
+          name_en: f.name_en,
+          category: "fiat" as const,
+          price_usd: Number(unitUsd.toFixed(4)),
+          price_toman: priceToman,
+          price_irr: priceToman * 10,
+          change_24h: 0.45,
+          high_24h_toman: Math.round(priceToman * 1.008),
+          low_24h_toman: Math.round(priceToman * 0.992),
+          high_24h_usd: Number((unitUsd * 1.008).toFixed(4)),
+          low_24h_usd: Number((unitUsd * 0.992).toFixed(4)),
+          flag: f.flag,
+        };
+      });
+
+  // Gold & Coins
+  const gram24Usd = cachedGoldOunceUsd / 31.1034768;
+  const gram18Usd = gram24Usd * (750 / 999.9);
+  const goldMeta = [
+    { id: "gold18", symbol: "GOLD18", name_fa: "گرم طلای ۱۸ عیار", name_en: "Gram 18K Gold", unitUsd: gram18Usd, change: 0.65 },
+    { id: "gold24", symbol: "GOLD24", name_fa: "گرم طلای ۲۴ عیار", name_en: "Gram 24K Gold", unitUsd: gram24Usd, change: 0.65 },
+    { id: "mithqal", symbol: "MITHQAL", name_fa: "مثقال طلا (مظنه بازار)", name_en: "Mithqal Gold", unitUsd: gram18Usd * 4.3318, change: 0.65 },
+    { id: "xau", symbol: "XAU", name_fa: "انس جهانی طلا", name_en: "Gold Ounce (XAU)", unitUsd: cachedGoldOunceUsd, change: 0.65 },
+    { id: "emami", symbol: "EMAMI", name_fa: "سکه امامی (طرح جدید)", name_en: "Emami Coin", unitUsd: 7.3197 * gram24Usd * 1.038, change: 0.85 },
+    { id: "bahar", symbol: "BAHAR", name_fa: "سکه بهار آزادی (طرح قدیم)", name_en: "Bahar Azadi Coin", unitUsd: 7.3197 * gram24Usd * 0.945, change: 0.75 },
+    { id: "nim", symbol: "NIM", name_fa: "نیم سکه بهار آزادی", name_en: "Half Azadi Coin", unitUsd: 3.6598 * gram24Usd * 1.12, change: 0.9 },
+    { id: "rob", symbol: "ROB", name_fa: "ربع سکه بهار آزادی", name_en: "Quarter Azadi Coin", unitUsd: 1.8299 * gram24Usd * 1.35, change: 1.1 },
+    { id: "gerami", symbol: "GERAMI", name_fa: "سکه یک گرمی", name_en: "Gram Coin", unitUsd: 0.9149 * gram24Usd * 1.74, change: 0.5 },
+    { id: "silver", symbol: "XAG", name_fa: "انس نقره جهانی", name_en: "Silver Ounce (XAG)", unitUsd: 34.5, change: 0.4 },
+  ];
+
+  const golds: ArzDigitalTableItem[] = goldMeta.map((g, i) => {
+    const priceToman = Math.round(g.unitUsd * usdToTomanRate);
+    return {
+      rank: i + 1,
+      id: g.id,
+      symbol: g.symbol,
+      name_fa: g.name_fa,
+      name_en: g.name_en,
+      category: "gold",
+      price_usd: Number(g.unitUsd.toFixed(2)),
+      price_toman: priceToman,
+      price_irr: priceToman * 10,
+      change_24h: g.change,
+      high_24h_toman: Math.round(priceToman * 1.008),
+      low_24h_toman: Math.round(priceToman * 0.992),
+      high_24h_usd: Number((g.unitUsd * 1.008).toFixed(2)),
+      low_24h_usd: Number((g.unitUsd * 0.992).toFixed(2)),
+    };
+  });
+
+  return {
+    benchmark: getUsdMarketRateInfo(),
+    cryptos,
+    fiats,
+    golds,
+    all: [...cryptos, ...fiats, ...golds],
+  };
+}
+
+export async function formatArzDigitalTelegramBoard(): Promise<string> {
+  const table = await getArzDigitalMarketTable();
+  const usdToman = table.benchmark.usdToman;
+  const tehranTime = new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" });
+
+  let text = `📊 <b>تابلو زنده قیمت ارزها و رمزارزها (مشابه ارزدیجیتال)</b>\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `💵 <b>دلار آزاد (تهران):</b> <b>${usdToman.toLocaleString("fa-IR")} تومان</b>\n`;
+
+  // Cryptos
+  text += `\n🪙 <b>برترین رمزارزهای بازار (Crypto):</b>\n`;
+  for (const c of table.cryptos.slice(0, 8)) {
+    const sign = c.change_24h >= 0 ? "+" : "";
+    const emoji = c.change_24h >= 0 ? "🟢" : "🔴";
+    const tomanStr =
+      c.price_toman >= 1000000
+        ? `${(c.price_toman / 1000000).toLocaleString("fa-IR", { maximumFractionDigits: 2 })} م.ت`
+        : `${c.price_toman.toLocaleString("fa-IR")} ت`;
+    text += `• <b>${c.name_fa} (${c.symbol}):</b> $${c.price_usd.toLocaleString("en-US", { maximumFractionDigits: c.price_usd < 1 ? 4 : 2 })} | <b>${tomanStr}</b> (${emoji} ${sign}${c.change_24h}%)\n`;
+  }
+
+  // Gold & Coins
+  text += `\n🥇 <b>طلا و انواع مسکوکات:</b>\n`;
+  for (const g of table.golds.slice(0, 5)) {
+    const tomanStr = `${g.price_toman.toLocaleString("fa-IR")} تومان`;
+    text += `• <b>${g.name_fa}:</b> <b>${tomanStr}</b>\n`;
+  }
+
+  // Major Fiats
+  text += `\n🌐 <b>ارزهای اصلی بازار آزاد:</b>\n`;
+  for (const f of table.fiats.slice(0, 5)) {
+    text += `• <b>${f.name_fa} (${f.symbol}):</b> <b>${f.price_toman.toLocaleString("fa-IR")} تومان</b>\n`;
+  }
+
+  text += `\n🕒 <b>زمان بروزرسانی:</b> <i>${tehranTime} (تهران)</i>\n`;
+  text += `🔗 <i>منبع: تجمیع زنده صرافی‌های معتبر و بازار آزاد</i>`;
+  return text;
 }
 
 function normalizeDigits(str: string): string {

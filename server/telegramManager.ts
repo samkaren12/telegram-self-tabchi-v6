@@ -255,6 +255,8 @@ import {
   fetchChartImageBuffer,
   getUsdMarketRateInfo,
   setCustomUsdRate,
+  getArzDigitalMarketTable,
+  formatArzDigitalTelegramBoard,
 } from "./marketService";
 import { translateText } from "./translationService";
 
@@ -266,6 +268,8 @@ export {
   fetchChartImageBuffer,
   getUsdMarketRateInfo,
   setCustomUsdRate,
+  getArzDigitalMarketTable,
+  formatArzDigitalTelegramBoard,
 };
 
 export { formatTehranTime, getTehranTimeParts };

@@ -708,7 +708,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
       {/* SUB-TABS NAVIGATION */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800/80">
         {[
-          { id: "cosmic", label: lang === "fa" ? "سلف ساز کازمیک پرو 🚀" : "Cosmic Arsenal", icon: Flame, color: "text-amber-400" },
+          { id: "cosmic", label: lang === "fa" ? "سلف ساز سام‌کارن پرو (Samkaren Pro) 🚀" : "Samkaren Pro Arsenal", icon: Flame, color: "text-amber-400" },
           { id: "clock", label: t.self.tabs.clock, icon: Clock, color: "text-cyan-400" },
           { id: "lockPv", label: lang === "fa" ? "قفل پیوی 🔒" : "Lock PV", icon: ShieldAlert, color: "text-rose-400" },
           { id: "mediaSaver", label: lang === "fa" ? "ذخیره‌ساز رسانه و تایم‌دار 📸" : "Media Saver", icon: Camera, color: "text-emerald-400" },

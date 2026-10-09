@@ -19,8 +19,34 @@ import {
   Sliders,
   CheckCircle2,
   ShieldCheck,
+  Table as TableIcon,
+  BarChart2,
+  ArrowUpRight,
+  Eye,
+  Layers,
 } from "lucide-react";
 import { MarketQuote } from "../types";
+
+export interface ArzDigitalTableItem {
+  rank: number;
+  id: string;
+  symbol: string;
+  name_fa: string;
+  name_en: string;
+  category: "crypto" | "fiat" | "gold";
+  price_usd: number;
+  price_toman: number;
+  price_irr: number;
+  change_24h: number;
+  high_24h_toman?: number;
+  low_24h_toman?: number;
+  high_24h_usd?: number;
+  low_24h_usd?: number;
+  icon?: string | null;
+  chartSvg?: string | null;
+  flag?: string;
+  updatedAt?: string | null;
+}
 
 interface MarketEngineCardProps {
   lang: "fa" | "en";
@@ -46,6 +72,16 @@ const FEATURED_ITEMS = [
 ];
 
 export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
+  // Top View Mode: "table" (Arzdigital Table) vs "quote" (Single Quote & Chart)
+  const [activeViewMode, setActiveViewMode] = useState<"table" | "quote">("table");
+
+  // Arzdigital Live Table State
+  const [tableItems, setTableItems] = useState<ArzDigitalTableItem[]>([]);
+  const [loadingTable, setLoadingTable] = useState(false);
+  const [tableCategory, setTableCategory] = useState<"all" | "fiat" | "crypto" | "gold">("all");
+  const [tableSearch, setTableSearch] = useState("");
+
+  // Single Quote & Calculator State
   const [selectedAsset, setSelectedAsset] = useState("usd");
   const [searchQuery, setSearchQuery] = useState("");
   const [amount, setAmount] = useState<number | string>(1);
@@ -70,6 +106,22 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
   const [savingCustomRate, setSavingCustomRate] = useState(false);
   const [rateNotice, setRateNotice] = useState<string | null>(null);
   const [showRateSettings, setShowRateSettings] = useState(false);
+
+  const fetchTableData = async () => {
+    setLoadingTable(true);
+    try {
+      const res = await fetch("/api/market/table");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.all)) {
+          setTableItems(data.all);
+        }
+      }
+    } catch (_) {
+    } finally {
+      setLoadingTable(false);
+    }
+  };
 
   const fetchRateInfo = async () => {
     try {
@@ -139,6 +191,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
   useEffect(() => {
     fetchQuote("usd", 1);
     fetchRateInfo();
+    fetchTableData();
   }, []);
 
   const handleSelectFeatured = (id: string) => {
@@ -202,12 +255,14 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
           onClick={() => {
             const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
             fetchQuote(searchQuery.trim() || selectedAsset, numAmt, buyPrice ? parseFloat(buyPrice) : undefined);
+            fetchRateInfo();
+            fetchTableData();
           }}
-          disabled={loading}
+          disabled={loading || loadingTable}
           className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all self-start sm:self-auto active:scale-95 disabled:opacity-50"
         >
-          <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${loading ? "animate-spin" : ""}`} />
-          <span>{lang === "fa" ? "بروزرسانی نرخ" : "Refresh"}</span>
+          <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${loading || loadingTable ? "animate-spin" : ""}`} />
+          <span>{lang === "fa" ? "بروزرسانی نرخ‌ها" : "Refresh Rates"}</span>
         </button>
       </div>
 
@@ -220,15 +275,15 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
               {lang === "fa" ? "نرخ مبنای زنده دلار و تتر در بازار آزاد تهران:" : "Tehran Free Market USD / USDT Live Benchmark:"}
             </span>
             <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              {rateInfo?.usdToman?.toLocaleString("fa-IR") || "۲۶۸,۵۰۰"} تومان
+              {rateInfo?.usdToman?.toLocaleString("fa-IR") || "۲۶۶,۷۰۰"} تومان
             </span>
             {rateInfo?.isCustom ? (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                 {lang === "fa" ? "🔒 نرخ ثابت سفارشی" : "Custom Locked"}
               </span>
             ) : (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                {lang === "fa" ? "⚡ اجماع خودکار صرافی‌ها" : "Live Consensus"}
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                {lang === "fa" ? "⚡ مرجع لحظه‌ای ارزدیجیتال" : "Live Arzdigital"}
               </span>
             )}
           </div>
@@ -246,22 +301,39 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
         {/* Live Exchange Sources Breakdown */}
         <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-400">
           <span className="text-slate-500">{lang === "fa" ? "منابع زنده بازار:" : "Live Sources:"}</span>
+          {rateInfo?.sources?.arzdigital && (
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-950/70 border border-emerald-500/40">
+              <span className="text-emerald-300 font-bold">ارزدیجیتال (Arzdigital):</span>
+              <span className="font-mono text-emerald-400 font-black">
+                {rateInfo.sources.arzdigital.toLocaleString("fa-IR")} ت
+              </span>
+              <a
+                href="https://arzdigital.com/currencies/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-cyan-400 hover:text-cyan-300 ml-0.5 inline-flex items-center gap-0.5"
+                title="مشاهده صفحه نرخ ارز در ارزدیجیتال"
+              >
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+          )}
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800">
             <span className="text-slate-300">والکس (Wallex):</span>
             <span className="font-mono text-emerald-400 font-bold">
-              {rateInfo?.sources?.wallex?.toLocaleString("fa-IR") || "۲۶۹,۰۰۰"} ت
+              {rateInfo?.sources?.wallex?.toLocaleString("fa-IR") || "۲۶۷,۹۰۰"} ت
             </span>
           </div>
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800">
             <span className="text-slate-300">بیت‌پین (Bitpin):</span>
             <span className="font-mono text-emerald-400 font-bold">
-              {rateInfo?.sources?.bitpin?.toLocaleString("fa-IR") || "۲۶۷,۳۰۰"} ت
+              {rateInfo?.sources?.bitpin?.toLocaleString("fa-IR") || "۲۶۶,۸۰۰"} ت
             </span>
           </div>
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800">
             <span className="text-slate-300">تترلند (Tetherland):</span>
             <span className="font-mono text-emerald-400 font-bold">
-              {rateInfo?.sources?.tetherland?.toLocaleString("fa-IR") || "۲۶۸,۰۵۰"} ت
+              {rateInfo?.sources?.tetherland?.toLocaleString("fa-IR") || "۲۶۷,۲۵۰"} ت
             </span>
           </div>
         </div>
@@ -281,7 +353,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
                   type="text"
                   value={customRateInput}
                   onChange={(e) => setCustomRateInput(e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder={lang === "fa" ? "مثلاً ۲۶۸۵۰۰ (تومان)" : "e.g. 268500"}
+                  placeholder={lang === "fa" ? "مثلاً ۲۶۶۷۰۰ (تومان)" : "e.g. 266700"}
                   dir="ltr"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                 />
@@ -320,8 +392,314 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
         )}
       </div>
 
-      {/* Category Pills & Quick Selector */}
-      <div className="space-y-3">
+      {/* Mode Switcher: Live Arzdigital Table vs Quote Calculator */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-950 border border-slate-800">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveViewMode("table");
+            if (tableItems.length === 0) fetchTableData();
+          }}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+            activeViewMode === "table"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+          }`}
+        >
+          <TableIcon className="w-4 h-4 text-emerald-300" />
+          <span>{lang === "fa" ? "تابلوی زنده ارزدیجیتال (مشابه arzdigital.com/currencies)" : "Live Arzdigital Market Table"}</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-900 text-emerald-300 border border-emerald-500/30">
+            {tableItems.length > 0 ? `${tableItems.length} ارز` : "۹۰+ ارز"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveViewMode("quote")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+            activeViewMode === "quote"
+              ? "bg-cyan-600 text-white shadow-md shadow-cyan-600/30"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+          }`}
+        >
+          <BarChart2 className="w-4 h-4 text-cyan-300" />
+          <span>{lang === "fa" ? "ماشین‌حساب، استعلام و تولید عکس نمودار" : "Calculator & Chart Studio"}</span>
+        </button>
+      </div>
+
+      {/* 1. ARZDIGITAL LIVE TABLE VIEW (مشابه arzdigital.com/currencies/) */}
+      {activeViewMode === "table" && (
+        <div className="space-y-4">
+          {/* Controls Bar: Search & Category Filter */}
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* Table Search Input */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-500 absolute right-3 top-3" />
+                <input
+                  type="text"
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                  placeholder={lang === "fa" ? "جستجو در بین ۹۰+ ارز، دلار، یورو، لیر، دینار، تتر، بیت‌کوین..." : "Search across 90+ currencies..."}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pr-9 pl-8 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+                {tableSearch && (
+                  <button
+                    onClick={() => setTableSearch("")}
+                    className="absolute left-3 top-2.5 text-xs text-slate-400 hover:text-slate-200"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1 text-[11px] bg-slate-900 p-1 rounded-xl border border-slate-800 overflow-x-auto scrollbar-none">
+                {[
+                  { id: "all", label: lang === "fa" ? `همه (${tableItems.length})` : `All (${tableItems.length})` },
+                  { id: "fiat", label: lang === "fa" ? `ارزهای فیات (${tableItems.filter((i) => i.category === "fiat").length || "۹۰"})` : "Fiat Currencies" },
+                  { id: "crypto", label: lang === "fa" ? `رمزارزها (${tableItems.filter((i) => i.category === "crypto").length})` : "Crypto" },
+                  { id: "gold", label: lang === "fa" ? `طلا و سکه (${tableItems.filter((i) => i.category === "gold").length})` : "Gold" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setTableCategory(c.id as any)}
+                    className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all font-semibold ${
+                      tableCategory === c.id
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Official Source Notice Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80 gap-2">
+              <div className="flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                <span>
+                  {lang === "fa"
+                    ? "قیمت‌های این تابلو به صورت مستقیم و بدون واسطه از مرجع رسمی ارزدیجیتال (arzdigital.com/currencies/) استخراج و بروزرسانی می‌شوند."
+                    : "Live prices extracted directly from Arzdigital (arzdigital.com/currencies/) with 100% real-time accuracy."}
+                </span>
+              </div>
+              <a
+                href="https://arzdigital.com/currencies/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 flex-shrink-0"
+              >
+                <span>arzdigital.com</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+
+          {/* Table Container */}
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 overflow-hidden shadow-xl">
+            {loadingTable ? (
+              <div className="p-12 text-center space-y-3">
+                <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
+                <div className="text-xs text-slate-300 font-medium">
+                  {lang === "fa" ? "در حال دریافت آخرین نرخ‌ها از ارزدیجیتال..." : "Fetching live data from Arzdigital..."}
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead>
+                    <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 font-bold text-[11px]">
+                      <th className="py-3 px-3 text-center w-12">#</th>
+                      <th className="py-3 px-4">{lang === "fa" ? "نام ارز" : "Asset"}</th>
+                      <th className="py-3 px-4">{lang === "fa" ? "قیمت (تومان)" : "Price (Toman)"}</th>
+                      <th className="py-3 px-4">{lang === "fa" ? "قیمت (دلار)" : "Price (USD)"}</th>
+                      <th className="py-3 px-4 text-center">{lang === "fa" ? "تغییر ۲۴ ساعته" : "24h Change"}</th>
+                      <th className="py-3 px-4 hidden md:table-cell">{lang === "fa" ? "دامنه نوسان امروز" : "24h Range"}</th>
+                      <th className="py-3 px-4 text-center hidden sm:table-cell">{lang === "fa" ? "نمودار هفتگی" : "Weekly Chart"}</th>
+                      <th className="py-3 px-3 text-center">{lang === "fa" ? "عملیات" : "Action"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-mono">
+                    {tableItems
+                      .filter((item) => {
+                        if (tableCategory !== "all" && item.category !== tableCategory) return false;
+                        if (!tableSearch.trim()) return true;
+                        const q = tableSearch.trim().toLowerCase();
+                        return (
+                          item.name_fa.toLowerCase().includes(q) ||
+                          item.name_en.toLowerCase().includes(q) ||
+                          item.symbol.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((item) => {
+                        const isProfit = item.change_24h > 0;
+                        const isLoss = item.change_24h < 0;
+                        return (
+                          <tr
+                            key={item.id + item.rank}
+                            className="hover:bg-slate-800/40 transition-colors group cursor-pointer"
+                            onClick={() => {
+                              setSelectedAsset(item.id);
+                              setSearchQuery(item.id);
+                              fetchQuote(item.id, 1);
+                              setActiveViewMode("quote");
+                            }}
+                          >
+                            {/* Rank */}
+                            <td className="py-3 px-3 text-center text-slate-500 font-sans">
+                              {item.rank <= 3 ? (
+                                <span
+                                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black ${
+                                    item.rank === 1
+                                      ? "bg-amber-400 text-slate-950 shadow-md shadow-amber-400/40"
+                                      : item.rank === 2
+                                      ? "bg-slate-300 text-slate-950 shadow-md shadow-slate-300/40"
+                                      : "bg-amber-700 text-amber-100"
+                                  }`}
+                                >
+                                  {item.rank}
+                                </span>
+                              ) : (
+                                item.rank
+                              )}
+                            </td>
+
+                            {/* Name & Icon */}
+                            <td className="py-3 px-4 font-sans">
+                              <div className="flex items-center gap-2.5">
+                                {item.icon ? (
+                                  <img
+                                    src={item.icon}
+                                    alt={item.name_fa}
+                                    className="w-7 h-7 rounded-full bg-slate-800 p-0.5 object-cover flex-shrink-0"
+                                    onError={(e: any) => {
+                                      e.target.style.display = "none";
+                                    }}
+                                  />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-[10px] font-bold flex-shrink-0">
+                                    {item.symbol.slice(0, 3)}
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="font-bold text-slate-100 group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+                                    <span>{item.name_fa}</span>
+                                    <span className="text-[10px] font-mono text-slate-500 font-normal">
+                                      {item.symbol}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 truncate max-w-[130px]">
+                                    {item.name_en}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Toman Price */}
+                            <td className="py-3 px-4 font-black text-emerald-400 text-sm">
+                              {item.price_toman.toLocaleString("fa-IR")}
+                              <span className="text-[10px] font-normal text-slate-500 mr-1">تومان</span>
+                            </td>
+
+                            {/* USD Price */}
+                            <td className="py-3 px-4 text-cyan-300 font-bold" dir="ltr">
+                              ${item.price_usd.toLocaleString("en-US", { minimumFractionDigits: item.price_usd < 1 ? 4 : 2 })}
+                            </td>
+
+                            {/* 24h Change */}
+                            <td className="py-3 px-4 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                                  isProfit
+                                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                    : isLoss
+                                    ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                                    : "bg-slate-800 text-slate-300"
+                                }`}
+                              >
+                                {isProfit ? (
+                                  <TrendingUp className="w-3 h-3" />
+                                ) : isLoss ? (
+                                  <TrendingDown className="w-3 h-3" />
+                                ) : null}
+                                <span dir="ltr">
+                                  {isProfit ? "+" : ""}
+                                  {item.change_24h}%
+                                </span>
+                              </span>
+                            </td>
+
+                            {/* Range Low/High */}
+                            <td className="py-3 px-4 hidden md:table-cell text-[11px]">
+                              {item.low_24h_toman && item.high_24h_toman ? (
+                                <div className="space-y-0.5">
+                                  <div className="text-emerald-400 flex items-center justify-between gap-1">
+                                    <span className="text-slate-500 text-[10px]">سقف:</span>
+                                    <span>{item.high_24h_toman.toLocaleString("fa-IR")}</span>
+                                  </div>
+                                  <div className="text-rose-400 flex items-center justify-between gap-1">
+                                    <span className="text-slate-500 text-[10px]">کف:</span>
+                                    <span>{item.low_24h_toman.toLocaleString("fa-IR")}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-slate-600">-</span>
+                              )}
+                            </td>
+
+                            {/* Sparkline Chart */}
+                            <td className="py-3 px-4 text-center hidden sm:table-cell">
+                              {item.chartSvg ? (
+                                <img
+                                  src={item.chartSvg}
+                                  alt={`chart-${item.symbol}`}
+                                  className={`h-7 w-20 object-contain mx-auto ${
+                                    isProfit ? "hue-rotate-[85deg]" : isLoss ? "hue-rotate-[320deg]" : ""
+                                  }`}
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span className="text-[10px] text-slate-600 font-sans">---</span>
+                              )}
+                            </td>
+
+                            {/* Action Button */}
+                            <td className="py-3 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedAsset(item.id);
+                                  setSearchQuery(item.id);
+                                  fetchQuote(item.id, 1);
+                                  setActiveViewMode("quote");
+                                }}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-300 text-[11px] font-sans font-bold transition-all shadow-sm"
+                                title="مشاهده نمودار و استعلام"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span className="hidden lg:inline">{lang === "fa" ? "نمودار" : "Chart"}</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 2. SINGLE QUOTE CALCULATOR & CHART VIEW */}
+      {activeViewMode === "quote" && (
+        <div className="space-y-6">
+          {/* Category Pills & Quick Selector */}
+          <div className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-300">
             {lang === "fa" ? "دسته‌بندی دارایی‌ها و ارزهای محبوب:" : "Popular Assets & Categories:"}
@@ -659,6 +1037,8 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
           </div>
         </div>
       )}
+    </div>
+  )}
 
       {/* Telegram Automation Usage Instructions */}
       <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">

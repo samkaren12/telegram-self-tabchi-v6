@@ -13,6 +13,7 @@ import {
   getFeaturedMarketList,
   getUsdMarketRateInfo,
   setCustomUsdRate,
+  getArzDigitalMarketTable,
 } from "./server/telegramManager.js";
 import { storeBotManager } from "./server/storeBotManager.js";
 import { supportBotManager } from "./server/supportBotManager.js";
@@ -1726,6 +1727,16 @@ async function startServer() {
   // Featured market items list for quick exploration
   app.get("/api/market/featured", (_req, res) => {
     return res.json({ success: true, items: getFeaturedMarketList() });
+  });
+
+  // ArzDigital-Style Live Currency & Crypto Market Table
+  app.get("/api/market/table", async (_req, res) => {
+    try {
+      const data = await getArzDigitalMarketTable();
+      return res.json({ success: true, ...data });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
   });
 
   // Real-time market benchmark info & source comparison
