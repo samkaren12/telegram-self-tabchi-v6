@@ -1477,7 +1477,7 @@ export async function formatArzDigitalTelegramBoard(): Promise<string> {
   return text;
 }
 
-function normalizeDigits(str: string): string {
+export function normalizeDigits(str: string): string {
   const faDigits = "۰۱۲۳۴۵۶۷۸۹";
   const enDigits = "0123456789";
   return str.replace(/[۰-۹]/g, (char) => {
@@ -1641,10 +1641,10 @@ export function parseCurrencyConversionQuery(text: string): {
 
   // Known currency tokens pattern
   const assetPattern =
-    "(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|تومان|تومن|ریال|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)";
+    "(usd|usdt|tether|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|تتر|تتر ترون|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|تومان|تومن|ریال|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)";
 
   // Pattern 1: [amount] [from] [to] تبدیل کن / [amount] [from] به [to]
-  // e.g. "۲ دلار ترون تبدیل کن" or "۲ دلار به ترون"
+  // e.g. "۲ دلار ترون تبدیل کن" or "۲ دلار به ترون" or "۵۰۰ تتر به تومان"
   const regex1 = new RegExp(
     `(?:تبدیل\\s+)?(?:${amountMatch ? amountMatch[1] : "\\d+"})?\\s*${assetPattern}\\s+(?:به\\s+|to\\s+)?${assetPattern}`,
     "i"

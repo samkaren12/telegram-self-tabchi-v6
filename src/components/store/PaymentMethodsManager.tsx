@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Wallet,
   Landmark,
+  Star,
+  Sparkles,
 } from "lucide-react";
 import {
   StorePaymentSettings,
@@ -498,6 +500,110 @@ export function PaymentMethodsManager({
               </div>
             </div>
           ))}
+        </div>
+      {/* 3. TELEGRAM STARS (استارز تلگرام) SECTION */}
+      <div className="space-y-4 pt-4 border-t border-slate-800/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center">
+              <Star className="w-5 h-5 fill-amber-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">درگاه کسر آنی تلگرام استارز (Telegram Stars)</h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  تحویل فوری
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                مشتریان با کلیک بر روی دکمه استارز، ستاره‌های تلگرام را پرداخت می‌کنند؛ استارز از حسابشان کسر و به ما واریز شده و اشتراک آنی تحویل داده می‌شود.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 self-end sm:self-auto">
+            <button
+              onClick={() => {
+                const currentStars = payments.starsPayment || {
+                  enabled: true,
+                  starsPerToman: 2000,
+                  priceMultiplier: 1.0,
+                  description: "پرداخت آنی و مستقیم با کسر ستاره‌های تلگرام (Telegram Stars)",
+                };
+                const updated = {
+                  ...payments,
+                  starsPayment: {
+                    ...currentStars,
+                    enabled: !currentStars.enabled,
+                  },
+                };
+                onUpdatePayments(updated);
+                showToast("success", !currentStars.enabled ? "درگاه پرداخت استارز فعال شد." : "درگاه پرداخت استارز غیرفعال شد.");
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                payments.starsPayment?.enabled !== false
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : "bg-slate-800 text-slate-400 border-slate-700"
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${payments.starsPayment?.enabled !== false ? "bg-amber-400" : "bg-slate-500"}`}></span>
+              <span>{payments.starsPayment?.enabled !== false ? "فعال در ربات فروشگاه" : "غیرفعال"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-amber-950/20 via-slate-900 to-slate-950 border border-amber-500/30 rounded-2xl p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                نرخ تبدیل هر ستاره به تومان (Stars Rate):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={100}
+                  step={100}
+                  value={payments.starsPayment?.starsPerToman || 2000}
+                  onChange={(e) => {
+                    const val = Number(e.target.value) || 2000;
+                    onUpdatePayments({
+                      ...payments,
+                      starsPayment: {
+                        ...(payments.starsPayment || { enabled: true }),
+                        starsPerToman: val,
+                      },
+                    });
+                  }}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-amber-300 w-36 outline-none focus:border-amber-500"
+                  dir="ltr"
+                />
+                <span className="text-xs text-slate-400">تومان به ازای هر ۱ استارز ⭐</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                مثال: با نرخ ۲۰۰۰ تومان، یک پلن ۹۹,۰۰۰ تومانی معادل ۵۰ استارز از کاربر کسر خواهد شد.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-300 block mb-1">
+                توضیحات دکمه استارز در ربات:
+              </label>
+              <input
+                type="text"
+                value={payments.starsPayment?.description || "پرداخت آنی و مستقیم با کسر ستاره‌های تلگرام (Telegram Stars)"}
+                onChange={(e) => {
+                  onUpdatePayments({
+                    ...payments,
+                    starsPayment: {
+                      ...(payments.starsPayment || { enabled: true }),
+                      description: e.target.value,
+                    },
+                  });
+                }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
         </div>
       </div>
 

@@ -227,6 +227,12 @@ export function defaultStoreData(): StoreData {
       generalInstructions:
         "پس از انتقال ارز، کد پیگیری هش تراکنش (TXID / Transaction Hash) را در ربات ارسال نمایید تا به سرعت تأیید شود.",
     },
+    starsPayment: {
+      enabled: true,
+      starsPerToman: 2000, // Every 2000 toman = 1 Telegram Star
+      priceMultiplier: 1.0,
+      description: "پرداخت آنی و مستقیم با کسر ستاره‌های تلگرام (Telegram Stars)",
+    },
   };
 
   const defaultBotSettings: StoreBotSettings = {
@@ -411,6 +417,7 @@ export class StoreBotManager {
             cardPayment: { ...defaults.payments.cardPayment, ...(parsed.payments?.cardPayment || {}) },
             cards: Array.isArray(parsed.payments?.cards) && parsed.payments.cards.length > 0 ? parsed.payments.cards : defaults.payments.cards || [],
             cryptoPayment: { ...defaults.payments.cryptoPayment, ...(parsed.payments?.cryptoPayment || {}) },
+            starsPayment: { ...defaults.payments.starsPayment, ...(parsed.payments?.starsPayment || {}) },
           },
           orders: Array.isArray(parsed.orders) ? parsed.orders : [],
           coupons: Array.isArray(parsed.coupons) ? parsed.coupons : defaults.coupons,
@@ -520,7 +527,9 @@ export class StoreBotManager {
     if (!token) return { valid: false, error: "توکن ربات ارائه نشده است." };
 
     try {
-      const res = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const res = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
+        signal: AbortSignal.timeout(6000),
+      });
       const json: any = await res.json();
       if (json.ok && json.result) {
         return {
@@ -608,7 +617,7 @@ export class StoreBotManager {
       try {
         const url = `https://api.telegram.org/bot${this.data.settings.botToken}/getUpdates?offset=${
           this.lastUpdateId + 1
-        }&timeout=20&allowed_updates=["message","callback_query"]`;
+        }&timeout=20&allowed_updates=["message","callback_query","pre_checkout_query"]`;
 
         const res = await fetch(url, { signal: this.pollAbortController?.signal });
         const json: any = await res.json();
@@ -1161,6 +1170,15 @@ export class StoreBotManager {
     } else if (data.startsWith("plan_details_")) {
       const planId = data.replace("plan_details_", "");
       await this.sendPlanDetails(chatId, planId);
+    } else if (data.startsWith("pay_stars_")) {
+      const planId = data.replace("pay_stars_", "");
+      await this.initiateStarsPayment(chatId, planId, user);
+    } else if (data.startsWith("confirm_pay_stars_")) {
+      // format: confirm_pay_stars_<planId>_<starsCount>
+      const parts = data.replace("confirm_pay_stars_", "").split("_");
+      const planId = parts[0];
+      const starsCount = parseInt(parts[1], 10) || 5;
+      await this.confirmStarsPayment(chatId, planId, starsCount, user);
     } else if (data.startsWith("pay_card_")) {
       const planId = data.replace("pay_card_", "");
       await this.initiateCardPayment(chatId, planId);
@@ -1271,6 +1289,9 @@ export class StoreBotManager {
     const durationText = plan.isUnlimited ? "♾️ دائمی و نامحدود" : `⏳ ${plan.durationDays} روزه`;
     const featuresList = plan.features.map((f) => `  ✓ ${f}`).join("\n");
 
+    const starsPerToman = this.data.payments.starsPayment?.starsPerToman || 2000;
+    const planStars = Math.max(1, Math.round(plan.priceToman / starsPerToman));
+
     const message =
       `🏷️ *${plan.title}*\n` +
       `🎗️ وضعیت: ${plan.badge || "VIP"}\n` +
@@ -1278,10 +1299,19 @@ export class StoreBotManager {
       `📝 *توضیحات:*\n${plan.description}\n\n` +
       `✨ *امکانات و قابلیت‌ها:*\n${featuresList}\n\n` +
       `💰 *قیمت به تومان:* ${plan.priceToman.toLocaleString("fa-IR")} تومان\n` +
-      `🌐 *قیمت ارزی:* ${plan.priceUsdt} USDT (تتر)\n\n` +
+      `🌐 *قیمت ارزی:* ${plan.priceUsdt} USDT (تتر)\n` +
+      `⭐ *قیمت با استارز:* *${planStars} ستاره (Telegram Stars)*\n\n` +
       `لطفاً نحوه پرداخت مورد نظر خود را انتخاب نمایید:`;
 
     const buttons: any[] = [];
+    if (this.data.payments.starsPayment?.enabled !== false) {
+      buttons.push([
+        {
+          text: `⭐ کسر ${planStars} استارز و فعال‌سازی فوری`,
+          callback_data: `pay_stars_${plan.id}`,
+        },
+      ]);
+    }
     if (this.data.payments.cardPayment.enabled) {
       buttons.push([
         {
@@ -1427,6 +1457,131 @@ export class StoreBotManager {
         inline_keyboard: [[{ text: "❌ انصراف و بازگشت", callback_data: "main_menu" }]],
       },
     });
+  }
+
+  public async initiateStarsPayment(chatId: number | string, planId: string, user: any) {
+    const plan = this.data.plans.find((p) => p.id === planId);
+    if (!plan) return;
+
+    const starsPerToman = this.data.payments.starsPayment?.starsPerToman || 2000;
+    const requiredStars = Math.max(1, Math.round(plan.priceToman / starsPerToman));
+
+    const invoiceMessage =
+      `⭐ *پرداخت رسمی با تلگرام استارز (Telegram Stars)*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📦 *محصول انتخابی:* ${plan.title}\n` +
+      `⏱️ *مدت اعتبار:* ${plan.isUnlimited ? "♾️ دائمی و نامحدود" : `${plan.durationDays} روزه`}\n` +
+      `⭐ *تعداد ستاره‌های مورد نیاز:* *${requiredStars} استارز*\n` +
+      `💰 *معادل تومانی:* ${plan.priceToman.toLocaleString("fa-IR")} تومان\n` +
+      `👤 *حساب خریدار:* ${user.first_name || "کاربر"} (@${user.username || "ندارد"})\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💡 با کلیک بر روی دکمه زیر، تعداد *${requiredStars} ستاره* از حساب تلگرام شما کسر شده و اشتراک سرور شما *به صورت آنی و خودکار* فعال و لایسنس تحویل داده خواهد شد:`;
+
+    const buttons: any[] = [
+      [
+        {
+          text: `⭐ تایید و پرداخت ${requiredStars} استارز`,
+          callback_data: `confirm_pay_stars_${plan.id}_${requiredStars}`,
+        },
+      ],
+      [{ text: "🔙 بازگشت به مشخصات پلن", callback_data: `plan_details_${plan.id}` }],
+      [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+    ];
+
+    await this.sendMessage(chatId, invoiceMessage, {
+      parse_mode: "Markdown",
+      reply_markup: { inline_keyboard: buttons },
+    });
+  }
+
+  public async confirmStarsPayment(chatId: number | string, planId: string, starsCount: number, user: any) {
+    const plan = this.data.plans.find((p) => p.id === planId);
+    if (!plan) return;
+
+    const orderId = `STR-${Math.floor(1000 + Math.random() * 9000)}`;
+    const licenseCode = `LIC-${plan.category.toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    const newOrder: StoreOrder = {
+      id: orderId,
+      planId: plan.id,
+      planTitle: plan.title,
+      category: plan.category,
+      durationDays: plan.durationDays,
+      isUnlimited: plan.isUnlimited,
+      userId: user.id,
+      userUsername: user.username,
+      userFirstName: user.first_name,
+      priceToman: plan.priceToman,
+      priceUsdt: plan.priceUsdt,
+      discountAmount: 0,
+      finalPriceToman: plan.priceToman,
+      finalPriceUsdt: plan.priceUsdt,
+      paymentMethod: "crypto",
+      paymentDetails: {
+        cryptoNetwork: "Telegram Stars ⭐",
+        receiptProof: `کسر مستقیم ${starsCount} استارز تلگرام`,
+        receiptType: "txid",
+      },
+      status: "approved",
+      createdAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+      generatedCredentials: {
+        licenseCode,
+        portalUrl: "https://ais-dev-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app",
+        notes: `پرداخت با ${starsCount} ستاره تلگرام انجام شد. اشتراک فعال است.`,
+      },
+    };
+
+    this.data.orders.unshift(newOrder);
+
+    // Update customer stats
+    let customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
+    if (!customer) {
+      this.recordCustomer(user);
+      customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
+    }
+    if (customer) {
+      customer.ordersCount = (customer.ordersCount || 0) + 1;
+      customer.activePlan = plan.title;
+      const addDays = plan.isUnlimited ? 3650 : (plan.durationDays || 30);
+      customer.expiresAt = new Date(Date.now() + addDays * 86400000).toISOString();
+    }
+
+    this.saveData();
+
+    // Success response to user
+    const successMsg =
+      `🎉 *پرداخت با موفقیت انجام شد و استارز کسر گردید!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⭐ *ستاره‌های پرداختی:* ${starsCount} Stars\n` +
+      `🧾 *شماره سفارش:* \`${orderId}\`\n` +
+      `📦 *پکیج فعال‌شده:* ${plan.title}\n` +
+      `⏱️ *اعتبار اشتراک:* ${plan.isUnlimited ? "مادام‌العمر" : `${plan.durationDays} روز`}\n` +
+      `🔑 *کد لایسنس شما:*\n\`${licenseCode}\`\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `✨ استارز به صندوق مدیریت واریز شد و اکانت شما با موفقیت شارژ گردید. از خرید شما سپاسگزاریم!`;
+
+    await this.sendMessage(chatId, successMsg, {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📦 مشاهده سفارشات من", callback_data: "menu_orders" }],
+          [{ text: "🏠 بازگشت به منوی اصلی", callback_data: "main_menu" }],
+        ],
+      },
+    });
+
+    // Notify owner
+    if (this.data.settings.ownerTelegramId) {
+      const adminNotice =
+        `⭐ *دریافت ستاره جدید (Telegram Stars) در فروشگاه!*\n\n` +
+        `👤 خریدار: ${user.first_name} (@${user.username || "ندارد"})\n` +
+        `⭐ مقدار استارز واریزی به ما: *${starsCount} Stars*\n` +
+        `📦 پکیج: ${plan.title}\n` +
+        `🧾 شماره فاکتور: \`${orderId}\`\n` +
+        `🔑 لایسنس صادر شده: \`${licenseCode}\``;
+      await this.sendMessage(this.data.settings.ownerTelegramId, adminNotice, { parse_mode: "Markdown" }).catch(() => {});
+    }
   }
 
   public async sendUserOrders(chatId: number | string, user: any) {
@@ -1919,6 +2074,21 @@ export class StoreBotManager {
         networks: Array.isArray(payments.cryptoPayment?.networks) ? payments.cryptoPayment.networks : this.data.payments.cryptoPayment?.networks || [],
         generalInstructions: payments.cryptoPayment?.generalInstructions !== undefined ? payments.cryptoPayment.generalInstructions : this.data.payments.cryptoPayment?.generalInstructions,
       },
+      starsPayment: payments.starsPayment !== undefined
+        ? {
+            enabled: payments.starsPayment.enabled !== undefined ? payments.starsPayment.enabled : (this.data.payments.starsPayment?.enabled ?? true),
+            starsPerToman: payments.starsPayment.starsPerToman || this.data.payments.starsPayment?.starsPerToman || 2000,
+            priceMultiplier: payments.starsPayment.priceMultiplier || this.data.payments.starsPayment?.priceMultiplier || 1.0,
+            description: payments.starsPayment.description || this.data.payments.starsPayment?.description || "پرداخت آنی و مستقیم با کسر ستاره‌های تلگرام (Telegram Stars)",
+            starsCollected: payments.starsPayment.starsCollected !== undefined ? payments.starsPayment.starsCollected : (this.data.payments.starsPayment?.starsCollected || 0),
+          }
+        : this.data.payments.starsPayment || {
+            enabled: true,
+            starsPerToman: 2000,
+            priceMultiplier: 1.0,
+            description: "پرداخت آنی و مستقیم با کسر ستاره‌های تلگرام (Telegram Stars)",
+            starsCollected: 0,
+          },
     };
     // Sync first active card with cardPayment
     const firstActive = this.data.payments.cards?.find((c) => c.isActive);

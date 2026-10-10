@@ -113,6 +113,14 @@ export interface TelegramAccountFeatures {
       lock_stars_paywall: boolean;
       stars_price?: number;
       paid_stars_users?: string[];
+      stars_collected?: number;
+      stars_history?: Array<{
+        userId: string;
+        userName: string;
+        stars: number;
+        date: string;
+        note?: string;
+      }>;
     };
     friend_enemy?: {
       active: boolean;
@@ -391,6 +399,13 @@ export interface StorePaymentSettings {
     enabled: boolean;
     networks: StorePaymentCryptoNetwork[];
     generalInstructions?: string;
+  };
+  starsPayment?: {
+    enabled: boolean;
+    starsPerToman?: number;
+    priceMultiplier?: number;
+    description?: string;
+    starsCollected?: number;
   };
 }
 

@@ -286,32 +286,40 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  // Track whether form fields have been initially loaded from server
+  const isFormInitializedRef = useRef(false);
+
   // Fetch store data
-  const fetchStoreData = async () => {
+  const fetchStoreData = async (forceFormUpdate = false) => {
     try {
       const res = await fetch("/api/store-bot/data");
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.data) {
           setData(json.data);
-          setPaymentsState(json.data.payments);
-          setBotToken(json.data.settings.botToken || "");
-          setOwnerTelegramId(String(json.data.settings.ownerTelegramId || ""));
-          setSupportUsername(json.data.settings.supportUsername || "");
-          setChannelUsername(json.data.settings.channelUsername || "");
-          setWelcomeText(json.data.settings.welcomeText || "");
-          const km = json.data.settings.keyboardMode || "inline";
-          setKeyboardMode(km);
-          setSimEffectiveMode(km);
-          setKeyboardColumns(Number(json.data.settings.keyboardColumns || 2) as any);
-          setReplyKeyboardColumns(Number(json.data.settings.replyKeyboardColumns || json.data.settings.keyboardColumns || 2) as any);
-          setAllowCustomerKeyboardSwitch(
-            json.data.settings.allowCustomerKeyboardSwitch !== undefined
-              ? Boolean(json.data.settings.allowCustomerKeyboardSwitch)
-              : true
-          );
-          setButtonTheme(json.data.settings.buttonTheme || "cyber_neon");
-          setButtonLabels(json.data.settings.buttonLabels || {});
+
+          // Update form states only on first load or when explicitly forced (e.g. after save)
+          if (!isFormInitializedRef.current || forceFormUpdate) {
+            isFormInitializedRef.current = true;
+            setPaymentsState(json.data.payments);
+            setBotToken(json.data.settings.botToken || "");
+            setOwnerTelegramId(String(json.data.settings.ownerTelegramId || ""));
+            setSupportUsername(json.data.settings.supportUsername || "");
+            setChannelUsername(json.data.settings.channelUsername || "");
+            setWelcomeText(json.data.settings.welcomeText || "");
+            const km = json.data.settings.keyboardMode || "inline";
+            setKeyboardMode(km);
+            setSimEffectiveMode(km);
+            setKeyboardColumns(Number(json.data.settings.keyboardColumns || 2) as any);
+            setReplyKeyboardColumns(Number(json.data.settings.replyKeyboardColumns || json.data.settings.keyboardColumns || 2) as any);
+            setAllowCustomerKeyboardSwitch(
+              json.data.settings.allowCustomerKeyboardSwitch !== undefined
+                ? Boolean(json.data.settings.allowCustomerKeyboardSwitch)
+                : true
+            );
+            setButtonTheme(json.data.settings.buttonTheme || "cyber_neon");
+            setButtonLabels(json.data.settings.buttonLabels || {});
+          }
         }
       }
     } catch (err) {
@@ -322,8 +330,8 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   };
 
   useEffect(() => {
-    fetchStoreData();
-    const interval = setInterval(fetchStoreData, 7000);
+    fetchStoreData(true);
+    const interval = setInterval(() => fetchStoreData(false), 7000);
     return () => clearInterval(interval);
   }, []);
 
@@ -456,7 +464,27 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
       const json = await res.json();
       setTokenTestResult(json);
       if (json.success) {
-        showToast("success", `ربات @${json.bot?.username} با موفقیت تایید شد.`);
+        showToast("success", `ربات @${json.bot?.username} تایید و تنظیمات ذخیره شد.`);
+        // Auto-persist verified bot token to ensure it never gets lost
+        fetch("/api/store-bot/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            botToken: botToken.trim(),
+            botUsername: json.bot?.username,
+            botFirstName: json.bot?.firstName,
+            ownerTelegramId,
+            supportUsername,
+            channelUsername,
+            welcomeText,
+            keyboardMode,
+            keyboardColumns,
+            replyKeyboardColumns,
+            allowCustomerKeyboardSwitch,
+            buttonTheme,
+            buttonLabels,
+          }),
+        }).catch(() => {});
       } else {
         showToast("error", json.error || "توکن ربات نامعتبر است.");
       }

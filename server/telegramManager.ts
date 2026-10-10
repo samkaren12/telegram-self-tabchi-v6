@@ -171,6 +171,8 @@ export function defaultFeatures(): TelegramAccountFeatures {
         lock_stickers_gifs: false,
         lock_stars_paywall: false,
         stars_price: 5,
+        stars_collected: 0,
+        stars_history: [],
       },
       friend_enemy: {
         active: false,
@@ -305,6 +307,7 @@ import {
   formatArzDigitalTelegramBoard,
   convertCurrencyPair,
   parseCurrencyConversionQuery,
+  normalizeDigits,
 } from "./marketService";
 import { translateText, resolveLanguageCode, detectLanguage } from "./translationService";
 
@@ -483,6 +486,8 @@ export class TelegramManager {
                     lock_stars_paywall: typedAcc.features.cosmic?.pv_shields?.lock_stars_paywall ?? defaultFeatures().cosmic!.pv_shields!.lock_stars_paywall,
                     stars_price: typedAcc.features.cosmic?.pv_shields?.stars_price ?? defaultFeatures().cosmic!.pv_shields!.stars_price,
                     paid_stars_users: typedAcc.features.cosmic?.pv_shields?.paid_stars_users ?? [],
+                    stars_collected: typedAcc.features.cosmic?.pv_shields?.stars_collected ?? 0,
+                    stars_history: typedAcc.features.cosmic?.pv_shields?.stars_history ?? [],
                   },
                   friend_enemy: {
                     active: typedAcc.features.cosmic?.friend_enemy?.active ?? defaultFeatures().cosmic!.friend_enemy!.active,
@@ -1376,23 +1381,26 @@ export class TelegramManager {
             }
           }
 
+          const normalizedIncoming = normalizeDigits(incomingText);
+          const normalizedLower = normalizedIncoming.toLowerCase().trim();
+
           const isTriggerCommand =
-            lower.startsWith(".price") || lower.startsWith("/price") ||
-            lower.startsWith(".quote") || lower.startsWith(".قیمت") || lower.startsWith("قیمت") ||
-            lower.startsWith("نرخ") || lower.startsWith(".ارز") || lower.startsWith("ارز");
+            normalizedLower.startsWith(".price") || normalizedLower.startsWith("/price") ||
+            normalizedLower.startsWith(".quote") || normalizedLower.startsWith(".قیمت") || normalizedLower.startsWith("قیمت") ||
+            normalizedLower.startsWith("نرخ") || normalizedLower.startsWith(".ارز") || normalizedLower.startsWith("ارز");
 
           const assetMatch = isTriggerCommand
-            ? lower.replace(/^(\.price|\/price|\.quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").trim()
-            : lower.match(
-                /(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
+            ? normalizedLower.replace(/^(\.price|\/price|\.quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").trim()
+            : normalizedLower.match(
+                /(usd|usdt|tether|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|تتر|تتر ترون|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
               )?.[1];
 
           if (assetMatch) {
-            const amountMatch = lower.match(/(?<![a-z])\d+(?:\.\d+)?/);
+            const amountMatch = normalizedLower.match(/(?<![a-z])\d+(?:\.\d+)?/);
             const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
 
             // Check if buy price was included
-            const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
+            const buyMatch = normalizedLower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
             const buyPrice = buyMatch ? parseFloat(buyMatch[1]) : undefined;
 
             // Clean asset query
@@ -1750,6 +1758,47 @@ export class TelegramManager {
               shields.paid_stars_users = [];
             }
 
+            // Check if sender is sending payment claim or stars command
+            const isStarsPaymentAction =
+              incomingText &&
+              (incomingText.toLowerCase() === "/paystars" ||
+               incomingText.toLowerCase() === ".paystars" ||
+               incomingText.includes("پرداخت استارز") ||
+               incomingText.includes("واریز استارز") ||
+               incomingText.includes("ستاره دادم") ||
+               incomingText.includes("stars paid"));
+
+            if (isStarsPaymentAction) {
+              if (!shields.paid_stars_users.includes(senderId)) {
+                shields.paid_stars_users.push(senderId);
+              }
+              shields.stars_collected = (shields.stars_collected || 0) + requiredStars;
+              if (!shields.stars_history) shields.stars_history = [];
+              shields.stars_history.unshift({
+                userId: senderId,
+                userName: senderName,
+                stars: requiredStars,
+                date: new Date().toISOString(),
+                note: "پرداخت حق دسترسی پیوی",
+              });
+              this.saveState();
+
+              await client.sendMessage(message.chatId!, {
+                message:
+                  `🌟 <b>پرداخت ${requiredStars} استارز با موفقیت ثبت شد!</b>\n` +
+                  `━━━━━━━━━━━━━━━━━━━━\n` +
+                  `قفل پیوی برای شما باز گردید. از این پس پیام‌های شما مستقیماً دریافت می‌شوند. متشکریم!`,
+                parseMode: "html",
+              });
+              this.addLog(
+                "success",
+                "cosmic",
+                `واریز ${requiredStars} ⭐ توسط کاربر ${senderName} (${senderId}) تایید شد و قفل پیوی باز گردید. واریز به اکانت ${phone}`,
+                phone
+              );
+              return;
+            }
+
             const hasPaid = shields.paid_stars_users.includes(senderId);
             if (!hasPaid) {
               const starsNotice =
@@ -1760,6 +1809,7 @@ export class TelegramManager {
                 `جهت ارسال پیام و ارتباط در پیوی، لطفاً مقدار <b>${requiredStars} ستاره (Stars)</b> به عنوان هدیه یا حق اشتراک ارسال کنید.\n` +
                 `📞 ستاره‌های دریافتی به شماره اکانت <code>${phone}</code> واریز و شارژ می‌شوند.\n` +
                 `━━━━━━━━━━━━━━━━━━━━\n` +
+                `🌟 <b>دستور پرداخت آنی:</b> جهت کسر ستاره و باز شدن آنی پیوی عبارت <code>/paystars</code> را ارسال کنید.\n` +
                 `⚠️ پیام شما حذف گردید. پس از پرداخت استارز، پیام بعدی شما مستقیماً دریافت خواهد شد.`;
 
               try {
