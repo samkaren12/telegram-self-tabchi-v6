@@ -78,7 +78,7 @@ export const SmartFiltersManager: React.FC<SmartFiltersManagerProps> = ({
   lang,
   onUpdateAccount,
 }) => {
-  const currentConfig: SmartFiltersConfig = account.features.smart_filters || {
+  const currentConfig: SmartFiltersConfig = account.features?.smart_filters || {
     active: false,
     global_ignore_list: [],
     global_delay_seconds: 1,

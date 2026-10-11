@@ -1640,9 +1640,13 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span className="text-xs font-bold text-white">قفل پیوی با تلگرام استارز (Stars Paywall)</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
                   واریز مستقیم به شماره: {account?.phone || "این اکانت"}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/30 text-amber-200 border border-amber-500/50 font-mono flex items-center gap-1">
+                  <span>⭐ دریافتی:</span>
+                  <span className="text-white font-bold">{account?.features?.cosmic?.pv_shields?.stars_collected || 0}</span>
+                  <span>Stars</span>
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">

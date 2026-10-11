@@ -217,6 +217,26 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
     }
   };
 
+  if (!account) {
+    return (
+      <div className="glass-panel rounded-3xl p-8 sm:p-12 text-center space-y-6 max-w-xl mx-auto shadow-2xl border border-slate-800" dir={lang === "fa" ? "rtl" : "ltr"}>
+        <div className="w-16 h-16 rounded-3xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto shadow-lg shadow-rose-500/10">
+          <Radio className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-base sm:text-lg font-bold text-white">
+            {lang === "fa" ? "هیچ اکانت تلگرامی برای ارسال تبچی انتخاب نشده است" : "No Account Selected for Tabchi"}
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+            {lang === "fa"
+              ? "برای ارسال پیام‌های تبلیغاتی گروهی، لطفاً ابتدا از تب مدیریت حساب‌ها یک اکانت تلگرام متصل کرده و آن را انتخاب کنید."
+              : "To broadcast messages, please connect a Telegram account and select it from Accounts tab."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6" dir={lang === "fa" ? "rtl" : "ltr"}>
       {/* HEADER BANNER: PERMANENT LICENSE ACTIVE */}

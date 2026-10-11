@@ -27,12 +27,16 @@ interface PaymentMethodsManagerProps {
   payments: StorePaymentSettings;
   onUpdatePayments: (updated: StorePaymentSettings) => void;
   showToast: (type: "success" | "error", text: string) => void;
+  onSavePayments?: () => Promise<void>;
+  saving?: boolean;
 }
 
 export function PaymentMethodsManager({
   payments,
   onUpdatePayments,
   showToast,
+  onSavePayments,
+  saving = false,
 }: PaymentMethodsManagerProps) {
   // Bank card modal state
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -501,6 +505,8 @@ export function PaymentMethodsManager({
             </div>
           ))}
         </div>
+      </div>
+
       {/* 3. TELEGRAM STARS (استارز تلگرام) SECTION */}
       <div className="space-y-4 pt-4 border-t border-slate-800/80">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -509,10 +515,15 @@ export function PaymentMethodsManager({
               <Star className="w-5 h-5 fill-amber-400" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-bold text-white">درگاه کسر آنی تلگرام استارز (Telegram Stars)</h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   تحویل فوری
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/25 text-amber-300 border border-amber-500/50 flex items-center gap-1 font-mono">
+                  <span>⭐ صندوق استارز:</span>
+                  <span className="text-white font-bold">{payments.starsPayment?.starsCollected || 0}</span>
+                  <span>Stars</span>
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -605,6 +616,23 @@ export function PaymentMethodsManager({
             </div>
           </div>
         </div>
+
+        {/* Global Save Button for Payment Settings & Stars */}
+        {onSavePayments && (
+          <div className="flex items-center justify-between p-4 bg-slate-900/90 border border-slate-800 rounded-2xl">
+            <div className="text-xs text-slate-400">
+              جهت اعمال فوری تنظیمات نرخ استارز و درگاه‌ها روی سرور، روی دکمه ذخیره کلیک کنید.
+            </div>
+            <button
+              onClick={onSavePayments}
+              disabled={saving}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-cyan-500 hover:opacity-90 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg transition-all"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{saving ? "در حال ذخیره‌سازی..." : "ذخیره تنظیمات درگاه‌ها و استارز"}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL: ADD / EDIT BANK CARD */}

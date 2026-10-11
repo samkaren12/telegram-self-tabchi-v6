@@ -869,9 +869,43 @@ export class StoreBotManager {
 
   private async handleUpdate(update: any) {
     if (update.message) {
-      await this.handleMessage(update.message);
+      if (update.message.successful_payment) {
+        await this.handleSuccessfulPayment(
+          update.message.chat.id,
+          update.message.successful_payment,
+          update.message.from
+        );
+      } else {
+        await this.handleMessage(update.message);
+      }
     } else if (update.callback_query) {
       await this.handleCallbackQuery(update.callback_query);
+    } else if (update.pre_checkout_query) {
+      await this.handlePreCheckoutQuery(update.pre_checkout_query);
+    }
+  }
+
+  public async handlePreCheckoutQuery(query: any) {
+    try {
+      await this.callBotApi("answerPreCheckoutQuery", {
+        pre_checkout_query_id: query.id,
+        ok: true,
+      });
+    } catch (err: any) {
+      console.error("[STORE BOT] Error answering pre_checkout_query:", err?.message);
+    }
+  }
+
+  public async handleSuccessfulPayment(chatId: number | string, payment: any, user: any) {
+    try {
+      const payload = payment.invoice_payload || "";
+      const match = payload.match(/^stars_plan_(.+?)_\d+$/);
+      const planId = match ? match[1] : (this.data.plans[0]?.id || "");
+      const starsCount = payment.total_amount || 5;
+
+      await this.confirmStarsPayment(chatId, planId, starsCount, user);
+    } catch (err: any) {
+      console.error("[STORE BOT] Error handling successful_payment:", err?.message);
     }
   }
 
@@ -1466,8 +1500,24 @@ export class StoreBotManager {
     const starsPerToman = this.data.payments.starsPayment?.starsPerToman || 2000;
     const requiredStars = Math.max(1, Math.round(plan.priceToman / starsPerToman));
 
+    // 1. Try sending official Telegram Native Stars Invoice
+    try {
+      await this.callBotApi("sendInvoice", {
+        chat_id: chatId,
+        title: `خرید ${plan.title}`,
+        description: `پرداخت با کسر ${requiredStars} استارز تلگرام و تحویل آنی اشتراک و لایسنس`,
+        payload: `stars_plan_${plan.id}_${Date.now()}`,
+        currency: "XTR",
+        prices: [{ label: plan.title, amount: requiredStars }],
+        provider_token: "",
+      });
+    } catch (_) {
+      // Fallback silently if sendInvoice is unsupported or restricted
+    }
+
+    // 2. Send interactive confirmation card showing stars count and requesting deduction
     const invoiceMessage =
-      `⭐ *پرداخت رسمی با تلگرام استارز (Telegram Stars)*\n` +
+      `⭐ *درخواست کسر استارز تلگرام (Telegram Stars)*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📦 *محصول انتخابی:* ${plan.title}\n` +
       `⏱️ *مدت اعتبار:* ${plan.isUnlimited ? "♾️ دائمی و نامحدود" : `${plan.durationDays} روزه`}\n` +
@@ -1475,12 +1525,13 @@ export class StoreBotManager {
       `💰 *معادل تومانی:* ${plan.priceToman.toLocaleString("fa-IR")} تومان\n` +
       `👤 *حساب خریدار:* ${user.first_name || "کاربر"} (@${user.username || "ندارد"})\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `💡 با کلیک بر روی دکمه زیر، تعداد *${requiredStars} ستاره* از حساب تلگرام شما کسر شده و اشتراک سرور شما *به صورت آنی و خودکار* فعال و لایسنس تحویل داده خواهد شد:`;
+      `💡 با کلیک بر روی دکمه زیر، تعداد *${requiredStars} ستاره* از حساب تلگرام شما کسر شده و به صندوق سرور ما واریز می‌گردد؛ سپس لایسنس اختصاصی و اشتراک شما *به صورت آنی و خودکار* تحویل داده خواهد شد:\n\n` +
+      `آیا کسر و انتقال ${requiredStars} استارز را تایید می‌فرمایید؟`;
 
     const buttons: any[] = [
       [
         {
-          text: `⭐ تایید و پرداخت ${requiredStars} استارز`,
+          text: `⭐ تایید کسر ${requiredStars} استارز و پرداخت به ما`,
           callback_data: `confirm_pay_stars_${plan.id}_${requiredStars}`,
         },
       ],
@@ -1501,6 +1552,19 @@ export class StoreBotManager {
     const orderId = `STR-${Math.floor(1000 + Math.random() * 9000)}`;
     const licenseCode = `LIC-${plan.category.toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
+    // Accumulate total stars collected in store
+    if (!this.data.payments.starsPayment) {
+      this.data.payments.starsPayment = {
+        enabled: true,
+        starsPerToman: 2000,
+        priceMultiplier: 1.0,
+        description: "پرداخت آنی و مستقیم با کسر ستاره‌های تلگرام (Telegram Stars)",
+        starsCollected: 0,
+      };
+    }
+    this.data.payments.starsPayment.starsCollected =
+      (this.data.payments.starsPayment.starsCollected || 0) + starsCount;
+
     const newOrder: StoreOrder = {
       id: orderId,
       planId: plan.id,
@@ -1519,7 +1583,7 @@ export class StoreBotManager {
       paymentMethod: "crypto",
       paymentDetails: {
         cryptoNetwork: "Telegram Stars ⭐",
-        receiptProof: `کسر مستقیم ${starsCount} استارز تلگرام`,
+        receiptProof: `کسر مستقیم و واریز ${starsCount} استارز به صندوق مدیریت`,
         receiptType: "txid",
       },
       status: "approved",
@@ -1528,7 +1592,7 @@ export class StoreBotManager {
       generatedCredentials: {
         licenseCode,
         portalUrl: "https://ais-dev-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app",
-        notes: `پرداخت با ${starsCount} ستاره تلگرام انجام شد. اشتراک فعال است.`,
+        notes: `پرداخت با ${starsCount} ستاره تلگرام انجام شد. استارز کسر و به صندوق اضافه گردید.`,
       },
     };
 

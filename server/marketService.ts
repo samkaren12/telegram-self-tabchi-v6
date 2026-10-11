@@ -1715,6 +1715,9 @@ export async function convertCurrencyPair(
       high_24h_usd: usdVal,
       low_24h_usd: usdVal,
       trend: "neutral",
+      chart_url: "",
+      chart_svg: "",
+      history: [],
       updated_at: new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" }),
     };
   } else {
@@ -1742,6 +1745,9 @@ export async function convertCurrencyPair(
       high_24h_usd: 1,
       low_24h_usd: 1,
       trend: "neutral",
+      chart_url: "",
+      chart_svg: "",
+      history: [],
       updated_at: new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" }),
     };
   } else {

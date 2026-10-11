@@ -660,7 +660,27 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const recipientCount = Object.keys(account.features.broadcast?.recipients || {}).length;
+  if (!account) {
+    return (
+      <div className="glass-panel rounded-3xl p-8 sm:p-12 text-center space-y-6 max-w-xl mx-auto shadow-2xl border border-slate-800" dir={lang === "fa" ? "rtl" : "ltr"}>
+        <div className="w-16 h-16 rounded-3xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mx-auto shadow-lg shadow-cyan-500/10">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-base sm:text-lg font-bold text-white">
+            {lang === "fa" ? "هیچ اکانت تلگرامی انتخاب نشده است" : "No Telegram Account Selected"}
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+            {lang === "fa"
+              ? "جهت استفاده از سلف، ساعت پروفایل، قفل پیوی، منشی هوشمند و ابزارهای چت، لطفاً ابتدا یک اکانت تلگرام متصل نمایید یا از تب مدیریت حساب‌ها یکی را انتخاب کنید."
+              : "To use self automation features, please connect a Telegram account or select one from the Accounts tab."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const recipientCount = Object.keys(account.features?.broadcast?.recipients || {}).length;
 
   return (
     <div className="space-y-6" dir={lang === "fa" ? "rtl" : "ltr"}>

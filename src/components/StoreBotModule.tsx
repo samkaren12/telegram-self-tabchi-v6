@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ShoppingBag,
   Bot,
@@ -436,7 +436,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
       const json = await res.json();
       if (json.success) {
         showToast("success", json.message || "تنظیمات ربات ذخیره شد.");
-        fetchStoreData();
+        fetchStoreData(true);
       } else {
         showToast("error", json.message || "خطا در ذخیره تنظیمات");
       }
@@ -517,24 +517,26 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   };
 
   // Save Payments
-  const handleSavePayments = async () => {
-    if (!paymentsState) return;
+  // Save Payments
+  const handleSavePayments = async (overrideState?: StorePaymentSettings) => {
+    const targetState = overrideState || paymentsState;
+    if (!targetState) return;
     setSavingPayments(true);
     try {
       const res = await fetch("/api/store-bot/payments", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentsState),
+        body: JSON.stringify(targetState),
       });
       const json = await res.json();
       if (json.success) {
         showToast("success", "تنظیمات درگاه‌های پرداخت با موفقیت ذخیره شد.");
-        fetchStoreData();
+        fetchStoreData(true);
       } else {
-        showToast("error", json.message);
+        showToast("error", json.message || "خطا در ذخیره درگاه‌ها");
       }
     } catch (err: any) {
-      showToast("error", err.message);
+      showToast("error", err.message || "خطای ارتباط با سرور");
     } finally {
       setSavingPayments(false);
     }
@@ -1272,7 +1274,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
             </div>
 
             <button
-              onClick={fetchStoreData}
+              onClick={() => fetchStoreData(true)}
               className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors self-end sm:self-auto"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -1664,7 +1666,12 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
       {activeSubTab === "payments" && paymentsState && (
         <PaymentMethodsManager
           payments={paymentsState}
-          onUpdatePayments={(updated) => setPaymentsState(updated)}
+          onUpdatePayments={(updated) => {
+            setPaymentsState(updated);
+            handleSavePayments(updated);
+          }}
+          onSavePayments={() => handleSavePayments(paymentsState)}
+          saving={savingPayments}
           showToast={showToast}
         />
       )}
@@ -2130,6 +2137,21 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Bottom Save Button for Bot Config */}
+            <div className="flex items-center justify-between p-4 bg-slate-950/80 border border-slate-800 rounded-2xl">
+              <div className="text-xs text-slate-400">
+                جهت ذخیره‌سازی توکن، متن‌ها و استایل دکمه‌ها روی سرور کلیک کنید:
+              </div>
+              <button
+                onClick={handleSaveBotSettings}
+                disabled={savingSettings}
+                className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/25 transition-all"
+              >
+                {savingSettings ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                <span>ذخیره تمامی تنظیمات ربات</span>
+              </button>
             </div>
           </div>
         </div>

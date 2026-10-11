@@ -307,7 +307,6 @@ import {
   formatArzDigitalTelegramBoard,
   convertCurrencyPair,
   parseCurrencyConversionQuery,
-  normalizeDigits,
 } from "./marketService";
 import { translateText, resolveLanguageCode, detectLanguage } from "./translationService";
 
@@ -1763,8 +1762,13 @@ export class TelegramManager {
               incomingText &&
               (incomingText.toLowerCase() === "/paystars" ||
                incomingText.toLowerCase() === ".paystars" ||
+               incomingText.toLowerCase() === "paystars" ||
                incomingText.includes("پرداخت استارز") ||
                incomingText.includes("واریز استارز") ||
+               incomingText.includes("کسر استارز") ||
+               incomingText.includes("تایید استارز") ||
+               incomingText.includes("پرداخت ستاره") ||
+               incomingText.includes("کسر ستاره") ||
                incomingText.includes("ستاره دادم") ||
                incomingText.includes("stars paid"));
 
