@@ -10,6 +10,23 @@ export interface MarketHistoryPoint {
   price_toman: number;
 }
 
+export interface MarketPnLDetails {
+  buyPriceUnit: number;
+  buyCurrency: "toman" | "usd" | "irr";
+  initialInvestmentToman: number;
+  initialInvestmentUsd: number;
+  initialInvestmentIrr: number;
+  currentValueToman: number;
+  currentValueUsd: number;
+  currentValueIrr: number;
+  netProfitToman: number;
+  netProfitUsd: number;
+  netProfitIrr: number;
+  profitPercent: number;
+  isProfit: boolean;
+  statusText: string;
+}
+
 export interface DetailedMarketQuote {
   asset: string;
   symbol: string;
@@ -34,6 +51,7 @@ export interface DetailedMarketQuote {
   history: MarketHistoryPoint[];
   updated_at: string;
   profitLossText?: string;
+  pnl?: MarketPnLDetails;
 }
 
 // -------------------------------------------------------------
@@ -912,13 +930,94 @@ export function generateSvgChart(
 }
 
 // -------------------------------------------------------------
+// PROFIT & LOSS (P&L) CALCULATION ENGINE
+// -------------------------------------------------------------
+
+export function computeMarketPnL(
+  unitUsd: number,
+  unitToman: number,
+  amount: number,
+  usdToTomanRate: number,
+  buyPrice?: number,
+  buyCurrency: "toman" | "usd" | "irr" = "toman"
+): { profitLossText?: string; pnl?: MarketPnLDetails } {
+  if (!buyPrice || buyPrice <= 0) return {};
+
+  let buyPriceUnitToman = 0;
+  let buyPriceUnitUsd = 0;
+
+  // Auto-detect currency if user didn't explicitly specify or if value is obviously Toman
+  let effectiveCurrency = buyCurrency;
+  if (effectiveCurrency === "usd" && buyPrice > 500 && unitUsd < 100) {
+    // e.g. someone entered 90000 for USD or EUR with $ selected by mistake
+    effectiveCurrency = "toman";
+  }
+
+  if (effectiveCurrency === "toman") {
+    buyPriceUnitToman = buyPrice;
+    buyPriceUnitUsd = buyPrice / (usdToTomanRate || 1);
+  } else if (effectiveCurrency === "irr") {
+    buyPriceUnitToman = buyPrice / 10;
+    buyPriceUnitUsd = (buyPrice / 10) / (usdToTomanRate || 1);
+  } else {
+    // USD
+    buyPriceUnitUsd = buyPrice;
+    buyPriceUnitToman = buyPrice * usdToTomanRate;
+  }
+
+  const initialInvestmentToman = Math.round(buyPriceUnitToman * amount);
+  const initialInvestmentUsd = Number((buyPriceUnitUsd * amount).toFixed(2));
+  const initialInvestmentIrr = initialInvestmentToman * 10;
+
+  const currentValueToman = Math.round(unitToman * amount);
+  const currentValueUsd = Number((unitUsd * amount).toFixed(2));
+  const currentValueIrr = currentValueToman * 10;
+
+  const netProfitToman = currentValueToman - initialInvestmentToman;
+  const netProfitUsd = Number((currentValueUsd - initialInvestmentUsd).toFixed(2));
+  const netProfitIrr = netProfitToman * 10;
+
+  const profitPercent = initialInvestmentToman > 0
+    ? Number((((currentValueToman - initialInvestmentToman) / initialInvestmentToman) * 100).toFixed(2))
+    : 0;
+
+  const isProfit = netProfitToman >= 0;
+  const sign = isProfit ? "+" : "";
+  const unitLabel = effectiveCurrency === "usd" ? "$" : effectiveCurrency === "irr" ? "ریال" : "تومان";
+
+  const profitLossText = `سود/زیان خرید (${buyPrice.toLocaleString("fa-IR")} ${unitLabel}): ${sign}${netProfitToman.toLocaleString("fa-IR")} تومان (${sign}${profitPercent}% ${isProfit ? "سود" : "زیان"})`;
+
+  const statusText = netProfitToman > 0 ? "معامله پرسود 🟢" : netProfitToman < 0 ? "معامله در زیان 🔴" : "سربه‌سر ⚪";
+
+  const pnl: MarketPnLDetails = {
+    buyPriceUnit: buyPrice,
+    buyCurrency: effectiveCurrency,
+    initialInvestmentToman,
+    initialInvestmentUsd,
+    initialInvestmentIrr,
+    currentValueToman,
+    currentValueUsd,
+    currentValueIrr,
+    netProfitToman,
+    netProfitUsd,
+    netProfitIrr,
+    profitPercent,
+    isProfit,
+    statusText,
+  };
+
+  return { profitLossText, pnl };
+}
+
+// -------------------------------------------------------------
 // MAIN GET MARKET QUOTE FUNCTION
 // -------------------------------------------------------------
 
 export async function getMarketQuote(
   rawAsset: string,
   amount: number = 1.0,
-  buyPriceUsd?: number
+  buyPrice?: number,
+  buyCurrency: "toman" | "usd" | "irr" = "toman"
 ): Promise<DetailedMarketQuote> {
   await refreshMarketRates();
 
@@ -964,13 +1063,14 @@ export async function getMarketQuote(
     const chart_url = generateQuickChartUrl(`${name_fa} (${symbol})`, symbol, history, trend, change24h);
     const chart_svg = generateSvgChart(`${name_fa} (${symbol})`, history, trend);
 
-    let profitLossText: string | undefined;
-    if (buyPriceUsd && buyPriceUsd > 0) {
-      const diff = totalUsd - buyPriceUsd;
-      const sign = diff >= 0 ? "+" : "";
-      const profitToman = Math.round(diff * (arzItem.priceToman || usdToTomanRate));
-      profitLossText = `سود/زیان نسبت به خرید $${buyPriceUsd}: ${sign}$${diff.toFixed(2)} (${sign}${profitToman.toLocaleString("fa-IR")} تومان)`;
-    }
+    const { profitLossText, pnl } = computeMarketPnL(
+      unitUsd,
+      unitToman,
+      amount,
+      arzItem.priceToman || usdToTomanRate,
+      buyPrice,
+      buyCurrency
+    );
 
     const tehranTime = new Date().toLocaleTimeString("fa-IR", {
       timeZone: "Asia/Tehran",
@@ -1003,6 +1103,7 @@ export async function getMarketQuote(
       history,
       updated_at: arzItem.updatedAt || tehranTime,
       profitLossText,
+      pnl,
     };
   }
 
@@ -1124,15 +1225,14 @@ export async function getMarketQuote(
   const chart_url = generateQuickChartUrl(`${name_fa} (${symbol})`, symbol, history, trend, change24h);
   const chart_svg = generateSvgChart(`${name_fa} (${symbol})`, history, trend);
 
-  let profitLossText: string | undefined;
-  if (buyPriceUsd && buyPriceUsd > 0) {
-    const diff = totalUsd - buyPriceUsd;
-    const sign = diff >= 0 ? "+" : "";
-    const profitToman = Math.round(diff * usdToTomanRate);
-    profitLossText = `سود/زیان نسبت به خرید $${buyPriceUsd}: ${sign}$${diff.toFixed(
-      2
-    )} (${sign}${profitToman.toLocaleString("fa-IR")} تومان)`;
-  }
+  const { profitLossText, pnl } = computeMarketPnL(
+    unitUsd,
+    unitToman,
+    amount,
+    usdToTomanRate,
+    buyPrice,
+    buyCurrency
+  );
 
   const tehranTime = new Date().toLocaleTimeString("fa-IR", {
     timeZone: "Asia/Tehran",
@@ -1165,6 +1265,7 @@ export async function getMarketQuote(
     history,
     updated_at: `${tehranTime} (تهران)`,
     profitLossText,
+    pnl,
   };
 }
 
@@ -1177,8 +1278,20 @@ export function formatTelegramMarketCaption(quote: DetailedMarketQuote): string 
   const pnlEmoji = isProfit ? "🟢 ⇡" : "🔴 ⇣";
   const changeSign = isProfit ? "+" : "";
   const pnlTag = isProfit
-    ? `🟢 <b>وضعیت سود ۲۴ ساعته:</b> <b>+${quote.change_24h_percent}% سود</b>`
-    : `🔴 <b>وضعیت زیان ۲۴ ساعته:</b> <b>${quote.change_24h_percent}% زیان</b>`;
+    ? `🟢 <b>وضعیت ۲۴ ساعته:</b> <b>+${quote.change_24h_percent}% رشد</b>`
+    : `🔴 <b>وضعیت ۲۴ ساعته:</b> <b>${quote.change_24h_percent}% افت</b>`;
+
+  const pnlBlock = quote.pnl
+    ? `\n💰 <b>محاسبه دقیق سود و زیان (P&L):</b>\n` +
+      `• <b>قیمت خرید شما:</b> <code>${quote.pnl.buyPriceUnit.toLocaleString("fa-IR")} ${quote.pnl.buyCurrency === "usd" ? "دلار" : quote.pnl.buyCurrency === "irr" ? "ریال" : "تومان"}</code>\n` +
+      `• <b>کل سرمایه خرید:</b> <code>${quote.pnl.initialInvestmentToman.toLocaleString("fa-IR")} تومان</code> (<code>$${quote.pnl.initialInvestmentUsd.toLocaleString("en-US")}</code>)\n` +
+      `• <b>ارزش روز دارایی:</b> <code>${quote.pnl.currentValueToman.toLocaleString("fa-IR")} تومان</code> (<code>$${quote.pnl.currentValueUsd.toLocaleString("en-US")}</code>)\n` +
+      `• <b>سود/زیان خالص:</b> <b>${quote.pnl.netProfitToman >= 0 ? "+" : ""}${quote.pnl.netProfitToman.toLocaleString("fa-IR")} تومان</b> (<code>${quote.pnl.netProfitUsd >= 0 ? "+" : ""}$${quote.pnl.netProfitUsd}</code>)\n` +
+      `• <b>درصد بازدهی (ROI):</b> <b>${quote.pnl.profitPercent >= 0 ? "+" : ""}${quote.pnl.profitPercent}% ${quote.pnl.isProfit ? "سود 🟢" : "زیان 🔴"}</b>\n` +
+      `• <b>وضعیت معامله:</b> <b>${quote.pnl.statusText}</b>\n`
+    : quote.profitLossText
+    ? `\n💡 <b>محاسبه سود/زیان:</b> ${quote.profitLossText}\n`
+    : "";
 
   return (
     `📊 <b>استعلام زنده قیمت و نمودار سود/زیان:</b>\n\n` +
@@ -1192,7 +1305,7 @@ export function formatTelegramMarketCaption(quote: DetailedMarketQuote): string 
     `📈 <b>روند تغییرات:</b> ${pnlEmoji} <code>${changeSign}${quote.change_24h_percent}%</code>\n` +
     `🔼 <b>سقف قیمت امروز:</b> ${quote.high_24h_toman.toLocaleString("fa-IR")} تومان\n` +
     `🔽 <b>کف قیمت امروز:</b> ${quote.low_24h_toman.toLocaleString("fa-IR")} تومان\n` +
-    (quote.profitLossText ? `💡 <b>محاسبه خرید/فروش:</b> ${quote.profitLossText}\n` : "") +
+    pnlBlock +
     `\n🕒 <b>زمان استعلام:</b> <i>${quote.updated_at}</i>\n` +
     `📈 <i>تصویر نمودار سود و زیان پیوست شده است ☝️</i>\n` +
     `⚡ <i>Telegram Self & Tabchi Automation v6</i>`

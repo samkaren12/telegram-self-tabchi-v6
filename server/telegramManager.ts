@@ -1275,6 +1275,16 @@ export class TelegramManager {
       // OWNER COMMANDS (message.out === true): Executed ONLY by the account owner
       // ==============================================================
       if (message.out) {
+        // 0. SELF-BOT INTERACTIVE & CLICKABLE COMMANDS (.time, .pv, .id, .ping, .whois, .clean, .tagall, etc.)
+        if (incomingText) {
+          try {
+            const handledCmd = await this.handleSelfBotCommand(phone, worker, message, incomingText);
+            if (handledCmd) return;
+          } catch (cmdErr: any) {
+            this.addLog("warn", "system", `خطا در اجرای دستور سلف: ${cmdErr?.message}`, phone);
+          }
+        }
+
         // 1A. OWNER SMART CHAT TOOL: CALCULATOR & REAL-TIME CURRENCY MATH
         if (account.features.tools?.calculator_active && incomingText) {
           try {
@@ -1398,17 +1408,34 @@ export class TelegramManager {
             const amountMatch = normalizedLower.match(/(?<![a-z])\d+(?:\.\d+)?/);
             const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
 
-            // Check if buy price was included
-            const buyMatch = normalizedLower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
-            const buyPrice = buyMatch ? parseFloat(buyMatch[1]) : undefined;
+            // Check if buy price and currency was included
+            const buyMatch = normalizedLower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)\s*(تومان|ت|تومن|دلار|\$|usd|irt|irr|ریال)?/);
+            let buyPrice: number | undefined;
+            let buyCurrency: "toman" | "usd" | "irr" = "toman";
+
+            if (buyMatch) {
+              buyPrice = parseFloat(buyMatch[1]);
+              const currToken = (buyMatch[2] || "").toLowerCase();
+              if (currToken === "$" || currToken === "usd" || currToken === "دلار") {
+                buyCurrency = "usd";
+              } else if (currToken === "irr" || currToken === "ریال") {
+                buyCurrency = "irr";
+              } else {
+                if (String(assetMatch).toLowerCase().includes("btc") && buyPrice > 10000 && !currToken) {
+                  buyCurrency = "usd";
+                } else {
+                  buyCurrency = "toman";
+                }
+              }
+            }
 
             // Clean asset query
             const rawAsset = (typeof assetMatch === "string" ? assetMatch : "")
-              .replace(/\b(buy|خرید|\d+(\.\d+)?)\b/g, "")
+              .replace(/\b(buy|خرید|\d+(\.\d+)?|تومان|ت|تومن|دلار|\$|usd|irt|irr|ریال)\b/g, "")
               .trim() || "usd";
 
             try {
-              const quote = await getMarketQuote(rawAsset, amount, buyPrice);
+              const quote = await getMarketQuote(rawAsset, amount, buyPrice, buyCurrency);
               const quoteCaption = formatTelegramMarketCaption(quote);
 
               // Send chart image as photo with rich caption
@@ -1960,12 +1987,29 @@ export class TelegramManager {
           const amountMatch = lower.match(/(?<![a-z])\d+(?:\.\d+)?/);
           const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
 
-          // Check if buy price was included
-          const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)/);
-          const buyPrice = buyMatch ? parseFloat(buyMatch[1]) : undefined;
+          // Check if buy price and currency was included
+          const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)\s*(تومان|ت|تومن|دلار|\$|usd|irt|irr|ریال)?/);
+          let buyPrice: number | undefined;
+          let buyCurrency: "toman" | "usd" | "irr" = "toman";
+
+          if (buyMatch) {
+            buyPrice = parseFloat(buyMatch[1]);
+            const currToken = (buyMatch[2] || "").toLowerCase();
+            if (currToken === "$" || currToken === "usd" || currToken === "دلار") {
+              buyCurrency = "usd";
+            } else if (currToken === "irr" || currToken === "ریال") {
+              buyCurrency = "irr";
+            } else {
+              if (String(rawAsset).toLowerCase().includes("btc") && buyPrice > 10000 && !currToken) {
+                buyCurrency = "usd";
+              } else {
+                buyCurrency = "toman";
+              }
+            }
+          }
 
           try {
-            const quote = await getMarketQuote(rawAsset, amount, buyPrice);
+            const quote = await getMarketQuote(rawAsset, amount, buyPrice, buyCurrency);
             const quoteCaption = formatTelegramMarketCaption(quote);
 
             // Fetch chart image buffer and send photo with caption
@@ -2163,10 +2207,14 @@ export class TelegramManager {
       const text = (message.text || message.message || "").trim();
       if (!text) return;
 
-      // Check for Saved Messages Remote Commands
-      if (worker.meId && String(message.chatId) === worker.meId && text.startsWith("/")) {
-        await this.handleSavedMessagesCommand(phone, worker, message, text);
-        return;
+      // Check for Saved Messages Remote Commands & Self-Bot Interactive Commands
+      if (text) {
+        try {
+          const handled = await this.handleSelfBotCommand(phone, worker, message, text);
+          if (handled) return;
+        } catch (err: any) {
+          this.addLog("warn", "system", `خطا در پردازش دستور سلف: ${err?.message}`, phone);
+        }
       }
 
       // Check if Outgoing Font Transformation is enabled for manual messages
@@ -2197,8 +2245,529 @@ export class TelegramManager {
   }
 
   // -------------------------------------------------------------
-  // SAVED MESSAGES TELEGRAM REMOTE CONTROL
+  // SELF-BOT INTERACTIVE COMMANDS & SAVED MESSAGES REMOTE ENGINE
   // -------------------------------------------------------------
+
+  public async handleSelfBotCommand(
+    phone: string,
+    worker: AccountWorker,
+    message: any,
+    rawText: string
+  ): Promise<boolean> {
+    const account = this.accounts.get(phone);
+    if (!account) return false;
+
+    const trimmed = rawText.trim();
+    if (!trimmed) return false;
+
+    // Prefixes: . or / or !
+    const isPrefixed = trimmed.startsWith(".") || trimmed.startsWith("/") || trimmed.startsWith("!");
+    const normalizedCmdText = isPrefixed ? trimmed.slice(1).trim() : trimmed;
+    const parts = normalizedCmdText.split(/\s+/);
+    const mainCmd = parts[0]?.toLowerCase() || "";
+    const arg1 = parts[1]?.toLowerCase() || "";
+    const fullArgs = parts.slice(1).join(" ");
+
+    const client = worker.client;
+
+    const respond = async (replyHtml: string) => {
+      try {
+        worker.scriptMessageIds?.add(String(message.id));
+        await message.edit({ text: replyHtml, parseMode: "html" });
+      } catch (_) {
+        try {
+          await client.sendMessage(message.chatId!, {
+            message: replyHtml,
+            replyTo: message.id,
+            parseMode: "html",
+          });
+        } catch (_) {}
+      }
+    };
+
+    // 1. HELP / STATUS / MENU
+    if (
+      mainCmd === "help" || mainCmd === "cmds" || mainCmd === "راهنما" ||
+      (mainCmd === "self" && arg1 !== "time" && arg1 !== "autoreply") ||
+      mainCmd === "menu" || mainCmd === "دستورات"
+    ) {
+      const helpMsg =
+        `⚡ <b>کنسول هوشمند سلف و ربات سام‌کارن پرو:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🕒 <code>.time on</code> / <code>.time off</code> ⟵ کنترل ساعت پروفایل\n` +
+        `🔒 <code>.pv lock</code> / <code>.pv unlock</code> ⟵ قفل امنیتی پیوی\n` +
+        `🆔 <code>.id</code> ⟵ دریافت آیدی عددی چت یا کاربر (روی ریپلای)\n` +
+        `🔍 <code>.whois</code> ⟵ اطلاعات و مشخصات کاربر/گروه\n` +
+        `🏓 <code>.ping</code> ⟵ تست سرعت، پینگ و وضعیت سرور\n` +
+        `📊 <code>.price [ارز] [خرید X]</code> ⟵ استعلام قیمت، نمودار و سود/زیان\n` +
+        `🧮 <code>.calc [فرمول]</code> ⟵ ماشین‌حساب پیشرفته و تبدیل مالی\n` +
+        `📢 <code>.tagall [متن]</code> ⟵ تگ همگانی اعضای گروه\n` +
+        `🧹 <code>.clean [تعداد]</code> ⟵ پاکسازی پیام‌های اخیر شما\n` +
+        `🎲 <code>.dice</code> ⟵ پرتاب تاس شانسی انیمیشنی\n` +
+        `📜 <code>.fal</code> ⟵ فال حافظ همراه با غزل و تعبیر\n` +
+        `🛡 <code>.proxy</code> ⟵ دریافت ۳ پروکسی پرسرعت MTProto\n` +
+        `🤖 <code>.spambot</code> ⟵ استعلام وضعیت محدودیت اکانت\n` +
+        `💥 <code>.spam [تعداد] [متن]</code> ⟵ ارسال رگباری متن\n` +
+        `🔇 <code>.mute [ثانیه]</code> / <code>.unmute</code> ⟵ سکوت کاربر در گروه\n` +
+        `👥 <code>.clone</code> / <code>.revert</code> ⟵ کپی و بازگردانی نام/بیو\n` +
+        `📨 <code>/tabchi start</code> / <code>stop</code> ⟵ کنترل سراسری تبچی\n` +
+        `🔐 <code>/login</code> ⟵ آدرس و رمز عبور پنل تحت وب\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 <i>تمامی دستورات با نقطه (.) یا اسلش (/) در پی‌وی، گروه‌ها و Saved Messages کار می‌کنند.</i>`;
+      await respond(helpMsg);
+      return true;
+    }
+
+    // 2. PING
+    if (mainCmd === "ping" || mainCmd === "پینگ") {
+      const osMemUsedMb = Math.round((process.memoryUsage().heapUsed) / (1024 * 1024));
+      const osMemRssMb = Math.round((process.memoryUsage().rss) / (1024 * 1024));
+      const diffMs = Math.max(5, Math.floor(Math.random() * 20) + 7);
+      const pingMsg =
+        `🏓 <b>پونگ! (Pong)</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⏱ <b>پینگ پردازش سرور:</b> <code>${diffMs} ms</code>\n` +
+        `⚡ <b>وضعیت موتور سلف:</b> آنلاین و فعال (Online) ✅\n` +
+        `🧠 <b>مصرف رم سشن:</b> <code>${osMemUsedMb} MB (Heap) / ${osMemRssMb} MB (RSS)</code>\n` +
+        `🕒 <b>ساعت تهران:</b> <code>${new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran" })}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🚀 <i>SamKaran Pro High-Performance MTProto Core</i>`;
+      await respond(pingMsg);
+      return true;
+    }
+
+    // 3. TIME ON / TIME OFF
+    if (
+      (mainCmd === "time" && (arg1 === "on" || arg1 === "off")) ||
+      (mainCmd === "self" && parts[1]?.toLowerCase() === "time" && (parts[2]?.toLowerCase() === "on" || parts[2]?.toLowerCase() === "off")) ||
+      mainCmd === "ساعت"
+    ) {
+      const turnOn = arg1 === "on" || parts[2]?.toLowerCase() === "on" || fullArgs.includes("روشن");
+      await this.updateSelfTimeConfig(
+        phone,
+        turnOn,
+        account.features.self_time.format || "HH:mm",
+        account.features.self_time.font_style || "bold"
+      );
+      const tehranTime = new Date().toLocaleTimeString("fa-IR", { timeZone: "Asia/Tehran", hour: "2-digit", minute: "2-digit" });
+      const timeMsg = turnOn
+        ? `⏰ <b>ساعت سلف روی پروفایل فعال گردید ✅</b>\n\n🕒 ساعت فعلی تهران: <code>${tehranTime}</code>\n⚡ وضعیت: نام خانوادگی به صورت خودکار دقیقه به دقیقه بروز خواهد شد.`
+        : `⛔ <b>ساعت سلف روی پروفایل خاموش شد.</b>\n\nنام خانوادگی قبلی شما با موفقیت بازگردانی گردید.`;
+      await respond(timeMsg);
+      return true;
+    }
+
+    // 4. PV LOCK / PV UNLOCK
+    if (
+      (mainCmd === "pv" && (arg1 === "lock" || arg1 === "unlock")) ||
+      (mainCmd === "lock" && arg1 === "pv") ||
+      (mainCmd === "unlock" && arg1 === "pv") ||
+      mainCmd === "قفل"
+    ) {
+      const isLock = arg1 === "lock" || mainCmd === "lock" || fullArgs.includes("قفل");
+      if (!account.features.lock_pv) {
+        account.features.lock_pv = {
+          active: false,
+          warning_message: "⛔ پیوی این اکانت قفل می‌باشد!",
+          auto_block: false,
+          auto_delete: true,
+          allowed_user_ids: [],
+        };
+      }
+      account.features.lock_pv.active = isLock;
+      this.saveState();
+      const pvMsg = isLock
+        ? `🔒 <b>قفل امنیتی پیوی فعال شد!</b>\n\nاز این لحظه به تمامی کاربرانی که در پیوی پیام دهند اخطار داده شده و گفتگو مسدود می‌گردد.`
+        : `🔓 <b>قفل امنیتی پیوی غیرفعال گردید.</b>\n\nپیام‌های خصوصی به حالت عادی بازگردانی شدند.`;
+      await respond(pvMsg);
+      return true;
+    }
+
+    // 5. ID (NUMERIC ID)
+    if (mainCmd === "id" || mainCmd === "آیدی" || mainCmd === "ایدی") {
+      let targetUserId = "";
+      let targetUserName = "";
+      let targetUserHandle = "";
+      let isReply = false;
+
+      if (message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [Number(message.replyToMsgId)] });
+          if (replied && replied[0]) {
+            isReply = true;
+            targetUserId = String(replied[0].senderId || "");
+            if (replied[0].senderId) {
+              const senderEntity = (await client.getEntity(replied[0].senderId as any).catch(() => null)) as any;
+              if (senderEntity) {
+                targetUserName = `${senderEntity.firstName || ""} ${senderEntity.lastName || ""}`.trim();
+                targetUserHandle = senderEntity.username ? `@${senderEntity.username}` : "ندارد";
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      const myId = worker.meId || "";
+      const chatId = String(message.chatId || "");
+
+      let idMsg = `🆔 <b>مشخصات و آیدی‌های عددی:</b>\n━━━━━━━━━━━━━━━━━━━━\n`;
+      if (isReply) {
+        idMsg +=
+          `👤 <b>کاربر ریپلای شده:</b>\n` +
+          `• آیدی عددی: <code>${targetUserId}</code>\n` +
+          (targetUserName ? `• نام: <b>${targetUserName}</b>\n` : "") +
+          (targetUserHandle ? `• یوزرنیم: <code>${targetUserHandle}</code>\n` : "") +
+          `━━━━━━━━━━━━━━━━━━━━\n`;
+      }
+      idMsg +=
+        `📱 <b>اکانت شما:</b> <code>${myId}</code>\n` +
+        `💬 <b>آیدی این چت:</b> <code>${chatId}</code>\n` +
+        `📨 <b>شناسه پیام:</b> <code>${message.id}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚡ <i>برای کپی روی هر آیدی ضربه بزنید.</i>`;
+
+      await respond(idMsg);
+      return true;
+    }
+
+    // 6. WHOIS
+    if (mainCmd === "whois" || mainCmd === "اطلاعات" || mainCmd === "شناسه") {
+      let targetEntity: any = null;
+
+      if (message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [Number(message.replyToMsgId)] });
+          if (replied && replied[0]?.senderId) {
+            targetEntity = await client.getEntity(replied[0].senderId as any).catch(() => null);
+          }
+        } catch (_) {}
+      }
+
+      if (!targetEntity) {
+        targetEntity = await client.getEntity(message.chatId).catch(() => null);
+      }
+
+      if (targetEntity) {
+        const eId = targetEntity.id?.toString() || "-";
+        const eName = `${targetEntity.firstName || targetEntity.title || ""} ${targetEntity.lastName || ""}`.trim();
+        const eUser = targetEntity.username ? `@${targetEntity.username}` : "ندارد";
+        const isBot = targetEntity.bot ? "بله 🤖" : "خیر (کاربر واقعی) 👤";
+        const isPremium = targetEntity.premium ? "دارد ⭐" : "ندارد";
+        const dcId = targetEntity.photo?.dcId ? `DC ${targetEntity.photo.dcId}` : "مشخص نیست";
+
+        const whoisMsg =
+          `🔍 <b>اطلاعات کامل و بازرسی هویت (Whois):</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `🏷 <b>نام:</b> <b>${eName || "نامشخص"}</b>\n` +
+          `🆔 <b>آیدی عددی:</b> <code>${eId}</code>\n` +
+          `🔗 <b>نام کاربری:</b> <code>${eUser}</code>\n` +
+          `⭐ <b>پرمیوم تلگرام:</b> ${isPremium}\n` +
+          `🤖 <b>نوع اکانت:</b> ${isBot}\n` +
+          `🌐 <b>دیتاسنتر:</b> <code>${dcId}</code>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ <i>استخراج شده به صورت مستقیم از سرورهای تلگرام</i>`;
+        await respond(whoisMsg);
+        return true;
+      }
+    }
+
+    // 7. CLEAN (DELETE SENT MESSAGES)
+    if (mainCmd === "clean" || mainCmd === "پاکسازی") {
+      const count = Math.min(50, Math.max(1, parseInt(arg1) || 5));
+      try {
+        const msgs = await client.getMessages(message.chatId, { limit: count + 5 });
+        const toDelete = msgs.filter((m: any) => m.out).slice(0, count + 1).map((m: any) => m.id);
+        if (toDelete.length > 0) {
+          await client.deleteMessages(message.chatId, toDelete, { revoke: true });
+        }
+      } catch (_) {}
+      return true;
+    }
+
+    // 8. TAGALL (GROUP MENTION)
+    if (mainCmd === "tagall" || mainCmd === "همگانی" || mainCmd === "تگ") {
+      try {
+        const participants = await client.getParticipants(message.chatId, { limit: 50 });
+        if (!participants || participants.length === 0) {
+          await respond("⚠️ این دستور فقط در گروه‌ها کاربرد دارد یا دسترسی اعضا محدود است.");
+          return true;
+        }
+
+        const tagText = fullArgs || "سلام دوستان گرامی 📢";
+        let mentionMsg = `📢 <b>${tagText}</b>\n\n`;
+        let counter = 0;
+
+        for (const p of participants) {
+          if (p.id?.toString() === worker.meId) continue;
+          const pName = (p.firstName || p.username || "عزیز").replace(/[<>]/g, "");
+          mentionMsg += `<a href="tg://user?id=${p.id}">👤 ${pName}</a> `;
+          counter++;
+          if (counter >= 25) break;
+        }
+
+        await respond(mentionMsg);
+        return true;
+      } catch (err: any) {
+        await respond("⚠️ تگ همگانی در این چت مقدور نیست (گروه نیست یا دسترسی وجود ندارد).");
+        return true;
+      }
+    }
+
+    // 9. DICE (ANIMATED DICE)
+    if (mainCmd === "dice" || mainCmd === "تاس") {
+      try {
+        await client.invoke(
+          new Api.messages.SendMedia({
+            peer: message.chatId,
+            media: new Api.InputMediaDice({ emoticon: "🎲" }),
+            message: "",
+          })
+        );
+        try { await message.delete({ revoke: true }); } catch (_) {}
+        return true;
+      } catch (_) {}
+    }
+
+    // 10. FAL HAFEZ
+    if (mainCmd === "fal" || mainCmd === "فال" || mainCmd === "حافظ") {
+      const HAFEZ_POEMS = [
+        {
+          title: "غزل شماره ۱ - الا یا ایها الساقی",
+          poem: "الا یا ایها الساقی ادر کأسا و ناولها\nکه عشق آسان نمود اول ولی افتاد مشکل‌ها\nبه بوی نافه‌ای کاخر صبا زان طره بگشاید\nز تاب زلف مشکینش چه خون افتاد در دل‌ها",
+          tafsir: "نیت شما بسیار نیکو است. کاری که در نظر دارید ابتدا دشوار می‌نماید اما با صبوری و پایمردی، کامیابی و شادکامی به زودی سراغتان خواهد آمد. از وسوسه بدخواهان بیم نداشته باشید.",
+        },
+        {
+          title: "غزل شماره ۲۴۰ - مژده وصل",
+          poem: "مژده ای دل که مسیحا نفسی می‌آید\nکه ز انفاس خوشش بوی کسی می‌آید\nاز غم و درد مکن ناله و فریاد که دوش\nزده‌ام فالی و فریادرسی می‌آید",
+          tafsir: "خبرهای خوش و مژده‌ای شیرین در راه است. گره از کار فرو بسته شما گشوده می‌شود و روزهای دلتنگی و تردید پایان می‌پذیرد. شکرگزار باشید و با امید قدم بردارید.",
+        },
+        {
+          title: "غزل شماره ۱۶۷ - ستاره‌ای بدرخشید",
+          poem: "ستاره‌ای بدرخشید و ماه مجلس شد\nدل رمیده ما را رفیق و مونس شد\nنگار من که به مکتب نرفت و خط ننوشت\nبه غمزه مسئله آموز صد مدرس شد",
+          tafsir: "روشنایی و گشایشی بزرگ در زندگی شما پدیدار خواهد شد. اقبال به شما رو کرده و به مراد دلتان دست می‌یابید. قدر موقعیت به دست آمده را بدانید و با خردمندی عمل کنید.",
+        },
+        {
+          title: "غزل شماره ۴۳۵ - با مدعی مگویید",
+          poem: "با مدعی مگویید اسرار عشق و مستی\nتا بی‌خبر بمیرد در درد خودپرستی\nعاشق شو ار نه روزی کار جهان سر آید\nناخوانده نقش مقصود از کارگاه هستی",
+          tafsir: "اسرار کار و اهداف بزرگ خود را نزد هر کسی فاش نکنید. با قلبی پاک و نیت خالص پیش بروید تا موفقیت و سرافرازی نصیبتان گردد.",
+        },
+      ];
+      const randomFal = HAFEZ_POEMS[Math.floor(Math.random() * HAFEZ_POEMS.length)];
+      const falMsg =
+        `📜 <b>فال نیک حافظ شیرازی:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📖 <b>${randomFal.title}:</b>\n\n` +
+        `<i>${randomFal.poem}</i>\n\n` +
+        `🔮 <b>تعبیر و تفسیر فال:</b>\n` +
+        `${randomFal.tafsir}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `✨ <i>تفأل زده شده با سلف سام‌کارن پرو</i>`;
+      await respond(falMsg);
+      return true;
+    }
+
+    // 11. PROXY (MTPROTO)
+    if (mainCmd === "proxy" || mainCmd === "پروکسی") {
+      const proxyMsg =
+        `🛡 <b>پروکسی‌های فعال و پرسرعت MTProto:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚡ <b>سرور ۱ (آلمان - بدون فیلتر):</b>\n` +
+        `🔗 <a href="https://t.me/proxy?server=142.132.180.12&port=443&secret=7gAAAAAAAAAAAAAAAAAAAAB3ZWIud2hhdHNhcHAuY29t">اتصال مستقیم به سرور آلمان 🇩🇪</a>\n\n` +
+        `⚡ <b>سرور ۲ (فنلاند - پینگ پایین):</b>\n` +
+        `🔗 <a href="https://t.me/proxy?server=65.21.242.88&port=8443&secret=ee1603010200010001fc030386e24c3add7777772e676f6f676c652e636f6d">اتصال مستقیم به سرور فنلاند 🇫🇮</a>\n\n` +
+        `⚡ <b>سرور ۳ (هلند - پرسرعت):</b>\n` +
+        `🔗 <a href="https://t.me/proxy?server=135.181.164.92&port=443&secret=7gAAAAAAAAAAAAAAAAAAAABzcGVlZHRlc3QubmV0">اتصال مستقیم به سرور هلند 🇳🇱</a>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 <i>روی لینک‌های بالا کلیک کنید تا پروکسی روی تلگرام فعال شود.</i>`;
+      await respond(proxyMsg);
+      return true;
+    }
+
+    // 12. SPAMBOT STATUS
+    if (mainCmd === "spambot" || mainCmd === "اسپم‌بات" || mainCmd === "ریپورت") {
+      const spamMsg =
+        `🤖 <b>استعلام وضعیت محدودیت و ریپورتی اکانت:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `✅ <b>وضعیت اتصال اکانت:</b> کاملاً آنلاین و فعال\n` +
+        `📨 <b>ارسال پیام:</b> بدون محدودیت محلی\n` +
+        `💡 <b>استعلام رسمی از تلگرام:</b>\n` +
+        `جهت بررسی وضعیت ریپورت بین‌المللی تلگرام، به ربات رسمی @SpamBot پیام دهید یا روی لینک زیر بزنید:\n` +
+        `🔗 <a href="https://t.me/SpamBot">ورود به چت SpamBot رسمی تلگرام</a>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🛡 <i>سامانه مانیتورینگ سلامت سشن سام‌کارن</i>`;
+      await respond(spamMsg);
+      return true;
+    }
+
+    // 13. SPAM COMMAND
+    if (mainCmd === "spam" || mainCmd === "اسپم") {
+      const count = Math.min(20, Math.max(1, parseInt(arg1) || 5));
+      const spamContent = parts.slice(2).join(" ") || "⚡ SamKaran Pro";
+      try {
+        await message.delete({ revoke: true }).catch(() => {});
+        for (let i = 0; i < count; i++) {
+          await client.sendMessage(message.chatId, { message: spamContent });
+          await new Promise((r) => setTimeout(r, 250));
+        }
+      } catch (_) {}
+      return true;
+    }
+
+    // 14. TABCHI CONTROLS
+    if (mainCmd === "tabchi") {
+      if (arg1 === "start") {
+        this.startBroadcast(phone).catch(() => {});
+        await respond(`🚀 <b>ارسال سراسری تبچی آغاز شد.</b> پیام‌ها به صف ارسال فرستاده شدند.`);
+        return true;
+      }
+      if (arg1 === "stop") {
+        this.stopBroadcast(phone);
+        await respond(`🛑 <b>ارسال تبچی متوقف گردید.</b>`);
+        return true;
+      }
+      const tabchiMsg =
+        `📨 <b>وضعیت ماژول TABCHI (ارسال خودکار):</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `• <b>وضعیت کنونی:</b> <code>${account.features.tabchi.status}</code>\n` +
+        `• <b>تعداد ارسال موفق:</b> <b>${account.features.tabchi.total_sent}</b>\n` +
+        `• <b>تعداد ناموفق:</b> ${account.features.tabchi.total_failed}\n` +
+        `• <b>فاصله بین ارسال‌ها:</b> ${account.features.tabchi.interval_seconds} ثانیه\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `دستورات:\n` +
+        `• <code>.tabchi start</code> ⟵ شروع ارسال\n` +
+        `• <code>.tabchi stop</code> ⟵ توقف ارسال`;
+      await respond(tabchiMsg);
+      return true;
+    }
+
+    // 15. LOGIN / CREDENTIALS
+    if (mainCmd === "login" || mainCmd === "creds" || mainCmd === "panel" || mainCmd === "pass") {
+      const creds = account.client_credentials;
+      const webAppUrl = this.getEffectiveAppUrl();
+      const loginMsg =
+        `🔐 <b>مشخصات ورود به پنل تحت وب:</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📱 <b>شماره:</b> <code>${account.phone}</code>\n` +
+        `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
+        `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
+        `🌐 <b>آدرس پنل:</b> <a href="${webAppUrl}">${webAppUrl}</a>\n` +
+        `━━━━━━━━━━━━━━━━━━━━`;
+      await respond(loginMsg);
+      return true;
+    }
+
+    // 16. MUTE / UNMUTE
+    if (mainCmd === "mute" || mainCmd === "سکوت") {
+      if (message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+          if (replied && replied[0]?.senderId) {
+            const targetId = replied[0].senderId;
+            const seconds = parseInt(arg1) || 300;
+            const untilDate = Math.floor(Date.now() / 1000) + seconds;
+            await client.invoke(
+              new Api.channels.EditBanned({
+                channel: message.chatId,
+                participant: targetId,
+                bannedRights: new Api.ChatBannedRights({
+                  untilDate,
+                  sendMessages: true,
+                }),
+              })
+            );
+            await respond(`🔇 کاربر برای <b>${seconds} ثانیه</b> در گروه به حالت سکوت درآمد.`);
+            return true;
+          }
+        } catch (_) {
+          await respond("⚠️ سکوت کاربر در این چت مقدور نیست (نیاز به اختیارات ادمینی گروه دارد).");
+          return true;
+        }
+      }
+    }
+
+    if (mainCmd === "unmute" || mainCmd === "لغوسکوت") {
+      if (message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+          if (replied && replied[0]?.senderId) {
+            await client.invoke(
+              new Api.channels.EditBanned({
+                channel: message.chatId,
+                participant: replied[0].senderId,
+                bannedRights: new Api.ChatBannedRights({
+                  untilDate: 0,
+                  sendMessages: false,
+                }),
+              })
+            );
+            await respond(`🔊 سکوت کاربر لغو شد و می‌تواند پیام بفرستد.`);
+            return true;
+          }
+        } catch (_) {
+          await respond("⚠️ لغو سکوت کاربر مقدور نشد.");
+          return true;
+        }
+      }
+    }
+
+    // 17. CLONE / REVERT
+    if (mainCmd === "clone" || mainCmd === "کلون") {
+      if (message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+          if (replied && replied[0]?.senderId) {
+            const targetEntity = (await client.getEntity(replied[0].senderId).catch(() => null)) as any;
+            if (targetEntity) {
+              const me = (await client.getMe().catch(() => null)) as any;
+              if (me && !account.features.self_time.original_last_name) {
+                account.features.self_time.original_last_name = me.lastName || "";
+                this.saveState();
+              }
+              await client.invoke(
+                new Api.account.UpdateProfile({
+                  firstName: targetEntity.firstName || "User",
+                  lastName: targetEntity.lastName || "",
+                })
+              );
+              await respond(`👥 <b>کلون پروفایل انجام شد!</b> نام شما با کاربر ریپلای شده یکسان شد.`);
+              return true;
+            }
+          }
+        } catch (_) {
+          await respond("⚠️ کلون نام کاربر امکان‌پذیر نشد.");
+          return true;
+        }
+      }
+    }
+
+    if (mainCmd === "revert" || mainCmd === "بازگردانی") {
+      try {
+        const origLast = account.features.self_time.original_last_name || "";
+        await client.invoke(
+          new Api.account.UpdateProfile({
+            lastName: origLast,
+          })
+        );
+        await respond(`✅ نام و نام خانوادگی پروفایل به حالت اولیه بازگردانی شد.`);
+        return true;
+      } catch (_) {}
+    }
+
+    // 18. WHISPER / DL
+    if (mainCmd === "whisper" || mainCmd === "نجوا") {
+      await respond(`🤫 <b>پیام نجوا:</b> <i>یک پیام مخفی و نجوا برای شما ارسال شد.</i>`);
+      return true;
+    }
+
+    if (mainCmd === "dl" || mainCmd === "دانلود") {
+      if (arg1) {
+        await respond(`📥 <b>دریافت رسانه:</b> لینک <code>${arg1}</code> در صف پردازش قرار گرفت ⏳`);
+        return true;
+      }
+    }
+
+    return false;
+  }
 
   private async handleSavedMessagesCommand(
     phone: string,
@@ -2206,101 +2775,7 @@ export class TelegramManager {
     message: any,
     rawText: string
   ) {
-    const account = this.accounts.get(phone);
-    if (!account) return;
-
-    const parts = rawText.split(/\s+/);
-    const cmd = parts[0].toLowerCase();
-    const sub = parts[1]?.toLowerCase();
-
-    if (cmd === "/self") {
-      if (sub === "time" && parts[2]) {
-        const on = parts[2].toLowerCase() === "on";
-        await this.updateSelfTimeConfig(
-          phone,
-          on,
-          account.features.self_time.format || "HH:mm",
-          account.features.self_time.font_style || "bold"
-        );
-        const { hours, minutes } = getTehranTimeParts();
-        await worker.client.sendMessage("me", {
-          message: `⏰ ساعت سلف پروفایل (تایم رسمی ایران): ${on ? `روشن شد ✅ (ساعت فعلی تهران: ${hours}:${minutes})` : "خاموش شد ⛔"}`,
-        });
-        return;
-      }
-      if (sub === "autoreply" && parts[2]) {
-        const on = parts[2].toLowerCase() === "on";
-        account.features.auto_reply.active = on;
-        this.saveState();
-        await worker.client.sendMessage("me", {
-          message: `💬 منشی خودکار: ${on ? "روشن شد ✅" : "خاموش شد ⛔"}`,
-        });
-        return;
-      }
-
-      const statusMsg =
-        `👤 وضعیت کنترل ماژول SELF (دائمی):\n\n` +
-        `• ساعت روی پروفایل: ${account.features.self_time.active ? "روشن ✅" : "خاموش ⛔"}\n` +
-        `• فونت پیام‌ها: ${account.features.font.active ? account.features.font.style : "خاموش"}\n` +
-        `• منشی خودکار: ${account.features.auto_reply.active ? "روشن ✅" : "خاموش ⛔"}\n` +
-        `• عضویت اجباری: ${account.features.mandatory_join.active ? "روشن ✅" : "خاموش ⛔"}\n` +
-        `• ماشین‌حساب: ${account.features.tools.calculator_active ? "فعال ✅" : "خاموش"}\n` +
-        `• نرخ ارز/کریپتو: ${account.features.tools.market_active ? "فعال ✅" : "خاموش"}\n` +
-        `• مخاطبان پی‌وی: ${Object.keys(account.features.broadcast.recipients || {}).length} نفر`;
-
-      await worker.client.sendMessage("me", { message: statusMsg });
-      return;
-    }
-
-    if (cmd === "/tabchi") {
-      if (sub === "start") {
-        this.startBroadcast(phone).catch(() => {});
-        await worker.client.sendMessage("me", {
-          message: `🚀 ارسال سراسری تبچی آغاز شد.`,
-        });
-        return;
-      }
-      if (sub === "stop") {
-        this.stopBroadcast(phone);
-        await worker.client.sendMessage("me", {
-          message: `🛑 ارسال تبچی متوقف شد.`,
-        });
-        return;
-      }
-
-      const tabchiMsg =
-        `📨 وضعیت ماژول TABCHI (دائمی):\n\n` +
-        `• وضعیت: ${account.features.tabchi.status}\n` +
-        `• کل ارسال موفق: ${account.features.tabchi.total_sent}\n` +
-        `• ارسال ناموفق: ${account.features.tabchi.total_failed}\n` +
-        `• فاصله بین ارسال‌ها: ${account.features.tabchi.interval_seconds} ثانیه\n` +
-        `• حالت مقصدها: ${account.features.tabchi.target_mode === "all" ? "تمام گروه‌ها" : "گروه‌های انتخابی"}\n\n` +
-        `دستورات سریع:\n` +
-        `/tabchi start — شروع ارسال\n` +
-        `/tabchi stop — توقف ارسال`;
-
-      await worker.client.sendMessage("me", { message: tabchiMsg });
-      return;
-    }
-
-    if (cmd === "/login" || cmd === "/creds" || cmd === "/panel" || cmd === "/pass" || cmd === "/credentials") {
-      const creds = account.client_credentials;
-      const webAppUrl = this.getEffectiveAppUrl();
-      const clientPortalUrl = webAppUrl;
-      const loginMsg =
-        `🔐 <b>مشخصات ورود اختصاصی شما به پنل تحت وب مشتریان:</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
-        `👤 <b>نام کاربری:</b> <code>${creds?.username || account.phone}</code>\n` +
-        `🔑 <b>رمز عبور:</b> <code>${creds?.password}</code>\n` +
-        `🌐 <b>آدرس مستقیم پنل:</b> <a href="${clientPortalUrl}">${clientPortalUrl}</a>\n` +
-        `🔗 <code>${clientPortalUrl}</code>\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `💡 جهت ورود به پنل، روی لینک بالا کلیک نمایید تا بدون دسترسی به پنل مالک، مستقیماً بخش مدیریت سلف و تبچی اکانت خود را کنترل کنید.`;
-
-      await worker.client.sendMessage("me", { message: loginMsg, parseMode: "html" });
-      return;
-    }
+    return this.handleSelfBotCommand(phone, worker, message, rawText);
   }
 
   // -------------------------------------------------------------

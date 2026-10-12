@@ -24,6 +24,7 @@ import {
   Send,
   Sliders,
   Check,
+  Copy,
   Download,
   Lightbulb,
 } from "lucide-react";
@@ -76,6 +77,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
   const [botFeedback, setBotFeedback] = useState<string | null>(null);
   const [isFeedbackError, setIsFeedbackError] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState(false);
+  const [copiedSavedCmd, setCopiedSavedCmd] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBotSettings();
@@ -669,18 +671,34 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
 
           <div className="space-y-2 text-xs font-mono">
             {[
-              { cmd: "/self", desc: lang === "fa" ? "مشاهده وضعیت کامل سلف و دکمه‌های کنترل" : "View self status & interactive menu" },
-              { cmd: "/self time on", desc: lang === "fa" ? "روشن کردن ساعت روی پروفایل" : "Turn profile clock on" },
-              { cmd: "/self time off", desc: lang === "fa" ? "خاموش کردن ساعت روی پروفایل" : "Turn profile clock off" },
-              { cmd: "/tabchi", desc: lang === "fa" ? "مشاهده وضعیت ارسال و آمار پیام‌ها" : "View Tabchi broadcast status & metrics" },
+              { cmd: ".ping", desc: lang === "fa" ? "تست سرعت و سلامت سشن سلف" : "Instant ping & latency test" },
+              { cmd: ".time on", desc: lang === "fa" ? "فعال‌سازی ساعت روی پروفایل" : "Turn profile clock on" },
+              { cmd: ".pv lock", desc: lang === "fa" ? "قفل امنیتی پیوی اکانت" : "Lock account private chats" },
+              { cmd: ".id", desc: lang === "fa" ? "دریافت آیدی عددی و مشخصات چت/کاربر" : "Get user or chat numeric ID" },
+              { cmd: ".price usd خرید 90000 تومان", desc: lang === "fa" ? "استعلام قیمت زنده و محاسبه سود" : "Live price and PnL calculation" },
+              { cmd: "/self", desc: lang === "fa" ? "مشاهده وضعیت کامل سلف و ماژول‌ها" : "View self status & interactive menu" },
               { cmd: "/tabchi start", desc: lang === "fa" ? "شروع فوری ارسال خودکار تبچی" : "Start Tabchi broadcast immediately" },
-              { cmd: "/tabchi stop", desc: lang === "fa" ? "توقف فوری ارسال تبچی" : "Stop Tabchi broadcast" },
               { cmd: "=1250 * 18 - 450", desc: lang === "fa" ? "محاسبه خودکار ریاضی در هر چت" : "Instant math in any chat" },
-              { cmd: "قیمت دلار / btc", desc: lang === "fa" ? "استعلام لحظه‌ای طلا، ارز و کریپتو" : "Live currency & crypto quote" },
             ].map((c, i) => (
-              <div key={i} className="p-2 bg-slate-950 rounded-xl flex items-center justify-between gap-2">
-                <span className="text-cyan-400 font-bold" dir="ltr">{c.cmd}</span>
-                <span className="text-slate-400 text-[11px]">{c.desc}</span>
+              <div
+                key={i}
+                onClick={() => {
+                  navigator.clipboard.writeText(c.cmd);
+                  setCopiedSavedCmd(c.cmd);
+                  setTimeout(() => setCopiedSavedCmd(null), 2000);
+                }}
+                className="p-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800/80 hover:border-cyan-500/40 rounded-xl flex items-center justify-between gap-2 cursor-pointer transition-all active:scale-95 group"
+                title="کلیک برای کپی دستور"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-cyan-400 group-hover:text-cyan-300 font-bold" dir="ltr">{c.cmd}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 text-[11px]">{c.desc}</span>
+                  <button type="button" className="text-slate-500 group-hover:text-cyan-400 p-0.5">
+                    {copiedSavedCmd === c.cmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

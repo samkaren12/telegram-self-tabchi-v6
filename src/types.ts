@@ -249,6 +249,23 @@ export interface BotSettings {
   button_layout?: "3-cols" | "2-cols" | "1-col"; // aiogram-style row arrangement
 }
 
+export interface MarketPnLDetails {
+  buyPriceUnit: number;
+  buyCurrency: "toman" | "usd" | "irr";
+  initialInvestmentToman: number;
+  initialInvestmentUsd: number;
+  initialInvestmentIrr: number;
+  currentValueToman: number;
+  currentValueUsd: number;
+  currentValueIrr: number;
+  netProfitToman: number;
+  netProfitUsd: number;
+  netProfitIrr: number;
+  profitPercent: number;
+  isProfit: boolean;
+  statusText: string;
+}
+
 export interface MarketQuote {
   asset: string;
   symbol: string;
@@ -272,6 +289,7 @@ export interface MarketQuote {
   history?: Array<{ time: string; price_usd: number; price_toman: number }>;
   updated_at: string;
   profitLossText?: string;
+  pnl?: MarketPnLDetails;
 }
 
 export interface SendCodeResponse {

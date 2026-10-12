@@ -86,6 +86,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [amount, setAmount] = useState<number | string>(1);
   const [buyPrice, setBuyPrice] = useState<string>("");
+  const [buyCurrency, setBuyCurrency] = useState<"toman" | "usd" | "irr">("toman");
   const [categoryFilter, setCategoryFilter] = useState<"all" | "fiat" | "gold" | "crypto">("all");
   const [quote, setQuote] = useState<MarketQuote | null>(null);
   const [loading, setLoading] = useState(false);
@@ -157,7 +158,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
           );
           setTimeout(() => setRateNotice(null), 4000);
           // Refetch current quote with updated rate
-          fetchQuote(selectedAsset, typeof amount === "number" ? amount : 1);
+          fetchQuote(selectedAsset, typeof amount === "number" ? amount : 1, buyPrice ? parseFloat(buyPrice) : undefined, buyCurrency);
         }
       }
     } catch (_) {
@@ -166,11 +167,16 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
     }
   };
 
-  const fetchQuote = async (assetKey: string, amt: number = 1, buy?: number) => {
+  const fetchQuote = async (
+    assetKey: string,
+    amt: number = 1,
+    buy?: number,
+    curr: "toman" | "usd" | "irr" = buyCurrency
+  ) => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      let url = `/api/market/quote?asset=${encodeURIComponent(assetKey)}&amount=${amt}`;
+      let url = `/api/market/quote?asset=${encodeURIComponent(assetKey)}&amount=${amt}&buyCurrency=${curr}`;
       if (buy && buy > 0) {
         url += `&buyPrice=${buy}`;
       }
@@ -189,7 +195,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
   };
 
   useEffect(() => {
-    fetchQuote("usd", 1);
+    fetchQuote("usd", 1, undefined, "toman");
     fetchRateInfo();
     fetchTableData();
   }, []);
@@ -199,7 +205,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
     setSearchQuery(id);
     const buyNum = buyPrice ? parseFloat(buyPrice) : undefined;
     const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
-    fetchQuote(id, numAmt, buyNum);
+    fetchQuote(id, numAmt, buyNum, buyCurrency);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -207,7 +213,7 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
     const q = searchQuery.trim() || selectedAsset;
     const buyNum = buyPrice ? parseFloat(buyPrice) : undefined;
     const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
-    fetchQuote(q, numAmt, buyNum);
+    fetchQuote(q, numAmt, buyNum, buyCurrency);
   };
 
   const handleCopyChartUrl = () => {
@@ -752,44 +758,54 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
         </div>
       </div>
 
-      {/* Interactive Search & Amount Form */}
-      <form onSubmit={handleSearchSubmit} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+      {/* Interactive Search & Amount Form with Currency Unit & Profit/Loss */}
+      <form onSubmit={handleSearchSubmit} className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {/* Search Asset Input */}
-          <div className="sm:col-span-6 relative">
-            <Search className="w-4 h-4 text-slate-500 absolute right-3 top-3" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={lang === "fa" ? "جستجوی نام یا نماد (دلار، درهم، یورو، سکه، btc، eur، aed...)" : "Asset name or symbol..."}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl pr-9 pl-3 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
-            />
+          <div className="sm:col-span-4 relative">
+            <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+              {lang === "fa" ? "انتخاب یا جستجوی دارایی:" : "Asset / Symbol:"}
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-500 absolute right-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={lang === "fa" ? "دلار، درهم، یورو، سکه، btc، ton..." : "Asset symbol..."}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl pr-9 pl-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
           </div>
 
           {/* Amount Input */}
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-2">
+            <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+              {lang === "fa" ? "تعداد / مقدار:" : "Amount:"}
+            </label>
             <input
               type="text"
               inputMode="decimal"
               value={amount}
               onChange={(e) => {
                 let val = e.target.value.replace(/[^0-9.]/g, "");
-                // Allow only one decimal point
                 const parts = val.split(".");
                 if (parts.length > 2) {
                   val = parts[0] + "." + parts.slice(1).join("");
                 }
                 setAmount(val);
               }}
-              placeholder={lang === "fa" ? "تعداد / مقدار (مثلاً ۱)" : "Amount (e.g. 1)"}
+              placeholder="1"
               dir="ltr"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-emerald-500"
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-emerald-500"
             />
           </div>
 
-          {/* Buy Price (Optional for Profit/Loss) */}
+          {/* Buy Price Input */}
           <div className="sm:col-span-3">
+            <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+              {lang === "fa" ? "قیمت خرید شما (محاسبه سود):" : "Your Buy Price (PnL):"}
+            </label>
             <input
               type="text"
               inputMode="decimal"
@@ -802,30 +818,81 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
                 }
                 setBuyPrice(val);
               }}
-              placeholder={lang === "fa" ? "قیمت خرید $ (اختیاری)" : "Buy Price $ (optional)"}
+              placeholder={lang === "fa" ? (buyCurrency === "toman" ? "مثلاً ۹۰۰۰۰ (تومان)" : buyCurrency === "usd" ? "مثلاً 65000 ($)" : "قیمت خرید") : "Buy price..."}
               dir="ltr"
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-emerald-500"
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-100 text-center focus:outline-none focus:border-cyan-500"
             />
+          </div>
+
+          {/* Currency Unit Selector for Buy Price */}
+          <div className="sm:col-span-3">
+            <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+              {lang === "fa" ? "واحد پول قیمت خرید:" : "Buy Currency Unit:"}
+            </label>
+            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-700">
+              {(
+                [
+                  { id: "toman", label: "تومان (IRT)" },
+                  { id: "usd", label: "دلار (USD)" },
+                  { id: "irr", label: "ریال (IRR)" },
+                ] as const
+              ).map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => {
+                    setBuyCurrency(u.id);
+                    if (buyPrice && quote) {
+                      const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
+                      fetchQuote(searchQuery.trim() || selectedAsset, numAmt, parseFloat(buyPrice), u.id);
+                    }
+                  }}
+                  className={`flex-1 py-1 px-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                    buyCurrency === u.id
+                      ? "bg-cyan-500 text-slate-950 shadow-sm font-black"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {u.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
           <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <Info className="w-3.5 h-3.5 text-slate-500" />
+            <Info className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
             <span>
               {lang === "fa"
-                ? "پشتیبانی از نمادهای جهانی: USD, EUR, AED, GBP, TRY, CAD, AUD, JPY, CNY, SAR, QAR, KWD, IQD و..."
-                : "Supports all global symbols: USD, EUR, AED, GBP, TRY, CAD, AUD, JPY, CNY, KWD, IQD..."}
+                ? "جهت محاسبه سود و زیان (P&L)، کافیست نرخ خرید خود را به تومان یا دلار بنویسید تا سیستم به صورت خودکار بازدهی و درصد سود را برآورد کند."
+                : "Enter your buy price in Tomans or USD to calculate real-time profit and loss (ROI)."}
             </span>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 active:scale-95"
-          >
-            {loading ? (lang === "fa" ? "درحال استعلام..." : "Fetching...") : (lang === "fa" ? "استعلام قیمت زنده" : "Fetch Quote")}
-          </button>
+          <div className="flex items-center gap-2">
+            {buyPrice && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBuyPrice("");
+                  const numAmt = amount === "" || isNaN(Number(amount)) || Number(amount) <= 0 ? 1 : Number(amount);
+                  fetchQuote(searchQuery.trim() || selectedAsset, numAmt, undefined, buyCurrency);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-medium border border-slate-800 transition-all"
+              >
+                {lang === "fa" ? "پاکسازی قیمت خرید" : "Clear Buy Price"}
+              </button>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 active:scale-95"
+            >
+              {loading ? (lang === "fa" ? "درحال استعلام..." : "Fetching...") : (lang === "fa" ? "استعلام قیمت و محاسبه سود" : "Fetch Quote & PnL")}
+            </button>
+          </div>
         </div>
       </form>
 
@@ -931,13 +998,135 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
                 {quote.total_irr.toLocaleString("fa-IR")}
                 <span className="text-xs font-normal text-slate-500 mr-1">ریال</span>
               </div>
-              {quote.profitLossText && (
-                <div className="text-[10px] text-amber-300 font-semibold truncate" title={quote.profitLossText}>
-                  {quote.profitLossText}
-                </div>
-              )}
+              <div className="text-[10px] text-slate-500">
+                واحد: {(quote.unit_toman * 10).toLocaleString("fa-IR")} ریال
+              </div>
             </div>
           </div>
+
+          {/* DEDICATED SMART PROFIT & LOSS (P&L) ANALYSIS CARD */}
+          {quote.pnl ? (
+            <div className="p-5 border-t border-slate-800 bg-slate-950/70 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                    quote.pnl.isProfit ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                  }`}>
+                    {quote.pnl.isProfit ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                      <span>{lang === "fa" ? "تحلیل جامع سود و زیان معامله (Profit & Loss):" : "Transaction Profit & Loss (P&L):"}</span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
+                        quote.pnl.isProfit
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                          : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                      }`}>
+                        {quote.pnl.statusText}
+                      </span>
+                    </h5>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {lang === "fa"
+                        ? `محاسبه نسبت به قیمت خرید ${quote.pnl.buyPriceUnit.toLocaleString("fa-IR")} ${quote.pnl.buyCurrency === "usd" ? "دلار" : quote.pnl.buyCurrency === "irr" ? "ریال" : "تومان"}`
+                        : `Calculated against entry price of ${quote.pnl.buyPriceUnit} ${quote.pnl.buyCurrency.toUpperCase()}`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <div className={`px-4 py-2 rounded-xl text-center border font-mono font-black ${
+                    quote.pnl.isProfit
+                      ? "bg-emerald-950/60 border-emerald-500/50 text-emerald-300 shadow-md shadow-emerald-500/10"
+                      : "bg-rose-950/60 border-rose-500/50 text-rose-300 shadow-md shadow-rose-500/10"
+                  }`}>
+                    <div className="text-[10px] uppercase font-sans opacity-80">{lang === "fa" ? "درصد بازدهی (ROI)" : "Net ROI"}</div>
+                    <div className="text-lg">
+                      {quote.pnl.profitPercent >= 0 ? "+" : ""}{quote.pnl.profitPercent}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 PnL Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* 1. Buy Price Unit */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                  <div className="text-[11px] text-slate-400">{lang === "fa" ? "قیمت خرید هر واحد" : "Entry Unit Price"}</div>
+                  <div className="text-base font-bold text-slate-200 font-mono">
+                    {quote.pnl.buyPriceUnit.toLocaleString("fa-IR")}
+                    <span className="text-xs font-normal text-slate-400 mr-1">
+                      {quote.pnl.buyCurrency === "usd" ? "دلار" : quote.pnl.buyCurrency === "irr" ? "ریال" : "تومان"}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    واحد انتخابی: {quote.pnl.buyCurrency.toUpperCase()}
+                  </div>
+                </div>
+
+                {/* 2. Initial Investment */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                  <div className="text-[11px] text-slate-400">{lang === "fa" ? "کل سرمایه اولیه خرید" : "Total Investment"}</div>
+                  <div className="text-base font-bold text-cyan-300 font-mono">
+                    {quote.pnl.initialInvestmentToman.toLocaleString("fa-IR")}
+                    <span className="text-xs font-normal text-slate-400 mr-1">تومان</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono" dir="ltr">
+                    ${quote.pnl.initialInvestmentUsd.toLocaleString("en-US")} USD
+                  </div>
+                </div>
+
+                {/* 3. Current Value */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                  <div className="text-[11px] text-slate-400">{lang === "fa" ? "ارزش روز دارایی (فعلی)" : "Current Total Value"}</div>
+                  <div className="text-base font-bold text-emerald-400 font-mono">
+                    {quote.pnl.currentValueToman.toLocaleString("fa-IR")}
+                    <span className="text-xs font-normal text-slate-400 mr-1">تومان</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono" dir="ltr">
+                    ${quote.pnl.currentValueUsd.toLocaleString("en-US")} USD
+                  </div>
+                </div>
+
+                {/* 4. Net Profit / Loss */}
+                <div className={`p-3.5 rounded-xl border space-y-1 ${
+                  quote.pnl.isProfit ? "bg-emerald-950/40 border-emerald-500/40" : "bg-rose-950/40 border-rose-500/40"
+                }`}>
+                  <div className="text-[11px] text-slate-300 font-medium">
+                    {lang === "fa" ? "سود / زیان خالص" : "Net Profit / Loss"}
+                  </div>
+                  <div className={`text-base font-black font-mono ${quote.pnl.isProfit ? "text-emerald-300" : "text-rose-300"}`}>
+                    {quote.pnl.netProfitToman >= 0 ? "+" : ""}{quote.pnl.netProfitToman.toLocaleString("fa-IR")}
+                    <span className="text-xs font-normal mr-1">تومان</span>
+                  </div>
+                  <div className={`text-[10px] font-mono font-bold ${quote.pnl.isProfit ? "text-emerald-400" : "text-rose-400"}`} dir="ltr">
+                    {quote.pnl.netProfitUsd >= 0 ? "+" : ""}${quote.pnl.netProfitUsd} USD
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 border-t border-slate-800 bg-slate-950/30 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-cyan-400" />
+                <span>
+                  {lang === "fa"
+                    ? "برای محاسبه سود و زیان دقیق خرید خود، قیمت خرید را در فیلد بالای صفحه وارد فرمایید."
+                    : "Enter your buy price in the form above to see full Profit & Loss analysis."}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const unitVal = buyCurrency === "usd" ? quote.unit_usd : quote.unit_toman;
+                  setBuyPrice(String(unitVal));
+                  fetchQuote(selectedAsset, typeof amount === "number" ? amount : 1, unitVal, buyCurrency);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-cyan-200 border border-slate-800 font-medium transition-all"
+              >
+                {lang === "fa" ? "تنظیم روی نرخ فعلی" : "Use Current Price"}
+              </button>
+            </div>
+          )}
 
           {/* VISUAL PRICE CHART & PHOTO ENGINE ("عکس نمودار قیمت هم بیاره") */}
           <div className="p-5 border-t border-slate-800 bg-slate-950/40 space-y-4">
@@ -1052,21 +1241,92 @@ export const MarketEngineCard: React.FC<MarketEngineCardProps> = ({ lang }) => {
             : "When market tools are active, sending any of these commands in chats or to the bot will reply with the price chart photo and full quote:"}
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
-          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300">
-            <div className="text-[10px] text-emerald-400 font-bold mb-1">استعلام ارزهای فیات:</div>
-            <div>.price usd</div>
-            <div className="text-slate-500">قیمت دلار | .price aed | .price eur</div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs font-mono">
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 space-y-1.5">
+            <div className="text-[10px] text-emerald-400 font-bold flex items-center justify-between">
+              <span>استعلام ارزهای فیات:</span>
+              <span className="text-[9px] text-slate-500 font-normal">کلیک جهت کپی</span>
+            </div>
+            <div
+              onClick={() => {
+                navigator.clipboard.writeText(".price usd");
+                setRateNotice("دستور .price usd کپی شد! در تلگرام بفرستید.");
+                setTimeout(() => setRateNotice(null), 3000);
+              }}
+              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-emerald-300 cursor-pointer flex items-center justify-between transition-all"
+            >
+              <span>.price usd</span>
+              <Copy className="w-3 h-3 text-slate-500" />
+            </div>
+            <div
+              onClick={() => {
+                navigator.clipboard.writeText(".price usd خرید 90000 تومان");
+                setRateNotice("دستور محاسبه سود دلار کپی شد!");
+                setTimeout(() => setRateNotice(null), 3000);
+              }}
+              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 cursor-pointer flex items-center justify-between text-[11px] transition-all"
+            >
+              <span>.price usd خرید 90000 تومان</span>
+              <Copy className="w-3 h-3 text-slate-500" />
+            </div>
           </div>
-          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300">
-            <div className="text-[10px] text-amber-400 font-bold mb-1">طلا، سکه و مظنه:</div>
-            <div>قیمت سکه امامی</div>
-            <div className="text-slate-500">.price gold | طلا ۱۸ عیار | .price xau</div>
+
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 space-y-1.5">
+            <div className="text-[10px] text-amber-400 font-bold flex items-center justify-between">
+              <span>طلا، سکه و مظنه:</span>
+              <span className="text-[9px] text-slate-500 font-normal">کلیک جهت کپی</span>
+            </div>
+            <div
+              onClick={() => {
+                navigator.clipboard.writeText(".price emami");
+                setRateNotice("دستور .price emami کپی شد!");
+                setTimeout(() => setRateNotice(null), 3000);
+              }}
+              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-amber-300 cursor-pointer flex items-center justify-between transition-all"
+            >
+              <span>.price emami</span>
+              <Copy className="w-3 h-3 text-slate-500" />
+            </div>
+            <div
+              onClick={() => {
+                navigator.clipboard.writeText(".price gold18 خرید 4200000 تومان");
+                setRateNotice("دستور محاسبه سود طلا کپی شد!");
+                setTimeout(() => setRateNotice(null), 3000);
+              }}
+              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 cursor-pointer flex items-center justify-between text-[11px] transition-all"
+            >
+              <span>.price gold18 خرید 4200000</span>
+              <Copy className="w-3 h-3 text-slate-500" />
+            </div>
           </div>
-          <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300">
-            <div className="text-[10px] text-cyan-400 font-bold mb-1">رمزارزها و محاسبه سود:</div>
-            <div>.price btc</div>
-            <div className="text-slate-500">.price ton | خرید 90000 قیمت دلار</div>
+
+          <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 space-y-1.5">
+            <div className="text-[10px] text-cyan-400 font-bold flex items-center justify-between">
+              <span>رمزارزها و سود دلاری:</span>
+              <span className="text-[9px] text-slate-500 font-normal">کلیک جهت کپی</span>
+            </div>
+            <div
+              onClick={() => {
+                navigator.clipboard.writeText(".price btc buy 65000$");
+                setRateNotice("دستور سود بیت‌کوین کپی شد!");
+                setTimeout(() => setRateNotice(null), 3000);
+              }}
+              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-cyan-300 cursor-pointer flex items-center justify-between transition-all"
+            >
+              <span>.price btc buy 65000$</span>
+              <Copy className="w-3 h-3 text-slate-500" />
+            </div>
+            <div
+              onClick={() => {
+                navigator.clipboard.writeText(".price ton خرید 5.5 دلار");
+                setRateNotice("دستور محاسبه سود تون کپی شد!");
+                setTimeout(() => setRateNotice(null), 3000);
+              }}
+              className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-300 cursor-pointer flex items-center justify-between text-[11px] transition-all"
+            >
+              <span>.price ton خرید 5.5 دلار</span>
+              <Copy className="w-3 h-3 text-slate-500" />
+            </div>
           </div>
         </div>
       </div>

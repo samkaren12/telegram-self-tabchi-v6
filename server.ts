@@ -1816,7 +1816,8 @@ async function startServer() {
       const asset = String(req.query.asset || "usd");
       const amount = Number(req.query.amount) || 1.0;
       const buyPrice = req.query.buyPrice ? Number(req.query.buyPrice) : undefined;
-      const quote = await getMarketQuote(asset, amount, buyPrice);
+      const buyCurrency = String(req.query.buyCurrency || "toman") as "toman" | "usd" | "irr";
+      const quote = await getMarketQuote(asset, amount, buyPrice, buyCurrency);
       return res.json({ success: true, quote });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
