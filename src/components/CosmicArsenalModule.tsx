@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Flame,
   Clock,
@@ -153,6 +153,7 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
   const [lockGifsStickers, setLockGifsStickers] = useState<boolean>(false);
   const [lockStarsPaywall, setLockStarsPaywall] = useState<boolean>(false);
   const [starsPrice, setStarsPrice] = useState<number>(5);
+  const [starsPriceInput, setStarsPriceInput] = useState<string>("5");
   const [chatGuardActive, setChatGuardActive] = useState<boolean>(true);
   const [antiCurse, setAntiCurse] = useState<boolean>(true);
   const [autoMuteSeconds, setAutoMuteSeconds] = useState<number>(60);
@@ -291,9 +292,14 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Sync state when account or account.features.cosmic changes
+  const loadedPhoneRef = useRef<string | null>(null);
+
+  // Sync state when account changes (Only on switching accounts, preventing 4s poll resets)
   useEffect(() => {
     if (!account?.features) return;
+    if (loadedPhoneRef.current === account.phone) return;
+    loadedPhoneRef.current = account.phone;
+
     const cosmic = account.features.cosmic;
     if (cosmic) {
       if (cosmic.chat_action) {
@@ -324,7 +330,9 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
         setLockGifsStickers(Boolean(cosmic.pv_shields.lock_stickers_gifs));
         setLockStarsPaywall(Boolean(cosmic.pv_shields.lock_stars_paywall));
         if (cosmic.pv_shields.stars_price !== undefined) {
-          setStarsPrice(cosmic.pv_shields.stars_price);
+          const val = Math.max(1, Number(cosmic.pv_shields.stars_price) || 5);
+          setStarsPrice(val);
+          setStarsPriceInput(String(val));
         }
       }
       if (cosmic.friend_enemy) {
@@ -345,7 +353,45 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
         }
       }
     }
-  }, [account?.phone, account?.features?.cosmic]);
+  }, [account?.phone]);
+
+  // Auto-save PV shields whenever any shield checkbox or stars input changes
+  const handleSaveShields = async (overrides?: Partial<{
+    lock_links: boolean;
+    lock_voice: boolean;
+    lock_photos: boolean;
+    lock_videos: boolean;
+    lock_forwards: boolean;
+    lock_stickers_gifs: boolean;
+    lock_stars_paywall: boolean;
+    stars_price: number;
+  }>) => {
+    if (!account) return;
+    try {
+      const currentShields = {
+        lock_links: overrides?.lock_links !== undefined ? overrides.lock_links : lockLinks,
+        lock_voice: overrides?.lock_voice !== undefined ? overrides.lock_voice : lockVoice,
+        lock_photos: overrides?.lock_photos !== undefined ? overrides.lock_photos : lockPhotos,
+        lock_videos: overrides?.lock_videos !== undefined ? overrides.lock_videos : lockVideos,
+        lock_forwards: overrides?.lock_forwards !== undefined ? overrides.lock_forwards : lockForwards,
+        lock_stickers_gifs: overrides?.lock_stickers_gifs !== undefined ? overrides.lock_stickers_gifs : lockGifsStickers,
+        lock_stars_paywall: overrides?.lock_stars_paywall !== undefined ? overrides.lock_stars_paywall : lockStarsPaywall,
+        stars_price: overrides?.stars_price !== undefined ? overrides.stars_price : (starsPrice || 5),
+      };
+
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/cosmic/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pv_shields: currentShields }),
+      });
+      const json = await res.json();
+      if (json.success && json.cosmic) {
+        account.features.cosmic = json.cosmic;
+        onUpdateAccount({ ...account });
+        showToast(isRtl ? "تنظیمات سپر پیوی و استارز ذخیره شد ✓" : "PV Shields & Stars saved ✓");
+      }
+    } catch (_) {}
+  };
 
   // Save All Cosmic Settings
   const handleSaveCosmicConfig = async () => {
@@ -1613,12 +1659,12 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[
-              { title: "قفل ارسال لینک 🔗", state: lockLinks, set: setLockLinks, desc: "حذف فوری پیام‌های حاوی لینک در پیوی" },
-              { title: "قفل ویس و صدا 🎙️", state: lockVoice, set: setLockVoice, desc: "مسدودسازی ارسال پیام صوتی در چت خصوصی" },
-              { title: "قفل عکس و تصویر 📸", state: lockPhotos, set: setLockPhotos, desc: "جلوگیری از دریافت عکس در پیوی" },
-              { title: "قفل ویدیو و فیلم 🎬", state: lockVideos, set: setLockVideos, desc: "مسدودسازی فایل‌های ویدیویی" },
-              { title: "قفل پیام فوروارد 🔄", state: lockForwards, set: setLockForwards, desc: "حذف خودکار پیام‌های فورواردشده" },
-              { title: "قفل گیف و استیکر 🎭", state: lockGifsStickers, set: setLockGifsStickers, desc: "مسدودسازی انیمیشن‌ها و استیکرها" },
+              { key: "lock_links", title: "قفل ارسال لینک 🔗", state: lockLinks, set: setLockLinks, desc: "حذف فوری پیام‌های حاوی لینک در پیوی" },
+              { key: "lock_voice", title: "قفل ویس و صدا 🎙️", state: lockVoice, set: setLockVoice, desc: "مسدودسازی ارسال پیام صوتی در چت خصوصی" },
+              { key: "lock_photos", title: "قفل عکس و تصویر 📸", state: lockPhotos, set: setLockPhotos, desc: "جلوگیری از دریافت عکس در پیوی" },
+              { key: "lock_videos", title: "قفل ویدیو و فیلم 🎬", state: lockVideos, set: setLockVideos, desc: "مسدودسازی فایل‌های ویدیویی" },
+              { key: "lock_forwards", title: "قفل پیام فوروارد 🔄", state: lockForwards, set: setLockForwards, desc: "حذف خودکار پیام‌های فورواردشده" },
+              { key: "lock_stickers_gifs", title: "قفل گیف و استیکر 🎭", state: lockGifsStickers, set: setLockGifsStickers, desc: "مسدودسازی انیمیشن‌ها و استیکرها" },
             ].map((lock, i) => (
               <div key={i} className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-between">
                 <div>
@@ -1628,7 +1674,11 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                 <input
                   type="checkbox"
                   checked={lock.state}
-                  onChange={(e) => lock.set(e.target.checked)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    lock.set(checked);
+                    handleSaveShields({ [lock.key]: checked });
+                  }}
                   className="w-4 h-4 accent-rose-500 cursor-pointer"
                 />
               </div>
@@ -1655,21 +1705,56 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
             </div>
             <div className="flex items-center gap-2 self-end sm:self-auto">
               <input
-                type="number"
-                min={1}
-                max={100}
-                value={starsPrice}
-                onChange={(e) => setStarsPrice(Number(e.target.value))}
-                className="w-16 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1 text-xs text-center text-amber-300 font-mono"
+                type="text"
+                inputMode="numeric"
+                value={starsPriceInput}
+                placeholder="5"
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, "");
+                  setStarsPriceInput(raw);
+                  const parsed = parseInt(raw, 10);
+                  if (!isNaN(parsed) && parsed > 0) {
+                    setStarsPrice(parsed);
+                    handleSaveShields({ stars_price: parsed });
+                  }
+                }}
+                onBlur={() => {
+                  const parsed = parseInt(starsPriceInput.replace(/\D/g, ""), 10);
+                  const valid = !isNaN(parsed) && parsed > 0 ? parsed : 5;
+                  setStarsPrice(valid);
+                  setStarsPriceInput(String(valid));
+                  handleSaveShields({ stars_price: valid });
+                }}
+                className="w-16 bg-slate-900 border border-amber-500/50 rounded-xl px-2.5 py-1 text-xs text-center text-amber-300 font-mono font-bold outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/40"
               />
               <span className="text-xs text-amber-400 font-bold">⭐ Stars</span>
               <input
                 type="checkbox"
                 checked={lockStarsPaywall}
-                onChange={(e) => setLockStarsPaywall(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setLockStarsPaywall(checked);
+                  handleSaveShields({ lock_stars_paywall: checked });
+                }}
                 className="w-4 h-4 accent-amber-500 cursor-pointer"
               />
             </div>
+          </div>
+
+          {/* Quick Save in Shields subtab */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+            <span className="text-[11px] text-slate-400">
+              {isRtl ? "پس از اعمال تیک‌ها و تغییر تعداد استارز، روی ذخیره کلیک کنید:" : "Save PV shields & Stars paywall:"}
+            </span>
+            <button
+              type="button"
+              onClick={handleSaveCosmicConfig}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+            >
+              <Save className={`w-3.5 h-3.5 ${saving ? "animate-spin" : ""}`} />
+              <span>{saving ? "درحال ذخیره..." : "ذخیره قفل پیوی و استارز"}</span>
+            </button>
           </div>
         </div>
       )}

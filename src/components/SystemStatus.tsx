@@ -34,6 +34,7 @@ import { UpdateManager } from "./UpdateManager";
 import { SslBackgroundServiceManager } from "./SslBackgroundServiceManager";
 import { AutoBackupManager } from "./AutoBackupManager";
 import { SessionHealthScoreCard } from "./SessionHealthScoreCard";
+import { ServerSpecsCapacityModule } from "./ServerSpecsCapacityModule";
 
 interface SystemStatusProps {
   health: SystemHealth | null;
@@ -334,6 +335,9 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Server Hardware Specs & Account Capacity Sizing Engine */}
+      <ServerSpecsCapacityModule lang={lang} />
 
       {/* Real-time Session Health Score (0-100%) Card */}
       <SessionHealthScoreCard lang={lang} />

@@ -1500,49 +1500,62 @@ export class StoreBotManager {
     const starsPerToman = this.data.payments.starsPayment?.starsPerToman || 2000;
     const requiredStars = Math.max(1, Math.round(plan.priceToman / starsPerToman));
 
-    // 1. Try sending official Telegram Native Stars Invoice
+    let invoiceSent = false;
+    // 1. Send official Telegram Native Stars Invoice (Shows official native 'Pay ★ 100' button and Telegram sheet)
     try {
-      await this.callBotApi("sendInvoice", {
+      const invoiceRes = await this.callBotApi("sendInvoice", {
         chat_id: chatId,
-        title: `خرید ${plan.title}`,
-        description: `پرداخت با کسر ${requiredStars} استارز تلگرام و تحویل آنی اشتراک و لایسنس`,
+        title: `پرداخت سفارش ${plan.title}`,
+        description: `مبلغ ${plan.priceToman.toLocaleString("fa-IR")} تومان معادل ${requiredStars} ستاره تلگرام (Telegram Stars). پرداخت داخل تلگرام انجام می‌شود و اشتراک بلافاصله ثبت می‌گردد.`,
         payload: `stars_plan_${plan.id}_${Date.now()}`,
         currency: "XTR",
-        prices: [{ label: plan.title, amount: requiredStars }],
+        prices: [{ label: `${plan.title} (${requiredStars} Stars)`, amount: requiredStars }],
         provider_token: "",
+        start_parameter: `plan_${plan.id.slice(0, 28)}`,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: `پرداخت ★ ${requiredStars}`, pay: true }],
+            [{ text: "🔙 بازگشت به مشخصات پلن", callback_data: `plan_details_${plan.id}` }],
+          ],
+        },
       });
-    } catch (_) {
-      // Fallback silently if sendInvoice is unsupported or restricted
+      if (invoiceRes) {
+        invoiceSent = true;
+      }
+    } catch (err: any) {
+      console.warn("[STORE BOT] sendInvoice fallback:", err?.message);
     }
 
-    // 2. Send interactive confirmation card showing stars count and requesting deduction
-    const invoiceMessage =
-      `⭐ *درخواست کسر استارز تلگرام (Telegram Stars)*\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `📦 *محصول انتخابی:* ${plan.title}\n` +
-      `⏱️ *مدت اعتبار:* ${plan.isUnlimited ? "♾️ دائمی و نامحدود" : `${plan.durationDays} روزه`}\n` +
-      `⭐ *تعداد ستاره‌های مورد نیاز:* *${requiredStars} استارز*\n` +
-      `💰 *معادل تومانی:* ${plan.priceToman.toLocaleString("fa-IR")} تومان\n` +
-      `👤 *حساب خریدار:* ${user.first_name || "کاربر"} (@${user.username || "ندارد"})\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `💡 با کلیک بر روی دکمه زیر، تعداد *${requiredStars} ستاره* از حساب تلگرام شما کسر شده و به صندوق سرور ما واریز می‌گردد؛ سپس لایسنس اختصاصی و اشتراک شما *به صورت آنی و خودکار* تحویل داده خواهد شد:\n\n` +
-      `آیا کسر و انتقال ${requiredStars} استارز را تایید می‌فرمایید؟`;
+    // 2. If native sendInvoice could not be sent (e.g. mock token or bot restriction), send interactive confirmation card
+    if (!invoiceSent) {
+      const invoiceMessage =
+        `⭐ *درخواست کسر استارز تلگرام (Telegram Stars)*\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📦 *محصول انتخابی:* ${plan.title}\n` +
+        `⏱️ *مدت اعتبار:* ${plan.isUnlimited ? "♾️ دائمی و نامحدود" : `${plan.durationDays} روزه`}\n` +
+        `⭐ *تعداد ستاره‌های مورد نیاز:* *${requiredStars} استارز*\n` +
+        `💰 *معادل تومانی:* ${plan.priceToman.toLocaleString("fa-IR")} تومان\n` +
+        `👤 *حساب خریدار:* ${user.first_name || "کاربر"} (@${user.username || "ندارد"})\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 با کلیک بر روی دکمه زیر، تعداد *${requiredStars} ستاره* از حساب تلگرام شما کسر شده و به صندوق سرور ما واریز می‌گردد؛ سپس لایسنس اختصاصی و اشتراک شما *به صورت آنی و خودکار* تحویل داده خواهد شد:\n\n` +
+        `آیا کسر و انتقال ${requiredStars} استارز را تایید می‌فرمایید؟`;
 
-    const buttons: any[] = [
-      [
-        {
-          text: `⭐ تایید کسر ${requiredStars} استارز و پرداخت به ما`,
-          callback_data: `confirm_pay_stars_${plan.id}_${requiredStars}`,
-        },
-      ],
-      [{ text: "🔙 بازگشت به مشخصات پلن", callback_data: `plan_details_${plan.id}` }],
-      [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
-    ];
+      const buttons: any[] = [
+        [
+          {
+            text: `⭐ تایید کسر ${requiredStars} استارز و پرداخت به ما`,
+            callback_data: `confirm_pay_stars_${plan.id}_${requiredStars}`,
+          },
+        ],
+        [{ text: "🔙 بازگشت به مشخصات پلن", callback_data: `plan_details_${plan.id}` }],
+        [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+      ];
 
-    await this.sendMessage(chatId, invoiceMessage, {
-      parse_mode: "Markdown",
-      reply_markup: { inline_keyboard: buttons },
-    });
+      await this.sendMessage(chatId, invoiceMessage, {
+        parse_mode: "Markdown",
+        reply_markup: { inline_keyboard: buttons },
+      });
+    }
   }
 
   public async confirmStarsPayment(chatId: number | string, planId: string, starsCount: number, user: any) {

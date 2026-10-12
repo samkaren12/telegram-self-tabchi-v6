@@ -259,6 +259,105 @@ async function startServer() {
     }
   });
 
+  // Comprehensive Server Specifications & Account Capacity Engine API
+  app.get("/api/system/server-capacity", async (_req, res) => {
+    try {
+      const accounts = telegramManager.getAccounts();
+      const onlineAccounts = accounts.filter((a) => a.isOnline);
+      const totalMemBytes = os.totalmem();
+      const freeMemBytes = os.freemem();
+      const totalMemMb = Math.round(totalMemBytes / (1024 * 1024));
+      const freeMemMb = Math.round(freeMemBytes / (1024 * 1024));
+      const usedMemMb = Math.max(0, totalMemMb - freeMemMb);
+      const memUsagePercent = Math.min(100, Math.round((usedMemMb / Math.max(1, totalMemMb)) * 100));
+
+      const cpus = os.cpus() || [];
+      const cpuCount = cpus.length || 1;
+      const cpuModel = cpus[0]?.model || "Intel / AMD Virtual CPU Core";
+      const cpuSpeedMhz = cpus[0]?.speed || 2400;
+      const loadAvg = os.loadavg() || [0, 0, 0];
+      const serverUptimeSeconds = Math.floor(os.uptime());
+      const processUptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+      const processMemory = process.memoryUsage();
+
+      // Capacity calculations: Each active GramJS MTProto client consumes ~45 MB RAM
+      // Leave 20% + 250MB buffer for OS and system background tasks
+      const availableForAccountsMb = Math.max(0, (totalMemMb * 0.8) - 250);
+      const ramPerAccountMb = 45;
+      const maxSafeCapacity = Math.max(5, Math.floor(availableForAccountsMb / ramPerAccountMb));
+
+      // Absolute Maximum Capacity (with swap utilization at ~35 MB per account)
+      const absoluteMaxCapacity = Math.max(10, Math.floor(((totalMemMb * 0.95) + (totalMemMb * 0.5)) / 35));
+
+      const currentAccountsCount = accounts.length;
+      const currentOnlineCount = onlineAccounts.length;
+      const remainingSafeSlots = Math.max(0, maxSafeCapacity - currentAccountsCount);
+      const capacityUsagePercent = Math.min(100, Math.round((currentAccountsCount / maxSafeCapacity) * 100));
+
+      let loadStatus: "optimal" | "moderate" | "heavy" | "critical" = "optimal";
+      if (memUsagePercent > 88 || loadAvg[0] > cpuCount * 1.5) {
+        loadStatus = "critical";
+      } else if (memUsagePercent > 75 || loadAvg[0] > cpuCount * 1.0) {
+        loadStatus = "heavy";
+      } else if (memUsagePercent > 60 || loadAvg[0] > cpuCount * 0.7) {
+        loadStatus = "moderate";
+      }
+
+      return res.json({
+        success: true,
+        specs: {
+          os: {
+            platform: os.platform(),
+            type: os.type(),
+            release: os.release(),
+            arch: os.arch(),
+            hostname: os.hostname(),
+          },
+          cpu: {
+            cores: cpuCount,
+            model: cpuModel,
+            speedMhz: cpuSpeedMhz,
+            loadAvg1m: Number(loadAvg[0].toFixed(2)),
+            loadAvg5m: Number(loadAvg[1].toFixed(2)),
+            loadAvg15m: Number(loadAvg[2].toFixed(2)),
+          },
+          memory: {
+            totalMb: totalMemMb,
+            freeMb: freeMemMb,
+            usedMb: usedMemMb,
+            usagePercent: memUsagePercent,
+            processRssMb: Math.round(processMemory.rss / (1024 * 1024)),
+            processHeapUsedMb: Math.round(processMemory.heapUsed / (1024 * 1024)),
+          },
+          uptime: {
+            serverUptimeSeconds,
+            processUptimeSeconds,
+          },
+          nodeVersion: process.version,
+        },
+        capacity: {
+          currentAccountsCount,
+          currentOnlineCount,
+          ramPerAccountMb,
+          maxSafeCapacity,
+          absoluteMaxCapacity,
+          remainingSafeSlots,
+          capacityUsagePercent,
+          loadStatus,
+          formula: "محاسبه بر اساس میانگین ۴۵ مگابایت رم به ازای هر اکانت تلگرام به همراه حفظ ۲۵۰ مگابایت رم آزاد برای پایداری سیستم‌عامل",
+          recommendations: [
+            "برای افزودن بیش از ۲۰ شماره به صورت همزمان، ساخت فایل Swap ۴ گیگابایتی (حافظه مجازی) ظرفیت سرور را تا ۲ برابر افزایش می‌دهد.",
+            "تاخیر ارسال تبچی را روی حداقل ۴ الی ۵ ثانیه قرار دهید تا مصرف پردازنده در شرایط ایده آل باقی بماند.",
+            "برای امنیت حداکثری در برابر محدودیت‌های تلگرام، برای هر ۵ الی ۱۰ اکانت از پروکسی اختصاصی MTProto مجزا استفاده نمایید.",
+            "حجم لاگ‌های زنده را به صورت دوره‌ای پاکسازی کنید تا فضای دیسک و بافر آزاد بماند."
+          ],
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
   // ==========================================
   // COSMIC ARSENAL (سلف ساز کازمیک پرو) API ROUTES
   // ==========================================

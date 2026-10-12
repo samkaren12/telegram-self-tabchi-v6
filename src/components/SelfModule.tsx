@@ -291,6 +291,144 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
     }
   };
 
+  // Immediate toggle handler for Profile Clock
+  const handleToggleTime = async (active: boolean) => {
+    setTimeActive(active);
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/self-time`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active, format: timeFormat, fontStyle: timeStyle }),
+      });
+      const data = await res.json();
+      if (data.success && data.self_time) {
+        account.features.self_time = data.self_time;
+        onUpdateAccount({ ...account });
+        setTimeFeedback(lang === "fa" ? (active ? "ساعت پروفایل فعال شد ✓" : "ساعت پروفایل غیرفعال شد ✓") : "Profile clock updated ✓");
+        setTimeout(() => setTimeFeedback(null), 2500);
+      }
+    } catch (_) {}
+  };
+
+  // Immediate toggle handler for Media Saver
+  const handleToggleMediaSaver = async (active: boolean) => {
+    setMediaSaverActive(active);
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/media-saver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active,
+          savePhotos,
+          saveVideos,
+          saveVoice,
+          saveSelfDestruct,
+          forwardTo: mediaForwardTo,
+          targetChannelId: mediaTargetChannelId.trim() || undefined,
+          captionSenderInfo: mediaCaptionInfo,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.media_saver) {
+        account.features.media_saver = data.media_saver;
+        onUpdateAccount({ ...account });
+        setMediaSaverFeedback(lang === "fa" ? (active ? "ذخیره‌ساز رسانه فعال شد ✓" : "ذخیره‌ساز رسانه غیرفعال شد ✓") : "Media saver updated ✓");
+        setTimeout(() => setMediaSaverFeedback(null), 2500);
+      }
+    } catch (_) {}
+  };
+
+  // Immediate toggle handler for Auto-Reply
+  const handleToggleAutoReply = async (active: boolean) => {
+    setAutoReplyActive(active);
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/auto-reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active,
+          messages,
+          delaySeconds,
+          aiEnabled,
+          aiApiKey,
+          aiPrompt,
+          aiModel,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.auto_reply) {
+        account.features.auto_reply = data.auto_reply;
+        onUpdateAccount({ ...account });
+        setReplyFeedback(lang === "fa" ? (active ? "منشی خودکار فعال شد ✓" : "منشی خودکار غیرفعال شد ✓") : "Auto-reply updated ✓");
+        setTimeout(() => setReplyFeedback(null), 2500);
+      }
+    } catch (_) {}
+  };
+
+  // Immediate toggle handler for Mandatory Join
+  const handleToggleMandatoryJoin = async (active: boolean) => {
+    setMandatoryActive(active);
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/mandatory-join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active, channels }),
+      });
+      const data = await res.json();
+      if (data.success && data.mandatory_join) {
+        account.features.mandatory_join = data.mandatory_join;
+        onUpdateAccount({ ...account });
+        setMandatoryFeedback(lang === "fa" ? (active ? "عضویت اجباری فعال شد ✓" : "عضویت اجباری غیرفعال شد ✓") : "Mandatory join updated ✓");
+        setTimeout(() => setMandatoryFeedback(null), 2500);
+      }
+    } catch (_) {}
+  };
+
+  // Immediate toggle handler for Chat Tools
+  const handleToggleTools = async (newCalc: boolean, newMarket: boolean) => {
+    setCalcActive(newCalc);
+    setMarketActive(newMarket);
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/chat-tools`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calculatorActive: newCalc, marketActive: newMarket }),
+      });
+      const data = await res.json();
+      if (data.success && data.tools) {
+        account.features.tools = data.tools;
+        onUpdateAccount({ ...account });
+        setToolsFeedback(lang === "fa" ? "تنظیمات ابزارها ذخیره شد ✓" : "Tools updated ✓");
+        setTimeout(() => setToolsFeedback(null), 2500);
+      }
+    } catch (_) {}
+  };
+
+  // Immediate toggle handler for Font Styler
+  const handleToggleFont = async (active: boolean) => {
+    setFontActive(active);
+    if (!account) return;
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/font-scopes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active, style: fontStyle, scopes: fontScopes }),
+      });
+      const data = await res.json();
+      if (data.success && data.font) {
+        account.features.font = data.font;
+        onUpdateAccount({ ...account });
+        setFontFeedback(lang === "fa" ? (active ? "فونت‌ساز فعال شد ✓" : "فونت‌ساز غیرفعال شد ✓") : "Font styler updated ✓");
+        setTimeout(() => setFontFeedback(null), 2500);
+      }
+    } catch (_) {}
+  };
+
   // 1.1 Save Lock PV
   const handleSaveLockPv = async () => {
     setSavingLockPv(true);
@@ -327,6 +465,40 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
     } finally {
       setSavingLockPv(false);
     }
+  };
+
+  // Auto-save lock pv toggle immediately on checkbox click
+  const triggerAutoSaveLockPv = async (overrides?: Partial<{ active: boolean; autoBlock: boolean; autoDelete: boolean }>) => {
+    if (!account) return;
+    try {
+      const allowedUserIds = lockPvAllowedIdsText
+        .split("\n")
+        .map((id) => id.trim())
+        .filter(Boolean);
+
+      const activeVal = overrides?.active !== undefined ? overrides.active : lockPvActive;
+      const autoBlockVal = overrides?.autoBlock !== undefined ? overrides.autoBlock : lockPvAutoBlock;
+      const autoDeleteVal = overrides?.autoDelete !== undefined ? overrides.autoDelete : lockPvAutoDelete;
+
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/lock-pv`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          active: activeVal,
+          warningMessage: lockPvWarning,
+          autoBlock: autoBlockVal,
+          autoDelete: autoDeleteVal,
+          allowedUserIds,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.lock_pv) {
+        account.features.lock_pv = data.lock_pv;
+        onUpdateAccount({ ...account });
+        setLockPvFeedback(lang === "fa" ? "تنظیمات قفل پیوی ذخیره شد ✓" : "Lock PV saved ✓");
+        setTimeout(() => setLockPvFeedback(null), 2500);
+      }
+    } catch (_) {}
   };
 
   // 1.2 Save Automatic Media Saver
@@ -790,7 +962,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={timeActive}
-                onChange={(e) => setTimeActive(e.target.checked)}
+                onChange={(e) => handleToggleTime(e.target.checked)}
                 className="sr-only peer"
               />
               <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
@@ -939,7 +1111,11 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={lockPvActive}
-                onChange={(e) => setLockPvActive(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setLockPvActive(val);
+                  triggerAutoSaveLockPv({ active: val });
+                }}
                 className="sr-only peer"
               />
               <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
@@ -976,7 +1152,11 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={lockPvAutoBlock}
-                onChange={(e) => setLockPvAutoBlock(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setLockPvAutoBlock(val);
+                  triggerAutoSaveLockPv({ autoBlock: val });
+                }}
                 className="w-4 h-4 rounded text-rose-500 focus:ring-0 cursor-pointer"
               />
             </div>
@@ -995,7 +1175,11 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={lockPvAutoDelete}
-                onChange={(e) => setLockPvAutoDelete(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setLockPvAutoDelete(val);
+                  triggerAutoSaveLockPv({ autoDelete: val });
+                }}
                 className="w-4 h-4 rounded text-amber-500 focus:ring-0 cursor-pointer"
               />
             </div>
@@ -1069,7 +1253,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={mediaSaverActive}
-                onChange={(e) => setMediaSaverActive(e.target.checked)}
+                onChange={(e) => handleToggleMediaSaver(e.target.checked)}
                 className="sr-only peer"
               />
               <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
@@ -1240,7 +1424,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={autoReplyActive}
-                onChange={(e) => setAutoReplyActive(e.target.checked)}
+                onChange={(e) => handleToggleAutoReply(e.target.checked)}
                 className="sr-only peer"
               />
               <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
@@ -1585,7 +1769,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={mandatoryActive}
-                onChange={(e) => setMandatoryActive(e.target.checked)}
+                onChange={(e) => handleToggleMandatoryJoin(e.target.checked)}
                 className="sr-only peer"
               />
               <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
@@ -1703,7 +1887,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
                 <input
                   type="checkbox"
                   checked={calcActive}
-                  onChange={(e) => setCalcActive(e.target.checked)}
+                  onChange={(e) => handleToggleTools(e.target.checked, marketActive)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
@@ -1723,7 +1907,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
                 <input
                   type="checkbox"
                   checked={marketActive}
-                  onChange={(e) => setMarketActive(e.target.checked)}
+                  onChange={(e) => handleToggleTools(calcActive, e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
@@ -1924,7 +2108,7 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               <input
                 type="checkbox"
                 checked={fontActive}
-                onChange={(e) => setFontActive(e.target.checked)}
+                onChange={(e) => handleToggleFont(e.target.checked)}
                 className="sr-only peer"
               />
               <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
