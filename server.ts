@@ -202,6 +202,9 @@ async function startServer() {
     next();
   });
 
+  // Sync registered domain into Telegram bot manager
+  telegramManager.syncDomainFromSslConfig();
+
   // Initialize all stored accounts on server startup
   telegramManager.initAllAccounts().catch((err) => {
     console.error("Error initializing accounts:", err);
@@ -2007,6 +2010,7 @@ async function startServer() {
       const apiHashToUse = apiHash !== undefined ? apiHash : api_hash;
       const enabledToUse = enabled !== undefined ? Boolean(enabled) : Boolean(tokenToUse);
       const layoutToUse = (buttonLayout || button_layout || "3-cols") as "3-cols" | "2-cols" | "1-col";
+      const webAppUrlToUse = req.body.web_app_url || req.body.webAppUrl;
 
       const settings = await telegramManager.updateBotSettings(
         tokenToUse,
@@ -2014,7 +2018,8 @@ async function startServer() {
         enabledToUse,
         apiIdToUse ? Number(apiIdToUse) : undefined,
         apiHashToUse ? String(apiHashToUse).trim() : undefined,
-        layoutToUse
+        layoutToUse,
+        webAppUrlToUse
       );
 
       return res.json({ success: true, settings, bot: settings, message: "تنظیمات ربات با موفقیت تایید و ذخیره شد." });
@@ -2170,6 +2175,10 @@ echo "======================================================================"
       const status = await generateServerIpSsl(customIp, customDomain);
       // Try to attach HTTPS server if not already running
       attachHttpsServer(app, status.httpsPort || 3443);
+      // Immediately sync domain to bot so bot messages & refresh always show the domain
+      if (status.domain && !/^[0-9.]+$/.test(status.domain)) {
+        telegramManager.setDomainUrl(status.domain, status.enabled, status.httpsPort);
+      }
       return res.json({
         success: true,
         ssl: status,
@@ -2188,6 +2197,10 @@ echo "======================================================================"
       }
       const status = saveCustomSslCertificate(certPem, keyPem, customDomain);
       attachHttpsServer(app, status.httpsPort || 3443);
+      // Immediately sync domain to bot
+      if (status.domain && !/^[0-9.]+$/.test(status.domain)) {
+        telegramManager.setDomainUrl(status.domain, status.enabled, status.httpsPort);
+      }
       return res.json({
         success: true,
         ssl: status,

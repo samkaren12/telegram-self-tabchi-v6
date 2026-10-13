@@ -32,6 +32,7 @@ import {
   getTehranTimeParts,
 } from "../src/utils/tehranTime.js";
 import { generateAiSecretaryReply } from "./aiSecretary.js";
+import { getSslConfig } from "./sslManager.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
@@ -358,6 +359,7 @@ export class TelegramManager {
 
   constructor() {
     this.loadState();
+    this.syncDomainFromSslConfig();
     setInterval(() => this.cleanupStaleSessions(), 5 * 60 * 1000);
     setInterval(() => this.checkSubscriptions(), 60 * 1000);
     if (this.botSettings.enabled && this.botSettings.bot_token) {
@@ -365,22 +367,146 @@ export class TelegramManager {
     }
   }
 
-  public setDetectedAppUrl(url: string) {
-    if (url && url.startsWith("http")) {
-      this.detectedAppUrl = url.replace(/\/$/, "");
+  public syncDomainFromSslConfig() {
+    try {
+      const sslCfg = getSslConfig();
+      if (
+        sslCfg &&
+        sslCfg.domain &&
+        sslCfg.domain.trim() &&
+        !/^[0-9.]+$/.test(sslCfg.domain.trim()) &&
+        !sslCfg.domain.includes("nip.io") &&
+        !sslCfg.domain.includes("sslip.io")
+      ) {
+        this.setDomainUrl(sslCfg.domain, sslCfg.enabled, sslCfg.httpsPort);
+      }
+    } catch (_) {}
+  }
+
+  public setDomainUrl(domain?: string, isHttps: boolean = true, port?: number) {
+    if (!domain) return;
+    const cleanDomain = domain.trim().toLowerCase();
+    if (/^[0-9.]+$/.test(cleanDomain) || cleanDomain.includes("nip.io") || cleanDomain.includes("sslip.io")) {
+      return;
     }
+    const proto = isHttps ? "https" : "http";
+    const portStr = port && port !== 443 && port !== 80 ? `:${port}` : "";
+    const fullUrl = `${proto}://${cleanDomain}${portStr}`;
+    this.detectedAppUrl = fullUrl;
+    this.botSettings.web_app_url = fullUrl;
+    this.saveState();
+  }
+
+  public setDetectedAppUrl(url: string) {
+    if (!url || !url.startsWith("http")) return;
+    const cleanUrl = url.replace(/\/$/, "");
+    const incomingHost = cleanUrl.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+    const isIp = /^[0-9.]+$/.test(incomingHost);
+
+    // If an explicit custom domain is registered, NEVER allow a raw IP to downgrade or overwrite it!
+    try {
+      const sslCfg = getSslConfig();
+      if (
+        sslCfg &&
+        sslCfg.domain &&
+        sslCfg.domain.trim() &&
+        !/^[0-9.]+$/.test(sslCfg.domain.trim()) &&
+        !sslCfg.domain.includes("nip.io") &&
+        !sslCfg.domain.includes("sslip.io")
+      ) {
+        if (isIp) {
+          return; // strictly preserve registered domain!
+        }
+      }
+    } catch (_) {}
+
+    // If existing detectedAppUrl is already a real domain name and new incoming is an IP, do not downgrade
+    if (isIp && this.detectedAppUrl) {
+      const currentHost = this.detectedAppUrl.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+      if (!/^[0-9.]+$/.test(currentHost) && !currentHost.includes("nip.io") && !currentHost.includes("sslip.io")) {
+        return;
+      }
+    }
+
+    this.detectedAppUrl = cleanUrl;
   }
 
   public getEffectiveAppUrl(): string {
+    // 1. Check registered custom domain in SSL config first (e.g. user set custom domain or subdomain)
+    try {
+      const sslCfg = getSslConfig();
+      if (
+        sslCfg &&
+        sslCfg.domain &&
+        sslCfg.domain.trim() &&
+        !/^[0-9.]+$/.test(sslCfg.domain.trim()) &&
+        !sslCfg.domain.includes("nip.io") &&
+        !sslCfg.domain.includes("sslip.io")
+      ) {
+        const cleanDomain = sslCfg.domain.trim().toLowerCase();
+        const proto = sslCfg.enabled ? "https" : "http";
+
+        // If detectedAppUrl already contains this domain with a specific port or scheme, prefer it
+        if (this.detectedAppUrl && this.detectedAppUrl.toLowerCase().includes(cleanDomain)) {
+          return this.detectedAppUrl.replace(/\/$/, "");
+        }
+
+        // If user configured explicit web_app_url matching this domain
+        if (this.botSettings.web_app_url && this.botSettings.web_app_url.toLowerCase().includes(cleanDomain)) {
+          return this.botSettings.web_app_url.replace(/\/$/, "");
+        }
+
+        const portStr =
+          sslCfg.httpsPort && sslCfg.httpsPort !== 443 && sslCfg.httpsPort !== 80 && sslCfg.type !== "custom"
+            ? `:${sslCfg.httpsPort}`
+            : "";
+
+        return `${proto}://${cleanDomain}${portStr}`;
+      }
+    } catch (_) {}
+
+    // 2. Check if user configured explicit domain/URL in bot settings (and it's not a raw IP)
+    if (this.botSettings.web_app_url && this.botSettings.web_app_url.startsWith("http")) {
+      const cleanUrl = this.botSettings.web_app_url.replace(/\/$/, "");
+      const hostOnly = cleanUrl.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+      if (!/^[0-9.]+$/.test(hostOnly) && !hostOnly.includes("nip.io") && !hostOnly.includes("sslip.io")) {
+        return cleanUrl;
+      }
+    }
+
+    // 3. Check detectedAppUrl if it is a real domain
+    if (this.detectedAppUrl && this.detectedAppUrl.startsWith("http")) {
+      const hostOnly = this.detectedAppUrl.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+      if (!/^[0-9.]+$/.test(hostOnly) && !hostOnly.includes("nip.io") && !hostOnly.includes("sslip.io")) {
+        return this.detectedAppUrl.replace(/\/$/, "");
+      }
+    }
+
+    // 4. Fallback to botSettings.web_app_url (even if IP or wildcard)
     if (this.botSettings.web_app_url && this.botSettings.web_app_url.startsWith("http")) {
       return this.botSettings.web_app_url.replace(/\/$/, "");
     }
+
+    // 5. Fallback to SSL config with nip.io wildcard
+    try {
+      const sslCfg = getSslConfig();
+      if (sslCfg && sslCfg.domain && sslCfg.domain.trim()) {
+        const proto = sslCfg.enabled ? "https" : "http";
+        const portStr = sslCfg.httpsPort && sslCfg.httpsPort !== 443 ? `:${sslCfg.httpsPort}` : "";
+        return `${proto}://${sslCfg.domain.trim()}${portStr}`;
+      }
+    } catch (_) {}
+
+    // 6. Fallback to detectedAppUrl
     if (this.detectedAppUrl && this.detectedAppUrl.startsWith("http")) {
       return this.detectedAppUrl.replace(/\/$/, "");
     }
+
+    // 7. Fallback to process.env.APP_URL
     if (process.env.APP_URL && process.env.APP_URL.startsWith("http")) {
       return process.env.APP_URL.replace(/\/$/, "");
     }
+
     return "http://localhost:3000";
   }
 
@@ -4285,7 +4411,8 @@ export class TelegramManager {
     enabled: boolean,
     apiId?: number,
     apiHash?: string,
-    buttonLayout?: "3-cols" | "2-cols" | "1-col"
+    buttonLayout?: "3-cols" | "2-cols" | "1-col",
+    webAppUrl?: string
   ): Promise<BotSettings> {
     const cleanToken = (botToken || "").trim();
     const cleanOwnerId = Number(ownerId) || 0;
@@ -4324,6 +4451,7 @@ export class TelegramManager {
       api_id: apiId && apiId > 0 ? Number(apiId) : (this.botSettings.api_id || DEFAULT_API_ID),
       api_hash: apiHash && apiHash.trim() ? apiHash.trim() : (this.botSettings.api_hash || DEFAULT_API_HASH),
       button_layout: buttonLayout || this.botSettings.button_layout || "3-cols",
+      web_app_url: webAppUrl || this.botSettings.web_app_url || this.getEffectiveAppUrl(),
     };
 
     this.saveState();

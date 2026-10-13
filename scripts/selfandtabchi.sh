@@ -214,6 +214,17 @@ do_domain_setup() {
     cfg.domain = '$DOMAIN_INPUT';
     cfg.serverIp = '$ip';
     fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
+
+    const statePath = '$PROJECT_DIR/data/state.json';
+    if (fs.existsSync(statePath)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        if (state.botSettings) {
+          state.botSettings.web_app_url = 'https://$DOMAIN_INPUT';
+          fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+        }
+      } catch(e){}
+    }
   " 2>/dev/null || true
 
   echo -e "${GREEN}✓ دامنه با موفقیت به عنوان دامنه رسمی سرور ثبت گردید.${NC}"
@@ -313,6 +324,17 @@ EOF
     cfg.httpsPort = 3443;
     cfg.daysRemaining = 365;
     fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
+
+    const statePath = '$PROJECT_DIR/data/state.json';
+    if (fs.existsSync(statePath)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        if (state.botSettings) {
+          state.botSettings.web_app_url = 'https://$target';
+          fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+        }
+      } catch(e){}
+    }
   " 2>/dev/null || true
 
   # Restart server to attach HTTPS port
