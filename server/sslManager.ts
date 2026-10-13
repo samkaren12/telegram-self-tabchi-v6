@@ -2,12 +2,13 @@ import fs from "fs";
 import path from "path";
 import https from "https";
 import http from "http";
-import { exec, execSync } from "child_process";
+import { execSync } from "child_process";
+import { X509Certificate } from "crypto";
 
 export interface SslRenewalLog {
   id: string;
   timestamp: string;
-  action: "check" | "renew" | "generate" | "error";
+  action: "check" | "renew" | "generate" | "custom" | "error";
   status: "success" | "warning" | "error" | "info";
   message: string;
   daysRemaining?: number;
@@ -40,6 +41,7 @@ const SSL_LOG_FILE = path.join(SSL_DATA_DIR, "ssl-renewal.log");
 
 let autoRenewTimer: NodeJS.Timeout | null = null;
 let nextScheduledTime = 0;
+let activeHttpsServer: https.Server | null = null;
 
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) {
@@ -61,8 +63,8 @@ export function appendSslLog(log: Omit<SslRenewalLog, "id" | "timestamp">) {
       logs = JSON.parse(fs.readFileSync(SSL_LOG_FILE, "utf-8"));
     }
     logs.unshift(entry);
-    // Keep last 40 logs
-    if (logs.length > 40) logs = logs.slice(0, 40);
+    // Keep last 50 logs
+    if (logs.length > 50) logs = logs.slice(0, 50);
     fs.writeFileSync(SSL_LOG_FILE, JSON.stringify(logs, null, 2), "utf-8");
   } catch (_) {}
 
@@ -119,6 +121,74 @@ export async function getPublicServerIp(): Promise<string> {
 }
 
 /**
+ * Inspect certificate file expiration using Node.js built-in X509Certificate
+ */
+export function inspectCertStatus(status: SslStatus): SslStatus {
+  if (!status.certPath || !fs.existsSync(status.certPath)) {
+    return { ...status, enabled: false, daysRemaining: 0 };
+  }
+
+  try {
+    const certPem = fs.readFileSync(status.certPath, "utf-8");
+
+    // 1. Primary: Use Node built-in X509Certificate (robust, no subprocess)
+    try {
+      const x509 = new X509Certificate(certPem);
+      if (x509.validTo) {
+        const expiresDate = new Date(x509.validTo);
+        if (!isNaN(expiresDate.getTime())) {
+          const diffMs = expiresDate.getTime() - Date.now();
+          const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+          return {
+            ...status,
+            expiresAt: expiresDate.toISOString(),
+            daysRemaining,
+            enabled: daysRemaining > 0,
+          };
+        }
+      }
+    } catch (_) {}
+
+    // 2. Secondary fallback: openssl CLI
+    try {
+      const out = execSync(`openssl x509 -enddate -noout -in "${status.certPath}"`, {
+        encoding: "utf-8",
+        timeout: 4000,
+      });
+      const match = out.match(/notAfter=(.+)/);
+      if (match && match[1]) {
+        const cleanStr = match[1].trim();
+        const expiresDate = new Date(cleanStr);
+        if (!isNaN(expiresDate.getTime())) {
+          const diffMs = expiresDate.getTime() - Date.now();
+          const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+          return {
+            ...status,
+            expiresAt: expiresDate.toISOString(),
+            daysRemaining,
+            enabled: daysRemaining > 0,
+          };
+        }
+      }
+    } catch (_) {}
+
+    // 3. Fallback: file mtime check (valid for 365 days from mtime)
+    const stat = fs.statSync(status.certPath);
+    const estExpire = new Date(stat.mtimeMs + 365 * 24 * 60 * 60 * 1000);
+    const diffMs = estExpire.getTime() - Date.now();
+    const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    return {
+      ...status,
+      expiresAt: estExpire.toISOString(),
+      daysRemaining,
+      enabled: daysRemaining > 0,
+    };
+  } catch (_) {
+    return status;
+  }
+}
+
+/**
  * Load current SSL configuration
  */
 export function getSslConfig(): SslStatus {
@@ -160,7 +230,7 @@ export function saveSslConfig(cfg: SslStatus) {
 }
 
 /**
- * Update SSL configuration parameters (e.g., autoRenew toggle, checkIntervalHours, thresholdDays)
+ * Update SSL configuration parameters
  */
 export function updateSslConfigSettings(partial: Partial<SslStatus>): SslStatus {
   const current = getSslConfig();
@@ -176,66 +246,93 @@ export function updateSslConfigSettings(partial: Partial<SslStatus>): SslStatus 
 }
 
 /**
- * Inspect certificate file expiration
+ * Save custom SSL certificate & private key (e.g. Cloudflare Origin CA certificate)
  */
-function inspectCertStatus(status: SslStatus): SslStatus {
-  if (!status.certPath || !fs.existsSync(status.certPath)) {
-    return { ...status, enabled: false, daysRemaining: 0 };
+export function saveCustomSslCertificate(
+  certPem: string,
+  keyPem: string,
+  customDomain?: string
+): SslStatus {
+  ensureDir(SSL_DATA_DIR);
+
+  const cleanCert = certPem.trim();
+  const cleanKey = keyPem.trim();
+
+  if (!cleanCert.includes("BEGIN CERTIFICATE") || !cleanKey.includes("PRIVATE KEY")) {
+    throw new Error("فرمت گواهی یا کلید خصوصی نامعتبر است (باید حاوی BEGIN CERTIFICATE و BEGIN PRIVATE KEY باشد).");
   }
+
+  let daysRemaining = 365;
+  let expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
 
   try {
-    const certPem = fs.readFileSync(status.certPath, "utf-8");
-    // Parse certificate using openssl command if available
-    try {
-      const out = execSync(`openssl x509 -enddate -noout -in "${status.certPath}"`, {
-        encoding: "utf-8",
-        timeout: 4000,
-      });
-      // Example: notAfter=Sep 24 10:00:00 2027 GMT
-      const match = out.match(/notAfter=(.+)/);
-      if (match) {
-        const expiresDate = new Date(match[1]);
-        const diffMs = expiresDate.getTime() - Date.now();
-        const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-        return {
-          ...status,
-          expiresAt: expiresDate.toISOString(),
-          daysRemaining,
-          enabled: daysRemaining > 0,
-        };
+    const x509 = new X509Certificate(cleanCert);
+    if (x509.validTo) {
+      const expDate = new Date(x509.validTo);
+      if (!isNaN(expDate.getTime())) {
+        expiresAt = expDate.toISOString();
+        const diffMs = expDate.getTime() - Date.now();
+        daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
       }
-    } catch (_) {}
-
-    // Fallback: file mtime check
-    const stat = fs.statSync(status.certPath);
-    const estExpire = new Date(stat.mtimeMs + 365 * 24 * 60 * 60 * 1000);
-    const diffMs = estExpire.getTime() - Date.now();
-    const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-    return {
-      ...status,
-      expiresAt: estExpire.toISOString(),
-      daysRemaining,
-      enabled: daysRemaining > 0,
-    };
-  } catch (_) {
-    return status;
+    }
+  } catch (err: any) {
+    throw new Error(`خطا در اعتبارسنجی گواهی امنیتی: ${err.message}`);
   }
+
+  const certPath = path.join(SSL_DATA_DIR, "server.crt");
+  const keyPath = path.join(SSL_DATA_DIR, "server.key");
+
+  fs.writeFileSync(certPath, cleanCert, "utf-8");
+  fs.writeFileSync(keyPath, cleanKey, "utf-8");
+
+  const current = getSslConfig();
+  const domain = customDomain?.trim() || current.domain || "custom-domain";
+
+  const newStatus: SslStatus = {
+    ...current,
+    enabled: true,
+    type: "custom",
+    domain,
+    certPath,
+    keyPath,
+    expiresAt,
+    daysRemaining,
+    lastRenewCheck: new Date().toISOString(),
+    lastRenewResult: `گواهی دست‌ساز / کلودفلر با موفقیت برای دامنه ${domain} ثبت شد (${daysRemaining} روز اعتبار).`,
+  };
+
+  saveSslConfig(newStatus);
+  appendSslLog({
+    action: "custom",
+    status: "success",
+    message: `گواهی اختصاصی برای دامنه ${domain} ثبت شد. اعتبار: ${daysRemaining} روز.`,
+    daysRemaining,
+  });
+
+  return newStatus;
 }
 
 /**
- * Generate high-grade SAN (Subject Alternative Name) self-signed certificate
- * for raw server IP (IP SAN) + nip.io / sslip.io wildcard domain.
+ * Generate high-grade SAN (Subject Alternative Name) self-signed certificate or Let's Encrypt
+ * NEVER drops custom domain!
  */
 export async function generateServerIpSsl(customIp?: string, customDomain?: string): Promise<SslStatus> {
   ensureDir(SSL_DATA_DIR);
-  const rawIp = customIp || (await getPublicServerIp());
-  // Strictly sanitize IP to prevent shell injection
+  const current = getSslConfig();
+
+  const rawIp = customIp || current.serverIp || (await getPublicServerIp());
   const serverIp = /^[0-9a-fA-F.:]+$/.test(rawIp.trim()) ? rawIp.trim() : "127.0.0.1";
 
-  // Strictly sanitize domain name to valid RFC hostname characters only
+  // Retain existing configured domain if user didn't provide a new one
+  const existingDomain = current.domain && !current.domain.includes("nip.io") && !current.domain.includes("sslip.io")
+    ? current.domain
+    : undefined;
+
   let selectedDomain = `${serverIp}.nip.io`;
-  if (customDomain && customDomain.trim()) {
-    const cleanDom = customDomain.trim().toLowerCase();
+  const domainCandidate = customDomain?.trim() || existingDomain;
+
+  if (domainCandidate) {
+    const cleanDom = domainCandidate.toLowerCase();
     if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(cleanDom)) {
       selectedDomain = cleanDom;
     }
@@ -248,22 +345,39 @@ export async function generateServerIpSsl(customIp?: string, customDomain?: stri
   const certPath = path.join(SSL_DATA_DIR, "server.crt");
   const cnfPath = path.join(SSL_DATA_DIR, "openssl.cnf");
 
-  // Try Certbot for valid Let's Encrypt SSL if custom domain provided and certbot is available
+  // Check if Let's Encrypt cert already exists on VPS for this domain
   let certbotSucceeded = false;
-  if (customDomain && !customDomain.includes("nip.io") && !customDomain.includes("sslip.io")) {
-    try {
-      execSync(`certbot certonly --standalone -d "${selectedDomain}" --non-interactive --agree-tos -m admin@${selectedDomain} --keep-until-expiring 2>/dev/null`, {
-        timeout: 30000,
-        stdio: "ignore",
-      });
-      const liveCert = `/etc/letsencrypt/live/${selectedDomain}/fullchain.pem`;
-      const liveKey = `/etc/letsencrypt/live/${selectedDomain}/privkey.pem`;
-      if (fs.existsSync(liveCert) && fs.existsSync(liveKey)) {
+  const isRealDomain = selectedDomain && !selectedDomain.includes("nip.io") && !selectedDomain.includes("sslip.io") && selectedDomain.includes(".");
+
+  if (isRealDomain) {
+    const liveCert = `/etc/letsencrypt/live/${selectedDomain}/fullchain.pem`;
+    const liveKey = `/etc/letsencrypt/live/${selectedDomain}/privkey.pem`;
+
+    // Try reading directly from live if exists
+    if (fs.existsSync(liveCert) && fs.existsSync(liveKey)) {
+      try {
         fs.copyFileSync(liveCert, certPath);
         fs.copyFileSync(liveKey, keyPath);
         certbotSucceeded = true;
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
+
+    // Otherwise try certbot standalone
+    if (!certbotSucceeded) {
+      try {
+        // Free port 80 if possible
+        try { execSync("fuser -k 80/tcp 2>/dev/null || true"); } catch (_) {}
+        execSync(
+          `certbot certonly --standalone -d "${selectedDomain}" --non-interactive --agree-tos -m "admin@${selectedDomain}" --keep-until-expiring 2>/dev/null`,
+          { timeout: 30000, stdio: "ignore" }
+        );
+        if (fs.existsSync(liveCert) && fs.existsSync(liveKey)) {
+          fs.copyFileSync(liveCert, certPath);
+          fs.copyFileSync(liveKey, keyPath);
+          certbotSucceeded = true;
+        }
+      } catch (_) {}
+    }
   }
 
   if (!certbotSucceeded) {
@@ -298,7 +412,6 @@ DNS.5 = localhost
 
     fs.writeFileSync(cnfPath, opensslConfig, "utf-8");
 
-    // Generate private key and SAN certificate valid for 365 days
     try {
       execSync(
         `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -config "${cnfPath}"`,
@@ -309,7 +422,6 @@ DNS.5 = localhost
     }
   }
 
-  const current = getSslConfig();
   const newStatus: SslStatus = {
     enabled: true,
     type: certbotSucceeded ? "letsencrypt_nip" : "self_signed",
@@ -324,7 +436,7 @@ DNS.5 = localhost
     isDaemonRunning: !!autoRenewTimer,
     history: getSslLogs(),
     lastRenewCheck: new Date().toISOString(),
-    lastRenewResult: `گواهی SSL با موفقیت برای ${selectedDomain} صادر شد.`,
+    lastRenewResult: `گواهی SSL با موفقیت برای دامنه ${selectedDomain} صادر شد.`,
   };
 
   const inspected = inspectCertStatus(newStatus);
@@ -341,6 +453,7 @@ DNS.5 = localhost
 /**
  * Automated Renewal Worker
  * Checks expiration; if less than threshold days remain, automatically executes renewal.
+ * PRESERVES CUSTOM DOMAIN!
  */
 export async function performAutoRenewCheck(forceRenew: boolean = false): Promise<{ renewed: boolean; message: string }> {
   const current = getSslConfig();
@@ -358,9 +471,19 @@ export async function performAutoRenewCheck(forceRenew: boolean = false): Promis
 
   const daysRemaining = current.daysRemaining ?? 0;
 
+  // If custom certificate (e.g. Cloudflare Origin CA) is installed and still valid, NEVER overwrite it!
+  if (current.type === "custom" && !forceRenew) {
+    if (daysRemaining > 0) {
+      current.lastRenewCheck = nowStr;
+      current.lastRenewResult = `گواهی اختصاصی کلودفلر/دستی برای ${current.domain} معتبر است (${daysRemaining} روز باقی‌مانده).`;
+      saveSslConfig(current);
+      return { renewed: false, message: current.lastRenewResult };
+    }
+  }
+
   if (!forceRenew && daysRemaining > threshold) {
     current.lastRenewCheck = nowStr;
-    current.lastRenewResult = `گواهی معتبر است (${daysRemaining} روز باقی‌مانده، آستانه تمدید: ${threshold} روز). اتصال کاملاً امن است.`;
+    current.lastRenewResult = `گواهی معتبر است (${daysRemaining} روز باقی‌مانده برای ${current.domain || current.serverIp}، آستانه تمدید: ${threshold} روز). اتصال کاملاً امن است.`;
     saveSslConfig(current);
 
     appendSslLog({
@@ -375,18 +498,23 @@ export async function performAutoRenewCheck(forceRenew: boolean = false): Promis
 
   // Renewal triggered (either below threshold or forced)
   try {
+    const targetDomain = current.domain && !current.domain.includes("nip.io") && !current.domain.includes("sslip.io")
+      ? current.domain
+      : undefined;
+
     appendSslLog({
       action: "renew",
       status: "info",
       message: forceRenew
-        ? `فرمان تمدید و صدور مجدد دستی برای آی‌پی ${current.serverIp} صادر شد...`
-        : `اعتبار گواهی (${daysRemaining} روز) کمتر از آستانه ${threshold} روز است. آغاز فرآیند تمدید خودکار پس‌زمینه...`,
+        ? `فرمان تمدید و صدور مجدد دستی برای دامنه/آی‌پی ${targetDomain || current.serverIp} صادر شد...`
+        : `اعتبار گواهی (${daysRemaining} روز) کمتر از آستانه ${threshold} روز است. آغاز فرآیند تمدید خودکار پس‌زمینه برای ${targetDomain || current.serverIp}...`,
       daysRemaining,
     });
 
-    const updated = await generateServerIpSsl(current.serverIp);
+    // Pass BOTH serverIp and domain to preserve the user's custom domain!
+    const updated = await generateServerIpSsl(current.serverIp, targetDomain);
     updated.lastRenewCheck = nowStr;
-    updated.lastRenewResult = `تمدید گواهی SSL با موفقیت اجرا شد. اعتبار جدید: ${updated.daysRemaining} روز.`;
+    updated.lastRenewResult = `تمدید گواهی SSL با موفقیت اجرا شد. اعتبار جدید: ${updated.daysRemaining} روز برای ${updated.domain || updated.serverIp}.`;
     saveSslConfig(updated);
 
     appendSslLog({
@@ -451,7 +579,8 @@ export function stopSslAutoRenewDaemon() {
 }
 
 /**
- * Attach HTTPS Server listener if SSL is enabled and files exist
+ * Attach or Hot-Reload HTTPS Server listener if SSL is enabled and files exist
+ * Avoids EADDRINUSE by updating secure context or safely closing first
  */
 export function attachHttpsServer(app: any, preferredPort: number = 3443): https.Server | null {
   const cfg = getSslConfig();
@@ -469,13 +598,30 @@ export function attachHttpsServer(app: any, preferredPort: number = 3443): https
       cert: fs.readFileSync(cfg.certPath),
     };
 
-    const httpsServer = https.createServer(options, app);
-    httpsServer.listen(preferredPort, "0.0.0.0", () => {
+    // If HTTPS server is already active on this port, hot-reload the certificates without dropping the port!
+    if (activeHttpsServer) {
+      try {
+        (activeHttpsServer as any).setSecureContext(options);
+        console.log(`🔒 HTTPS SSL Server certificates reloaded successfully.`);
+        return activeHttpsServer;
+      } catch (_) {}
+    }
+
+    activeHttpsServer = https.createServer(options, app);
+    activeHttpsServer.listen(preferredPort, "0.0.0.0", () => {
       console.log(`🔒 HTTPS SSL Server running on https://0.0.0.0:${preferredPort}`);
     });
-    return httpsServer;
+    activeHttpsServer.on("error", (err: any) => {
+      if (err.code === "EADDRINUSE") {
+        console.warn(`[HTTPS] Port ${preferredPort} is already in use, continuing.`);
+      } else {
+        console.error("[HTTPS] Server error:", err);
+      }
+    });
+    return activeHttpsServer;
   } catch (err) {
     console.error("Failed to start HTTPS server:", err);
     return null;
   }
 }
+

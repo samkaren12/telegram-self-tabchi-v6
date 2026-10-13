@@ -308,6 +308,7 @@ EOF
     cfg.serverIp = '$ip';
     cfg.certPath = '$certPath';
     cfg.keyPath = '$keyPath';
+    cfg.type = '$certbot_ok' === 'true' ? 'letsencrypt_nip' : 'self_signed';
     cfg.autoRenew = true;
     cfg.httpsPort = 3443;
     cfg.daysRemaining = 365;

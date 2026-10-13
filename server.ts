@@ -27,6 +27,7 @@ import {
   updateSslConfigSettings,
   attachHttpsServer,
   getPublicServerIp,
+  saveCustomSslCertificate,
 } from "./server/sslManager.js";
 import { backupService } from "./server/backupService.js";
 import { translateText, SUPPORTED_LANGUAGES } from "./server/translationService.js";
@@ -2173,6 +2174,24 @@ echo "======================================================================"
         success: true,
         ssl: status,
         message: `گواهی SSL امنیتی برای ${status.domain || status.serverIp} با موفقیت صادر و فعال شد.`,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/ssl/custom", async (req, res) => {
+    try {
+      const { certPem, keyPem, customDomain } = req.body || {};
+      if (!certPem || !keyPem) {
+        return res.status(400).json({ success: false, message: "محتوای گواهی (certPem) و کلید خصوصی (keyPem) الزامی است." });
+      }
+      const status = saveCustomSslCertificate(certPem, keyPem, customDomain);
+      attachHttpsServer(app, status.httpsPort || 3443);
+      return res.json({
+        success: true,
+        ssl: status,
+        message: `گواهی امنیتی اختصاصی برای دامنه ${status.domain} با موفقیت نصب و فعال گردید (${status.daysRemaining} روز اعتبار).`,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });

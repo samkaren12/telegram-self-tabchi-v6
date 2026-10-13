@@ -2405,31 +2405,33 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {[
-              { cmd: ".time on", desc: "فعال‌سازی ساعت زنده در پروفایل تلگرام" },
-              { cmd: ".time off", desc: "خاموش کردن ساعت پروفایل" },
-              { cmd: ".pv lock", desc: "قفل فوری پیوی (مسدودسازی پیام‌های خصوصی)" },
-              { cmd: ".pv unlock", desc: "باز کردن قفل پیوی" },
-              { cmd: ".mute [time]", desc: "سکوت کاربر در گروه یا پیوی" },
-              { cmd: ".unmute", desc: "لغو سکوت کاربر" },
-              { cmd: ".spam [تعداد] [متن]", desc: "ارسال اسپم با تعداد دلخواه" },
-              { cmd: ".calc [فرمول]", desc: "محاسبه عبارات ریاضی و مالی" },
-              { cmd: ".price [ارز]", desc: "استعلام نرخ زنده دلار، طلا و رمزارز" },
-              { cmd: ".whois", desc: "مشاهده آمار کامل و مشخصات اکانت یا گروه" },
-              { cmd: ".id", desc: "دریافت آیدی عددی کاربر یا چت" },
-              { cmd: ".clone", desc: "ریپلای روی کاربر جهت کلون نام و بیوگرافی" },
-              { cmd: ".revert", desc: "بازگردانی نام و بیو اصلی خود" },
-              { cmd: ".dl [لینک]", desc: "دانلود از اینستاگرام و یوتیوب" },
-              { cmd: ".tagall [متن]", desc: "تگ همگانی تمامی اعضای گروه" },
-              { cmd: ".clean [تعداد]", desc: "پاکسازی پیام‌های ارسالی شما در گروه" },
-              { cmd: ".spambot", desc: "استعلام وضعیت محدودیت و ریپورتی تلگرام" },
-              { cmd: ".fal", desc: "گرفتن فال حافظ با شعر و تفسیر" },
-              { cmd: ".dice", desc: "پرتاب تاس با شانس برد ۱۰۰٪" },
-              { cmd: ".proxy", desc: "دریافت پروکسی‌های فعال MTProto" },
-              { cmd: ".whisper [متن]", desc: "خواندن و ارسال پیام نجوا" },
+              { cmd: ".time on", copyCmd: ".time on", desc: "فعال‌سازی ساعت زنده در پروفایل تلگرام" },
+              { cmd: ".time off", copyCmd: ".time off", desc: "خاموش کردن ساعت پروفایل" },
+              { cmd: ".pv lock", copyCmd: ".pv lock", desc: "قفل فوری پیوی (مسدودسازی پیام‌های خصوصی)" },
+              { cmd: ".pv unlock", copyCmd: ".pv unlock", desc: "باز کردن قفل پیوی" },
+              { cmd: ".ping", copyCmd: ".ping", desc: "تست پینگ و وضعیت سلامت سرور" },
+              { cmd: ".price [ارز]", copyCmd: ".price btc", desc: "استعلام نرخ زنده دلار، طلا و رمزارز" },
+              { cmd: ".price ton خرید 300000", copyCmd: ".price ton | خرید 300000 تومان", desc: "استعلام همراه با محاسبه سود و زیان" },
+              { cmd: ".calc [فرمول]", copyCmd: ".calc 50 * 85000", desc: "محاسبه عبارات ریاضی و مالی" },
+              { cmd: ".id", copyCmd: ".id", desc: "دریافت آیدی عددی کاربر یا چت" },
+              { cmd: ".whois", copyCmd: ".whois", desc: "مشاهده آمار کامل و مشخصات اکانت یا گروه" },
+              { cmd: ".clean [تعداد]", copyCmd: ".clean 5", desc: "پاکسازی پیام‌های ارسالی شما در گروه" },
+              { cmd: ".tagall [متن]", copyCmd: ".tagall سلام دوستان", desc: "تگ همگانی تمامی اعضای گروه" },
+              { cmd: ".mute [ثانیه]", copyCmd: ".mute 300", desc: "سکوت کاربر در گروه (روی ریپلای)" },
+              { cmd: ".unmute", copyCmd: ".unmute", desc: "لغو سکوت کاربر" },
+              { cmd: ".spam [تعداد] [متن]", copyCmd: ".spam 3 سلام رفقا", desc: "ارسال رگباری متن با تعداد دلخواه" },
+              { cmd: ".dl [لینک]", copyCmd: ".dl https://instagram.com/", desc: "دانلود از اینستاگرام و یوتیوب" },
+              { cmd: ".whisper [متن]", copyCmd: ".whisper پیام خصوصی محرمانه", desc: "ارسال پیام نجوا رمزنگاری‌شده" },
+              { cmd: ".clone", copyCmd: ".clone", desc: "ریپلای روی کاربر جهت کلون نام و بیو" },
+              { cmd: ".revert", copyCmd: ".revert", desc: "بازگردانی نام و بیو اصلی خود" },
+              { cmd: ".spambot", copyCmd: ".spambot", desc: "استعلام وضعیت محدودیت و ریپورتی تلگرام" },
+              { cmd: ".proxy", copyCmd: ".proxy", desc: "دریافت پروکسی‌های فعال MTProto" },
+              { cmd: ".fal", copyCmd: ".fal", desc: "گرفتن فال حافظ با شعر و تفسیر" },
+              { cmd: ".dice", copyCmd: ".dice", desc: "پرتاب تاس با شانس برد ۱۰۰٪" },
             ].map((c, i) => (
               <div
                 key={i}
-                onClick={() => copyToClipboard(c.cmd, `c-${i}`)}
+                onClick={() => copyToClipboard(c.copyCmd || c.cmd, `c-${i}`)}
                 className="p-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/40 rounded-2xl flex items-center justify-between cursor-pointer transition-all active:scale-95"
               >
                 <div>

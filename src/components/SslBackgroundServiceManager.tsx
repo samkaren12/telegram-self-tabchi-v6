@@ -66,6 +66,50 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
   const [customIp, setCustomIp] = useState("");
   const [customDomain, setCustomDomain] = useState("");
   const [showConfig, setShowConfig] = useState(false);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [customCertPem, setCustomCertPem] = useState("");
+  const [customKeyPem, setCustomKeyPem] = useState("");
+
+  const handleSaveCustomCert = async () => {
+    if (!customCertPem.trim() || !customKeyPem.trim()) {
+      setFeedback({
+        message: "لطفاً هر دو بخش متن گواهی (Certificate) و کلید خصوصی (Private Key) را وارد نمایید.",
+        type: "error",
+      });
+      return;
+    }
+    setActionLoading(true);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/ssl/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          certPem: customCertPem.trim(),
+          keyPem: customKeyPem.trim(),
+          customDomain: customDomain.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFeedback({
+          message: data.message || "گواهی اختصاصی با موفقیت نصب و فعال گردید.",
+          type: "success",
+        });
+        setShowCustomModal(false);
+        setCustomCertPem("");
+        setCustomKeyPem("");
+        fetchStatus();
+      } else {
+        throw new Error(data.message || "خطا در نصب گواهی");
+      }
+    } catch (err: any) {
+      setFeedback({ message: `خطا: ${err.message}`, type: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -232,6 +276,26 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowGuide(!showGuide)}
+            className="py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+            title="آموزش و رفع مشکل پریدن گواهی SSL روی دامنه"
+          >
+            <Shield className="w-3.5 h-3.5 text-amber-400" />
+            <span>{lang === "fa" ? "راهنمای ماندگاری SSL 🛡" : "Permanent SSL Guide"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowCustomModal(!showCustomModal)}
+            className="py-2 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+            title="ثبت مستقیم گواهی ۱۵ ساله کلودفلر یا گواهی دلخواه"
+          >
+            <Lock className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{lang === "fa" ? "گواهی ۱۵ ساله Cloudflare 🔑" : "Cloudflare 15Y Cert"}</span>
+          </button>
+
           {onOpenHelp && (
             <button
               type="button"
@@ -240,7 +304,7 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
               title="آموزش تصویری دامنه و SSL"
             >
               <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span>راهنمای SSL و دامنه 💡</span>
+              <span>راهنمای تصویری 💡</span>
             </button>
           )}
 
@@ -251,7 +315,7 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
             className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-400" : ""}`} />
-            <span>{lang === "fa" ? "بروزرسانی وضعیت" : "Refresh"}</span>
+            <span>{lang === "fa" ? "بروزرسانی" : "Refresh"}</span>
           </button>
 
           <button
@@ -260,10 +324,144 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
             className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
           >
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
-            <span>{lang === "fa" ? "تنظیمات آستانه" : "Configure"}</span>
+            <span>{lang === "fa" ? "تنظیمات" : "Settings"}</span>
           </button>
         </div>
       </div>
+
+      {/* EXPANDABLE PERMANENT SSL FIX GUIDE */}
+      {showGuide && (
+        <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-950 to-slate-900 border border-amber-500/30 rounded-2xl space-y-3 shadow-xl">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-amber-400" />
+              <h4 className="font-bold text-xs sm:text-sm text-slate-100">
+                {lang === "fa"
+                  ? "چرا گواهی SSL روی دامنه/ساب‌دامنه می‌پرید و چگونه برای همیشه ماندگار شد؟"
+                  : "Why did Domain SSL drop and how is it permanently solved?"}
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGuide(false)}
+              className="text-xs text-slate-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs leading-relaxed text-slate-300">
+            <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-1.5">
+              <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                <span>۱. رفع باگ ریست دامنه در دیمون:</span>
+              </div>
+              <p className="text-slate-400 text-[11px]">
+                در بررسی‌های دوره‌ای قبلی، دیمون پس‌زمینه نام دامنه اختصاصی شما را در تابع بازرسی لحاظ نمی‌کرد و گواهی موقت آی‌پی جایگزین آن می‌شد. اکنون هسته سیستم ارتقا یافته و دامنه شما به صورت دائمی ثبت و تثبیت می‌ماند.
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-1.5">
+              <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+                <span>۲. تنظیم حالت SSL کلودفلر روی Full:</span>
+              </div>
+              <p className="text-slate-400 text-[11px]">
+                اگر دامنه شما از کلودفلر (ابر نارنجی) رد می‌شود، در منوی <b>SSL/TLS</b> کلودفلر، حالت رمزنگاری را حتماً روی <b>Full</b> بگذارید. در حالت Flexible پس از مدتی لوپ یا خطای گواهی رخ می‌دهد.
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-1.5">
+              <div className="font-bold text-emerald-300 flex items-center gap-1.5">
+                <span>۳. راهکار قطعی: گواهی ۱۵ ساله Origin CA:</span>
+              </div>
+              <p className="text-slate-400 text-[11px]">
+                با زدن دکمه <b>گواهی ۱۵ ساله Cloudflare</b>، می‌توانید یک بار گواهی رایگان ۱۵ ساله کلودفلر را کپی و اینجا پیست کنید تا سیستم تا ۱۵ سال آینده بدون نیاز به تمدید، روی HTTPS معتبر بماند.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXPANDABLE CLOUDFLARE 15-YEAR ORIGIN CA / CUSTOM CERTIFICATE MODAL */}
+      {showCustomModal && (
+        <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-950 to-slate-900 border border-cyan-500/40 rounded-2xl space-y-3.5 shadow-2xl">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-cyan-400" />
+              <h4 className="font-bold text-xs sm:text-sm text-slate-100">
+                {lang === "fa"
+                  ? "ثبت گواهی ۱۵ ساله Cloudflare Origin CA یا گواهی اختصاصی (ماندگاری دائمی)"
+                  : "Install 15-Year Cloudflare Origin CA or Custom SSL (Permanent)"}
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCustomModal(false)}
+              className="text-xs text-slate-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-400 leading-relaxed">
+            {lang === "fa"
+              ? "در پنل کلودفلر به مسیر SSL/TLS -> Origin Server -> Create Certificate بروید. محتوای گواهی (Certificate) و کلید خصوصی (Private Key) تولید شده را در دو کادر زیر پیست نمایید. این گواهی به مدت ۱۵ سال اعتبار دارد و هیچ‌گاه منقضی یا بازنشانی نمی‌شود."
+              : "In Cloudflare dashboard, go to SSL/TLS -> Origin Server -> Create Certificate and paste the PEM certificate and private key below."}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                {lang === "fa" ? "محتوای گواهی (Certificate PEM):" : "Certificate PEM:"}
+              </label>
+              <textarea
+                value={customCertPem}
+                onChange={(e) => setCustomCertPem(e.target.value)}
+                placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                rows={5}
+                dir="ltr"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-[11px] font-mono text-cyan-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                {lang === "fa" ? "کلید خصوصی (Private Key PEM):" : "Private Key PEM:"}
+              </label>
+              <textarea
+                value={customKeyPem}
+                onChange={(e) => setCustomKeyPem(e.target.value)}
+                placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                rows={5}
+                dir="ltr"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-[11px] font-mono text-amber-300 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+            <span className="text-[11px] text-emerald-400">
+              🔒 این گواهی در برابر بازنویسی خودکار دیمون محافظت شده و به هیچ وجه نمی‌پرد.
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCustomModal(false)}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCustomCert}
+                disabled={actionLoading}
+                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white text-xs font-bold transition-all disabled:opacity-50"
+              >
+                {actionLoading ? "در حال ثبت و فعال‌سازی..." : "ثبت و فعال‌سازی گواهی دائمی"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Status Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">

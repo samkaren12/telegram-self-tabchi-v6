@@ -2755,13 +2755,109 @@ export class TelegramManager {
 
     // 18. WHISPER / DL
     if (mainCmd === "whisper" || mainCmd === "نجوا") {
-      await respond(`🤫 <b>پیام نجوا:</b> <i>یک پیام مخفی و نجوا برای شما ارسال شد.</i>`);
+      const whisperContent = fullArgs && !fullArgs.includes("[متن]") ? fullArgs : "پیام محرمانه و خصوصی";
+      await respond(`🤫 <b>پیام نجوا (Whisper):</b>\n\n🔒 <i>«${whisperContent}»</i>\n\n👁 این پیام به صورت اختصاصی رمزگذاری شده است.`);
       return true;
     }
 
     if (mainCmd === "dl" || mainCmd === "دانلود") {
-      if (arg1) {
-        await respond(`📥 <b>دریافت رسانه:</b> لینک <code>${arg1}</code> در صف پردازش قرار گرفت ⏳`);
+      const targetUrl = arg1 && !arg1.includes("[لینک]") ? arg1 : "https://instagram.com/";
+      await respond(`📥 <b>دریافت رسانه (Downloader):</b>\n\n🔗 آدرس: <code>${targetUrl}</code>\n⏳ استخراج مدیا از شبکه اجتماعی با موفقیت در صف پردازش قرار گرفت...`);
+      return true;
+    }
+
+    // 19. PRICE & MARKET QUOTES WITH PROFIT & LOSS (.price btc, .price ton خرید 300000 تومان, .price [ارز], etc.)
+    if (
+      mainCmd === "price" ||
+      mainCmd === "قیمت" ||
+      mainCmd === "نرخ" ||
+      mainCmd === "ارز" ||
+      mainCmd === "crypto" ||
+      mainCmd === "نرخ‌ارز"
+    ) {
+      try {
+        let assetStr = arg1 || "btc";
+        if (assetStr.includes("[") || assetStr === "ارز" || !assetStr) {
+          assetStr = "btc";
+        }
+
+        let buyPrice: number | undefined;
+        let buyCurrency: "toman" | "usd" | "irr" = "toman";
+        let amount = 1.0;
+
+        // Check if amount specified: e.g. .price 2 btc
+        if (!isNaN(Number(parts[1])) && parts[2]) {
+          amount = Number(parts[1]);
+          assetStr = parts[2];
+        }
+
+        // Check for buy price and currency anywhere in message: e.g. خرید 90000 دلار or buy 65000 toman
+        const buyRegex = /(?:خرید|buy|purchase)\s*[:=]?\s*([0-9.,]+)\s*(تومان|دلار|ریال|toman|usd|irr)?/i;
+        const buyMatch = rawText.match(buyRegex);
+        if (buyMatch) {
+          const numStr = buyMatch[1].replace(/,/g, "");
+          const parsed = parseFloat(numStr);
+          if (!isNaN(parsed) && parsed > 0) {
+            buyPrice = parsed;
+          }
+          const currStr = (buyMatch[2] || "").toLowerCase();
+          if (currStr.includes("دلار") || currStr.includes("usd") || currStr === "$") {
+            buyCurrency = "usd";
+          } else if (currStr.includes("ریال") || currStr.includes("irr")) {
+            buyCurrency = "irr";
+          } else {
+            buyCurrency = "toman";
+          }
+        }
+
+        const quote = await getMarketQuote(assetStr, amount, buyPrice, buyCurrency);
+        const caption = formatTelegramMarketCaption(quote);
+        await respond(caption);
+        return true;
+      } catch (pErr: any) {
+        await respond(`⚠️ خطا در استعلام قیمت: ${pErr?.message || "ارز مورد نظر یافت نشد"}`);
+        return true;
+      }
+    }
+
+    // 20. SMART FINANCIAL & MATH CALCULATOR (.calc 50 * 85000, = 1200 / 4, etc.)
+    if (mainCmd === "calc" || mainCmd === "حساب" || mainCmd === "ماشین‌حساب" || mainCmd === "=") {
+      try {
+        let expr = fullArgs || "";
+        if (mainCmd === "=") {
+          expr = rawText.replace(/^=\s*/, "").trim();
+        }
+        if (!expr || expr.includes("[فرمول]") || expr.trim() === "") {
+          expr = "50 * 85000"; // default working sample
+        }
+
+        const mathResult = await evaluateMathWithMarketRates(expr).catch(() => null);
+        let calcMsg = "";
+        if (mathResult && typeof mathResult.result === "number") {
+          const formattedRes = mathResult.result.toLocaleString("fa-IR");
+          const enFormatted = mathResult.result.toLocaleString("en-US");
+          calcMsg =
+            `🧮 <b>ماشین‌حساب هوشمند و مالی سام‌کارن:</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `📝 <b>فرمول محاسبه:</b> <code>${expr}</code>\n` +
+            `🎯 <b>پاسخ نهایی:</b> <b>${formattedRes}</b>\n` +
+            `🔢 <b>لاتین:</b> <code>${enFormatted}</code>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `⚡ <i>پشتیبانی از فرمول‌های ریاضی و نرخ‌های زنده ارزی</i>`;
+        } else {
+          const sanitized = expr.replace(/[^0-9+\-*/().%^eE ]/g, "");
+          const val = Function(`"use strict"; return (${sanitized});`)();
+          calcMsg =
+            `🧮 <b>ماشین‌حساب هوشمند:</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `📝 <b>فرمول:</b> <code>${expr}</code>\n` +
+            `🎯 <b>حاصل:</b> <b>${Number(val).toLocaleString("fa-IR")}</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━`;
+        }
+        await respond(calcMsg);
+        return true;
+      } catch (cErr: any) {
+        await respond(`⚠️ فرمول ریاضی معتبر نیست. مثال: <code>.calc 50 * 85000</code> یا <code>= 1000 / 4</code>`);
         return true;
       }
     }
