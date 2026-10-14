@@ -68,12 +68,11 @@ else
 fi
 WRAPPER_EOF
 
-chmod 755 /tmp/selfandtabchi_wrapper
-cp -f /tmp/selfandtabchi_wrapper /usr/local/bin/selfandtabchi 2>/dev/null || true
-cp -f /tmp/selfandtabchi_wrapper /usr/bin/selfandtabchi 2>/dev/null || true
-cp -f /tmp/selfandtabchi_wrapper /bin/selfandtabchi 2>/dev/null || true
+chmod +x "$PROJECT_DIR/scripts/selfandtabchi.sh"
+cp -f "$PROJECT_DIR/scripts/selfandtabchi.sh" /usr/local/bin/selfandtabchi 2>/dev/null || true
+cp -f "$PROJECT_DIR/scripts/selfandtabchi.sh" /usr/bin/selfandtabchi 2>/dev/null || true
+cp -f "$PROJECT_DIR/scripts/selfandtabchi.sh" /bin/selfandtabchi 2>/dev/null || true
 chmod 755 /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi /bin/selfandtabchi 2>/dev/null || true
-rm -f /tmp/selfandtabchi_wrapper
 hash -r 2>/dev/null || true
 
 echo -e "\033[1;32m✓ دستور sudo selfandtabchi با موفقیت فعال شد!\033[0m"

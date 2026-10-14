@@ -103,7 +103,11 @@ get_service_status() {
       return
     fi
   fi
-  if lsof -ti:3000 >/dev/null 2>&1; then
+  if curl -s -m 1 http://127.0.0.1:3000 >/dev/null 2>&1; then
+    echo -e "${GREEN}آنلاین و فعال روی پورت 3000${NC}"
+    return
+  fi
+  if command -v lsof >/dev/null 2>&1 && lsof -ti:3000 >/dev/null 2>&1; then
     echo -e "${GREEN}فعال روی پورت 3000${NC}"
     return
   fi
@@ -133,42 +137,42 @@ show_menu() {
   show_banner
   echo -e "${WHITE}${BOLD}لطفاً یکی از گزینه‌های زیر را با وارد کردن شماره انتخاب نمایید:${NC}"
   echo ""
-  echo -e "  ${GREEN}[1]${NC} 🚀 ${BOLD}شروع / راه‌اندازی مجدد سرویس (Start / Restart)${NC}"
-  echo -e "  ${YELLOW}[2]${NC} 🛑 ${BOLD}توقف سرویس تلگرام (Stop Service)${NC}"
-  echo -e "  ${CYAN}[3]${NC} 🔄 ${BOLD}بروزرسانی اسکریپت به آخرین نسخه (Update Script)${NC}"
-  echo -e "  ${PURPLE}[4]${NC} 🌐 ${BOLD}تنظیم و تغییر دامنه سرور (Set / Change Domain)${NC}"
-  echo -e "  ${GREEN}[5]${NC} 🔒 ${BOLD}دریافت و نصب گواهی SSL روی دامنه یا آی‌پی (Issue SSL Certificate)${NC}"
-  echo -e "  ${BLUE}[6]${NC} 🛡️ ${BOLD}فعال‌سازی سرویس تمدید خودکار SSL (Auto-Renewal Daemon)${NC}"
-  echo -e "  ${YELLOW}[7]${NC} 📜 ${BOLD}مشاهده لاگ‌های زنده سیستم (View Live Logs)${NC}"
-  echo -e "  ${CYAN}[8]${NC} 🔑 ${BOLD}تغییر رمز ورود مالک و احراز هویت (Change Admin Password)${NC}"
-  echo -e "  ${RED}[9]${NC} 🗑️ ${BOLD}حذف کامل اسکریپت و پاکسازی سرور (Uninstall Script)${NC}"
+  echo -e "  ${GREEN}[1]${NC} 🚀 ${BOLD}روشن کردن و شروع سرویس (Start Service)${NC}"
+  echo -e "  ${YELLOW}[2]${NC} 🛑 ${BOLD}متوقف کردن و خاموش کردن سرویس (Stop Service)${NC}"
+  echo -e "  ${CYAN}[3]${NC} 🔄 ${BOLD}راه‌اندازی مجدد سرویس (Restart Service)${NC}"
+  echo -e "  ${BLUE}[4]${NC} 📊 ${BOLD}بررسی وضعیت آنلاین بودن و اطلاعات سیستم (Check Status)${NC}"
+  echo -e "  ${YELLOW}[5]${NC} 📜 ${BOLD}مشاهده لاگ‌های زنده سیستم (View Live Logs)${NC}"
+  echo -e "  ${PURPLE}[6]${NC} 🌐 ${BOLD}تنظیم و تغییر دامنه سرور (Set / Change Domain)${NC}"
+  echo -e "  ${GREEN}[7]${NC} 🔒 ${BOLD}دریافت و نصب گواهی SSL روی دامنه یا آی‌پی (Issue SSL Certificate)${NC}"
+  echo -e "  ${BLUE}[8]${NC} 🛡️ ${BOLD}فعال‌سازی سرویس تمدید خودکار SSL (Auto-Renewal Daemon)${NC}"
+  echo -e "  ${CYAN}[9]${NC} 🔑 ${BOLD}تغییر رمز ورود مالک و احراز هویت (Change Admin Password)${NC}"
+  echo -e "  ${MAGENTA}[10]${NC} ⚡ ${BOLD}بروزرسانی اسکریپت به آخرین نسخه (Update Script)${NC}"
+  echo -e "  ${RED}[11]${NC} 🗑️ ${BOLD}حذف کامل اسکریپت و پاکسازی سرور (Uninstall Script)${NC}"
   echo -e "  ${WHITE}[0]${NC} 🚪 ${BOLD}خروج (Exit)${NC}"
   echo ""
   echo -ne "${CYAN}👉 شماره مورد نظر را وارد کرده و Enter بزنید: ${NC}"
 }
 
-do_start_restart() {
+do_start() {
   echo ""
-  echo -e "${CYAN}[*] در حال بررسی و راه‌اندازی سرویس...${NC}"
+  echo -e "${CYAN}[*] در حال روشن کردن و راه‌اندازی سرویس تلگرام...${NC}"
   cd "$PROJECT_DIR"
   if [ -f "./start.sh" ]; then
-    chmod +x ./start.sh ./stop.sh
-    ./stop.sh >/dev/null 2>&1 || true
-    sleep 1
+    chmod +x ./start.sh
     ./start.sh
   elif command -v pm2 >/dev/null 2>&1; then
-    pm2 restart telegram-self-tabchi-v6 2>/dev/null || pm2 start process.json 2>/dev/null || pm2 start server.cjs --name "telegram-self-tabchi-v6"
+    pm2 start process.json 2>/dev/null || pm2 start dist/server.cjs --name "telegram-self-tabchi-v6" || pm2 restart telegram-self-tabchi-v6 2>/dev/null
   else
     npm run build
     nohup node dist/server.cjs > data/logs/server.log 2>&1 &
   fi
-  echo -e "${GREEN}✓ سرویس با موفقیت راه‌اندازی و در پس‌زمینه فعال شد.${NC}"
+  echo -e "${GREEN}✓ سرویس با موفقیت فعال شد.${NC}"
   read -p "برای ادامه Enter بزنید..."
 }
 
 do_stop() {
   echo ""
-  echo -e "${YELLOW}[*] در حال متوقف کردن سرویس...${NC}"
+  echo -e "${YELLOW}[*] در حال متوقف کردن و خاموش کردن سرویس...${NC}"
   cd "$PROJECT_DIR"
   if [ -f "./stop.sh" ]; then
     chmod +x ./stop.sh
@@ -177,8 +181,48 @@ do_stop() {
     pm2 stop telegram-self-tabchi-v6 >/dev/null 2>&1 || true
     pm2 delete telegram-self-tabchi-v6 >/dev/null 2>&1 || true
     fuser -k 3000/tcp >/dev/null 2>&1 || true
+    fuser -k 3443/tcp >/dev/null 2>&1 || true
   fi
   echo -e "${GREEN}✓ سرویس با موفقیت متوقف شد.${NC}"
+  read -p "برای ادامه Enter بزنید..."
+}
+
+do_restart() {
+  echo ""
+  echo -e "${CYAN}[*] در حال راه‌اندازی مجدد (Restart) سرویس...${NC}"
+  cd "$PROJECT_DIR"
+  if [ -f "./stop.sh" ] && [ -f "./start.sh" ]; then
+    chmod +x ./start.sh ./stop.sh
+    ./stop.sh >/dev/null 2>&1 || true
+    sleep 1
+    ./start.sh
+  elif command -v pm2 >/dev/null 2>&1; then
+    pm2 restart telegram-self-tabchi-v6 2>/dev/null || pm2 restart all
+  else
+    fuser -k 3000/tcp >/dev/null 2>&1 || true
+    nohup node dist/server.cjs > data/logs/server.log 2>&1 &
+  fi
+  echo -e "${GREEN}✓ سرویس با موفقیت ری‌استارت شد.${NC}"
+  read -p "برای ادامه Enter بزنید..."
+}
+
+do_status() {
+  echo ""
+  echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${CYAN}║${WHITE}             📊 وضعیت زنده سرویس و اکانت‌ها                  ${CYAN}║${NC}"
+  echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+  local ip=$(get_public_ip)
+  local status=$(get_service_status)
+  local ssl_info=$(get_ssl_info)
+  echo -e " 🌐 آی‌پی عمومی سرور:   ${YELLOW}${ip}${NC}"
+  echo -e " 📊 وضعیت سرویس:       ${status}"
+  echo -e " 🔒 وضعیت SSL:         ${ssl_info}"
+  echo -e " 📁 مسیر پروژه:        ${WHITE}${PROJECT_DIR}${NC}"
+  echo -e " 🔗 وب‌پنل:             ${CYAN}http://${ip}:3000${NC} یا ${CYAN}https://${ip}:3443${NC}"
+  echo ""
+  if command -v pm2 >/dev/null 2>&1; then
+    pm2 status telegram-self-tabchi-v6 2>/dev/null || pm2 list 2>/dev/null || true
+  fi
   read -p "برای ادامه Enter بزنید..."
 }
 
@@ -562,27 +606,48 @@ do_uninstall() {
   exit 0
 }
 
-# Main event loop
-while true; do
-  show_menu
-  read CHOICE
-  case $CHOICE in
-    1) do_start_restart ;;
-    2) do_stop ;;
-    3) do_update ;;
-    4) do_domain_setup ;;
-    5) do_ssl_menu ;;
-    6) do_auto_renew_toggle ;;
-    7) do_view_logs ;;
-    8) do_change_password ;;
-    9) do_uninstall ;;
-    0|q|Q)
+handle_action() {
+  local act="$1"
+  case $act in
+    1|"start"|"روشن") do_start ;;
+    2|"stop"|"خاموش") do_stop ;;
+    3|"restart"|"ری‌استارت") do_restart ;;
+    4|"status"|"وضعیت") do_status ;;
+    5|"logs"|"لاگ") do_view_logs ;;
+    6|"domain"|"دامنه") do_domain_setup ;;
+    7|"ssl"|"اس‌اس‌ال") do_ssl_menu ;;
+    8|"autorenew"|"تمدید") do_auto_renew_toggle ;;
+    9|"password"|"رمز") do_change_password ;;
+    10|"update"|"آپدیت"|"بروزرسانی") do_update ;;
+    11|"uninstall"|"حذف") do_uninstall ;;
+    0|"exit"|"q"|"Q"|"خروج")
       echo -e "${GREEN}خروج از دستیار مدیریت سرور.${NC}"
       exit 0
       ;;
     *)
-      echo -e "${RED}[!] گزینه نامعتبر است.${NC}"
+      echo -e "${RED}[!] گزینه وارد شده نامعتبر است: $act${NC}"
       sleep 1
       ;;
   esac
+}
+
+convert_to_ascii_digits() {
+  echo "$1" | sed 's/۰/0/g; s/۱/1/g; s/۲/2/g; s/۳/3/g; s/۴/4/g; s/۵/5/g; s/۶/6/g; s/۷/7/g; s/۸/8/g; s/۹/9/g; s/٠/0/g; s/١/1/g; s/٢/2/g; s/٣/3/g; s/٤/4/g; s/٥/5/g; s/٦/6/g; s/٧/7/g; s/٨/8/g; s/٩/9/g; s/[ \t\r\n]//g'
+}
+
+# If CLI argument was provided directly, execute and exit
+if [ -n "$1" ]; then
+  CLI_ARG=$(convert_to_ascii_digits "$1")
+  handle_action "$CLI_ARG"
+  exit 0
+fi
+
+# Interactive menu loop
+while true; do
+  show_menu
+  read -r RAW_CHOICE
+  # Convert Persian/Arabic digits to English digits
+  CHOICE=$(convert_to_ascii_digits "$RAW_CHOICE")
+  handle_action "$CHOICE"
 done
+
