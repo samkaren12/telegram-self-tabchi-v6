@@ -91,6 +91,66 @@ fi
 
 PROJECT_DIR="$(pwd)"
 
+register_cli() {
+  echo "$PROJECT_DIR" | $SUDO tee /etc/selfandtabchi.conf >/dev/null 2>&1 || true
+
+  cat << 'WRAPPER_EOF' > /tmp/selfandtabchi_wrapper
+#!/usr/bin/env bash
+# Global CLI launcher for Telegram Self & Tabchi
+if [ "$EUID" -ne 0 ]; then
+  echo -e "\033[1;31m[!] خطا: برای اجرای دستیار مدیریت لطفاً از دستور زیر با دسترسی روت یا sudo استفاده کنید:\033[0m"
+  echo "    sudo selfandtabchi"
+  exit 1
+fi
+
+PROJECT_DIR=""
+if [ -f /etc/selfandtabchi.conf ]; then
+  CONF_DIR=$(cat /etc/selfandtabchi.conf 2>/dev/null | tr -d '\r\n')
+  if [ -d "$CONF_DIR" ] && [ -f "$CONF_DIR/scripts/selfandtabchi.sh" ]; then
+    PROJECT_DIR="$CONF_DIR"
+  fi
+fi
+
+if [ -z "$PROJECT_DIR" ]; then
+  for dir in "/root/telegram-self-tabchi-v6" "/var/www/telegram-self-tabchi-v6" "/opt/telegram-self-tabchi-v6" "/home/*/telegram-self-tabchi-v6" "$(pwd)"; do
+    for cand in $dir; do
+      if [ -d "$cand" ] && [ -f "$cand/scripts/selfandtabchi.sh" ]; then
+        PROJECT_DIR="$cand"
+        echo "$PROJECT_DIR" > /etc/selfandtabchi.conf 2>/dev/null || true
+        break 2
+      fi
+    done
+  done
+fi
+
+if [ -n "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/scripts/selfandtabchi.sh" ]; then
+  chmod +x "$PROJECT_DIR/scripts/selfandtabchi.sh" 2>/dev/null || true
+  export PROJECT_DIR
+  exec bash "$PROJECT_DIR/scripts/selfandtabchi.sh" "$@"
+else
+  echo -e "\033[1;31m[!] مسیر پروژه یافت نشد. لطفاً در پوشه پروژه دستور را اجرا کنید:\033[0m"
+  echo "    cd /root/telegram-self-tabchi-v6 && sudo bash scripts/selfandtabchi.sh"
+  exit 1
+fi
+WRAPPER_EOF
+
+  $SUDO chmod 755 /tmp/selfandtabchi_wrapper 2>/dev/null || true
+  $SUDO cp -f /tmp/selfandtabchi_wrapper /usr/local/bin/selfandtabchi 2>/dev/null || true
+  $SUDO cp -f /tmp/selfandtabchi_wrapper /usr/bin/selfandtabchi 2>/dev/null || true
+  $SUDO cp -f /tmp/selfandtabchi_wrapper /bin/selfandtabchi 2>/dev/null || true
+  $SUDO chmod 755 /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi /bin/selfandtabchi 2>/dev/null || true
+  rm -f /tmp/selfandtabchi_wrapper 2>/dev/null || true
+  hash -r 2>/dev/null || true
+}
+
+# Auto-register CLI immediately
+register_cli
+
+if [ "$1" = "register" ] || [ "$1" = "--register" ] || [ "$1" = "cli" ]; then
+  echo -e "${GREEN}✓ دستور sudo selfandtabchi با موفقیت ثبت شد.${NC}"
+  exit 0
+fi
+
 # Check Node.js
 echo -e "${BLUE}▶ [2/6] Checking Node.js (v20+ LTS required)...${NC}"
 NODE_NEED_INSTALL=false
@@ -228,52 +288,7 @@ fi
 SERVER_IP=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
 # Register sudo selfandtabchi global terminal command permanently
-echo "$PROJECT_DIR" | $SUDO tee /etc/selfandtabchi.conf >/dev/null 2>&1 || true
-
-cat << 'WRAPPER_EOF' > /tmp/selfandtabchi_wrapper
-#!/usr/bin/env bash
-# Global CLI launcher for Telegram Self & Tabchi
-if [ "$EUID" -ne 0 ]; then
-  echo -e "\033[1;31m[!] خطا: برای اجرای دستیار مدیریت لطفاً از دستور زیر با دسترسی روت یا sudo استفاده کنید:\033[0m"
-  echo "    sudo selfandtabchi"
-  exit 1
-fi
-
-PROJECT_DIR=""
-if [ -f /etc/selfandtabchi.conf ]; then
-  CONF_DIR=$(cat /etc/selfandtabchi.conf 2>/dev/null | tr -d '\r\n')
-  if [ -d "$CONF_DIR" ] && [ -f "$CONF_DIR/scripts/selfandtabchi.sh" ]; then
-    PROJECT_DIR="$CONF_DIR"
-  fi
-fi
-
-if [ -z "$PROJECT_DIR" ]; then
-  for dir in "/root/telegram-self-tabchi-v6" "/var/www/telegram-self-tabchi-v6" "/opt/telegram-self-tabchi-v6" "/home/*/telegram-self-tabchi-v6" "$(pwd)"; do
-    for cand in $dir; do
-      if [ -d "$cand" ] && [ -f "$cand/scripts/selfandtabchi.sh" ]; then
-        PROJECT_DIR="$cand"
-        echo "$PROJECT_DIR" > /etc/selfandtabchi.conf 2>/dev/null || true
-        break 2
-      fi
-    done
-  done
-fi
-
-if [ -n "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/scripts/selfandtabchi.sh" ]; then
-  chmod +x "$PROJECT_DIR/scripts/selfandtabchi.sh" 2>/dev/null || true
-  export PROJECT_DIR
-  exec bash "$PROJECT_DIR/scripts/selfandtabchi.sh" "$@"
-else
-  echo -e "\033[1;31m[!] مسیر پروژه یافت نشد. لطفاً در پوشه پروژه دستور را اجرا کنید.\033[0m"
-  exit 1
-fi
-WRAPPER_EOF
-
-$SUDO chmod 755 /tmp/selfandtabchi_wrapper 2>/dev/null || true
-$SUDO cp -f /tmp/selfandtabchi_wrapper /usr/local/bin/selfandtabchi 2>/dev/null || true
-$SUDO cp -f /tmp/selfandtabchi_wrapper /usr/bin/selfandtabchi 2>/dev/null || true
-$SUDO chmod 755 /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi 2>/dev/null || true
-rm -f /tmp/selfandtabchi_wrapper 2>/dev/null || true
+register_cli
 
 echo -e "\n${GREEN}${BOLD}======================================================================${NC}"
 echo -e "${GREEN}${BOLD}   🎉 INSTALLATION COMPLETED — 24/7 DAEMON ACTIVATED PERMANENTLY!    ${NC}"

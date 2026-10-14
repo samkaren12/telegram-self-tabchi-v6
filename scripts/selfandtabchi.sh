@@ -56,10 +56,25 @@ WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
+CACHED_IP=""
 get_public_ip() {
-  curl -s --max-time 3 https://api.ipify.org 2>/dev/null || \
-  curl -s --max-time 3 https://icanhazip.com 2>/dev/null || \
-  hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1"
+  if [ -n "$CACHED_IP" ]; then
+    echo "$CACHED_IP"
+    return
+  fi
+  local found_ip=""
+  found_ip=$(curl -s --connect-timeout 1 --max-time 2 https://api.ipify.org 2>/dev/null)
+  if [ -z "$found_ip" ]; then
+    found_ip=$(curl -s --connect-timeout 1 --max-time 2 https://icanhazip.com 2>/dev/null)
+  fi
+  if [ -z "$found_ip" ]; then
+    found_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+  if [ -z "$found_ip" ]; then
+    found_ip="127.0.0.1"
+  fi
+  CACHED_IP="$found_ip"
+  echo "$CACHED_IP"
 }
 
 get_ssl_info() {
@@ -96,11 +111,11 @@ get_service_status() {
 }
 
 show_banner() {
-  clear
   local ip=$(get_public_ip)
   local status=$(get_service_status)
   local ssl_info=$(get_ssl_info)
 
+  clear 2>/dev/null || true
   echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${NC}"
   echo -e "${CYAN}║${WHITE}${BOLD}   ⚡ TELEGRAM SELF & TABCHI v6 - SERVER MANAGEMENT ASSISTANT          ${CYAN}║${NC}"
   echo -e "${CYAN}║${PURPLE}   سیستم یکپارچه مدیریت سرور، بروزرسانی، دامنه و گواهی امنیتی SSL      ${CYAN}║${NC}"
