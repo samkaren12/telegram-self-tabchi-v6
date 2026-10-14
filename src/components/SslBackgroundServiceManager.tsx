@@ -111,11 +111,45 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
     }
   };
 
+  const handleSaveDomainOnly = async () => {
+    if (!customDomain.trim()) {
+      setFeedback({ message: "لطفاً نام دامنه یا ساب‌دامنه را وارد کنید.", type: "error" });
+      return;
+    }
+    setActionLoading(true);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/domain/set", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          domain: customDomain.trim(),
+          isHttps: ssl?.enabled ?? true,
+          port: ssl?.httpsPort || 3443,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFeedback({ message: data.message || "دامنه با موفقیت ثبت شد و در ربات اعمال گردید.", type: "success" });
+        fetchStatus();
+      } else {
+        throw new Error(data.message || "خطا در ثبت دامنه");
+      }
+    } catch (err: any) {
+      setFeedback({ message: `خطا: ${err.message}`, type: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const fetchStatus = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/ssl/status");
-      const data = await res.json();
+      const [resSsl, resDom] = await Promise.all([
+        fetch("/api/ssl/status"),
+        fetch("/api/domain/get").catch(() => null),
+      ]);
+      const data = await resSsl.json();
       if (data.success && data.ssl) {
         setSsl(data.ssl);
         setThresholdDays(data.ssl.thresholdDays || 30);
@@ -124,9 +158,16 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
         if (data.ssl.detectedIp && !customIp) {
           setCustomIp(data.ssl.detectedIp);
         }
-        if (data.ssl.domain && !customDomain) {
+      }
+      if (resDom && resDom.ok) {
+        const domData = await resDom.json();
+        if (domData.success && domData.domainConfig?.domain) {
+          setCustomDomain(domData.domainConfig.domain);
+        } else if (data.ssl?.domain && !customDomain) {
           setCustomDomain(data.ssl.domain);
         }
+      } else if (data.ssl?.domain && !customDomain) {
+        setCustomDomain(data.ssl.domain);
       }
     } catch (err: any) {
       setFeedback({ message: `خطا در دریافت وضعیت SSL: ${err.message}`, type: "error" });
@@ -741,6 +782,18 @@ export const SslBackgroundServiceManager: React.FC<SslBackgroundServiceManagerPr
                 : (lang === "fa" ? "صدور SSL روی آی‌پی" : "Issue IP SSL")}
             </span>
           </button>
+          {customDomain.trim() && (
+            <button
+              type="button"
+              onClick={handleSaveDomainOnly}
+              disabled={actionLoading}
+              title={lang === "fa" ? "فقط ثبت دامنه در تنظیمات و ربات‌ها (بدون تغییر SSL فعلی)" : "Register Domain Only"}
+              className="py-2.5 px-3 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-500/40 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all whitespace-nowrap"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>{lang === "fa" ? "ثبت رسمی دامنه" : "Register Domain"}</span>
+            </button>
+          )}
         </div>
 
         <div className="ml-auto flex items-center gap-2">

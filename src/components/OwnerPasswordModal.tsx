@@ -149,15 +149,15 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
       <div
-        className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200"
+        className="w-full max-w-md bg-gradient-to-b from-[#0d1326] to-[#080c1a] border border-violet-500/25 rounded-2xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200"
         dir={lang === "fa" ? "rtl" : "ltr"}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-center justify-between pb-3 border-b border-violet-500/15">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400">
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
@@ -173,7 +173,7 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -183,24 +183,24 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {error && (
             <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
               <span>{error}</span>
             </div>
           )}
 
           {success && (
             <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
               <span>{success}</span>
             </div>
           )}
 
           {/* Current Username Info */}
-          <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl flex items-center justify-between">
+          <div className="p-3 bg-slate-950/70 border border-violet-500/15 rounded-xl flex items-center justify-between">
             <span className="text-slate-400">
               {lang === "fa" ? "نام کاربری فعلی مالک:" : "Current Owner Username:"}
             </span>
-            <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+            <span className="font-mono font-bold text-violet-300 bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/20">
               {fetching ? "..." : currentUsername}
             </span>
           </div>
@@ -208,7 +208,7 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
           {/* New Username Input */}
           <div className="space-y-1.5">
             <label className="text-slate-300 font-semibold flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-amber-400" />
+              <User className="w-3.5 h-3.5 text-violet-400" />
               <span>{lang === "fa" ? "نام کاربری جدید مالک:" : "New Owner Username:"}</span>
             </label>
             <input
@@ -216,7 +216,7 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
               value={newUsername}
               onChange={(e) => setNewUsername(e.target.value)}
               placeholder="e.g. myadmin"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono transition-all"
+              className="w-full saas-input rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-500 focus:border-violet-500 font-mono transition-all"
               required
             />
           </div>
@@ -233,13 +233,13 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="رمز فعلی (پیش‌فرض: samkaren12)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono transition-all pr-10"
+                className="w-full saas-input rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-500 focus:border-violet-500 font-mono transition-all pr-10"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowCurrentPass(!showCurrentPass)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200 cursor-pointer"
               >
                 {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -249,7 +249,7 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
           {/* New Password Input */}
           <div className="space-y-1.5">
             <label className="text-slate-300 font-semibold flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <Shield className="w-3.5 h-3.5 text-violet-400" />
               <span>{lang === "fa" ? "رمز عبور جدید مالک (اختیاری):" : "New Password (optional):"}</span>
             </label>
             <div className="relative">
@@ -258,12 +258,12 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="حداقل ۵ کاراکتر (در صورت خالی بودن بدون تغییر می‌ماند)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono transition-all pr-10"
+                className="w-full saas-input rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-500 focus:border-violet-500 font-mono transition-all pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowNewPass(!showNewPass)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200 cursor-pointer"
               >
                 {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -282,7 +282,7 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="تکرار دقیق رمز جدید"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono transition-all"
+                className="w-full saas-input rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-500 focus:border-violet-500 font-mono transition-all"
                 required
               />
             </div>
@@ -293,14 +293,14 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold transition-colors"
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-300 font-semibold transition-colors cursor-pointer"
             >
               {lang === "fa" ? "انصراف" : "Cancel"}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl saas-btn-primary text-white font-bold shadow-md disabled:opacity-50 transition-all cursor-pointer"
             >
               {loading ? (
                 <>
@@ -320,3 +320,4 @@ export const OwnerPasswordModal: React.FC<OwnerPasswordModalProps> = ({
     </div>
   );
 };
+

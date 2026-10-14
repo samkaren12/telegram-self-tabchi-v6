@@ -73,7 +73,7 @@ export const AccountsFilterToolbar: React.FC<AccountsFilterToolbarProps> = ({
   };
 
   return (
-    <div className="glass-panel rounded-3xl p-4 sm:p-5 shadow-xl border border-cyan-500/20 bg-slate-900/80 space-y-4">
+    <div className="glass-panel rounded-2xl p-4 sm:p-5 shadow-xl border border-violet-500/15 space-y-4">
       {/* Top Header & Search Bar Row */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         {/* Search Input */}
@@ -88,7 +88,7 @@ export const AccountsFilterToolbar: React.FC<AccountsFilterToolbarProps> = ({
                 ? "جستجو در شماره تلفن، نام، نام خانوادگی، یا نام کاربری..."
                 : "Search by phone number, name, or username..."
             }
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-2xl pr-10 pl-9 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-cyan-500/80 transition-all font-medium"
+            className="w-full saas-input rounded-xl pr-10 pl-9 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-violet-500 transition-all font-medium"
           />
           {filters.searchQuery && (
             <button
@@ -143,13 +143,13 @@ export const AccountsFilterToolbar: React.FC<AccountsFilterToolbarProps> = ({
             <select
               value={filters.subscriptionStatus}
               onChange={(e) => handleUpdate("subscriptionStatus", e.target.value as SubscriptionFilterType)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-cyan-500 transition-all cursor-pointer font-medium appearance-none"
+              className="w-full saas-input rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-violet-500 transition-all cursor-pointer font-medium appearance-none"
             >
-              <option value="all">🌐 {isRtl ? "همه وضعیت‌های اشتراک" : "All Subscriptions"}</option>
-              <option value="active">✅ {isRtl ? "اشتراک فعال و معتبر" : "Active & Valid"}</option>
-              <option value="unlimited">♾️ {isRtl ? "دائمی و نامحدود" : "Unlimited Access"}</option>
-              <option value="expiring_soon">⏳ {isRtl ? "رو به اتمام (کمتر از ۳ روز)" : "Expiring Soon (≤3d)"}</option>
-              <option value="expired">❌ {isRtl ? "منقضی شده" : "Expired"}</option>
+              <option value="all" className="bg-[#0b0f20] text-slate-200">🌐 {isRtl ? "همه وضعیت‌های اشتراک" : "All Subscriptions"}</option>
+              <option value="active" className="bg-[#0b0f20] text-slate-200">✅ {isRtl ? "اشتراک فعال و معتبر" : "Active & Valid"}</option>
+              <option value="unlimited" className="bg-[#0b0f20] text-slate-200">♾️ {isRtl ? "دائمی و نامحدود" : "Unlimited Access"}</option>
+              <option value="expiring_soon" className="bg-[#0b0f20] text-slate-200">⏳ {isRtl ? "رو به اتمام (کمتر از ۳ روز)" : "Expiring Soon (≤3d)"}</option>
+              <option value="expired" className="bg-[#0b0f20] text-slate-200">❌ {isRtl ? "منقضی شده" : "Expired"}</option>
             </select>
           </div>
         </div>
@@ -164,11 +164,11 @@ export const AccountsFilterToolbar: React.FC<AccountsFilterToolbarProps> = ({
             <select
               value={filters.onlineStatus}
               onChange={(e) => handleUpdate("onlineStatus", e.target.value as OnlineFilterType)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-cyan-500 transition-all cursor-pointer font-medium appearance-none"
+              className="w-full saas-input rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-violet-500 transition-all cursor-pointer font-medium appearance-none"
             >
-              <option value="all">⚡ {isRtl ? "همه اکانت‌ها (آنلاین و آفلاین)" : "All Accounts"}</option>
-              <option value="online">🟢 {isRtl ? "آنلاین و متصل" : "Online Only"}</option>
-              <option value="offline">🔴 {isRtl ? "قطع اتصال و آفلاین" : "Offline Only"}</option>
+              <option value="all" className="bg-[#0b0f20] text-slate-200">⚡ {isRtl ? "همه اکانت‌ها (آنلاین و آفلاین)" : "All Accounts"}</option>
+              <option value="online" className="bg-[#0b0f20] text-slate-200">🟢 {isRtl ? "آنلاین و متصل" : "Online Only"}</option>
+              <option value="offline" className="bg-[#0b0f20] text-slate-200">🔴 {isRtl ? "قطع اتصال و آفلاین" : "Offline Only"}</option>
             </select>
           </div>
         </div>
@@ -183,13 +183,13 @@ export const AccountsFilterToolbar: React.FC<AccountsFilterToolbarProps> = ({
             <select
               value={filters.broadcastLoad}
               onChange={(e) => handleUpdate("broadcastLoad", e.target.value as BroadcastLoadFilterType)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-cyan-500 transition-all cursor-pointer font-medium appearance-none"
+              className="w-full saas-input rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-violet-500 transition-all cursor-pointer font-medium appearance-none"
             >
-              <option value="all">📊 {isRtl ? "همه بارهای کاری" : "All Loads"}</option>
-              <option value="broadcasting">🚀 {isRtl ? "در حال ارسال همگانی فعال" : "Active Broadcasting"}</option>
-              <option value="high">🔥 {isRtl ? "بار کاری بالا (بیش از ۵۰۰ پیام)" : "High Load (>500 msgs)"}</option>
-              <option value="medium">⚡ {isRtl ? "بار متوسط (۱۰۰ تا ۵۰۰ پیام)" : "Medium Load (100-500)"}</option>
-              <option value="low_idle">💤 {isRtl ? "بار پایین / آماده‌به‌کار (<۱۰۰)" : "Idle / Low (<100)"}</option>
+              <option value="all" className="bg-[#0b0f20] text-slate-200">📊 {isRtl ? "همه بارهای کاری" : "All Loads"}</option>
+              <option value="broadcasting" className="bg-[#0b0f20] text-slate-200">🚀 {isRtl ? "در حال ارسال همگانی فعال" : "Active Broadcasting"}</option>
+              <option value="high" className="bg-[#0b0f20] text-slate-200">🔥 {isRtl ? "بار کاری بالا (بیش از ۵۰۰ پیام)" : "High Load (>500 msgs)"}</option>
+              <option value="medium" className="bg-[#0b0f20] text-slate-200">⚡ {isRtl ? "بار متوسط (۱۰۰ تا ۵۰۰ پیام)" : "Medium Load (100-500)"}</option>
+              <option value="low_idle" className="bg-[#0b0f20] text-slate-200">💤 {isRtl ? "بار پایین / آماده‌به‌کار (<۱۰۰)" : "Idle / Low (<100)"}</option>
             </select>
           </div>
         </div>
@@ -204,12 +204,12 @@ export const AccountsFilterToolbar: React.FC<AccountsFilterToolbarProps> = ({
             <select
               value={filters.sortBy}
               onChange={(e) => handleUpdate("sortBy", e.target.value as SortByType)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-cyan-500 transition-all cursor-pointer font-medium appearance-none"
+              className="w-full saas-input rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-violet-500 transition-all cursor-pointer font-medium appearance-none"
             >
-              <option value="default">📋 {isRtl ? "ترتیب پیش‌فرض" : "Default Order"}</option>
-              <option value="broadcast_sent">🚀 {isRtl ? "بیشترین پیام‌های ارسالی" : "Most Broadcast Sent"}</option>
-              <option value="expiry">⏳ {isRtl ? "نزدیک‌ترین زمان انقضا" : "Closest Expiry Date"}</option>
-              <option value="phone">📞 {isRtl ? "شماره تلفن" : "Phone Number"}</option>
+              <option value="default" className="bg-[#0b0f20] text-slate-200">📋 {isRtl ? "ترتیب پیش‌فرض" : "Default Order"}</option>
+              <option value="broadcast_sent" className="bg-[#0b0f20] text-slate-200">🚀 {isRtl ? "بیشترین پیام‌های ارسالی" : "Most Broadcast Sent"}</option>
+              <option value="expiry" className="bg-[#0b0f20] text-slate-200">⏳ {isRtl ? "نزدیک‌ترین زمان انقضا" : "Closest Expiry Date"}</option>
+              <option value="phone" className="bg-[#0b0f20] text-slate-200">📞 {isRtl ? "شماره تلفن" : "Phone Number"}</option>
             </select>
           </div>
         </div>

@@ -144,31 +144,31 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-4xl bg-gradient-to-br from-[#020604] via-[#051109] to-[#0a0204] border-2 border-emerald-500/40 rounded-3xl shadow-[0_0_50px_rgba(16,185,129,0.25)] overflow-hidden my-auto max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-4xl bg-gradient-to-b from-[#0d1326] via-[#090d1e] to-[#070a18] border border-violet-500/25 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
         dir="rtl"
       >
-        {/* Top Header with Cyber Glow */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-emerald-500/30 bg-black/60 backdrop-blur-md relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-48 h-full bg-gradient-to-l from-emerald-500/15 to-transparent pointer-events-none"></div>
-          <div className="absolute top-0 left-0 w-48 h-full bg-gradient-to-r from-rose-500/15 to-transparent pointer-events-none"></div>
+        {/* Top Header */}
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-violet-500/15 bg-slate-900/40 backdrop-blur-md relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-48 h-full bg-gradient-to-l from-violet-500/10 to-transparent pointer-events-none"></div>
+          <div className="absolute top-0 left-0 w-48 h-full bg-gradient-to-r from-cyan-500/10 to-transparent pointer-events-none"></div>
 
           <div className="flex items-center gap-3 relative z-10">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-              <Lightbulb className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 animate-pulse" />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 shadow-md">
+              <Lightbulb className="w-5 h-5 sm:w-6 sm:h-6 text-violet-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
-                  راهنمای تصویری و خودمونی بخش‌ها
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  راهنمای تصویری و آموزشی بخش‌ها
                 </h3>
-                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/30">
                   آموزش گام‌به‌گام
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                توضیحات خیلی راحت، شفاف و کاربردی درباره نحوه کار هر ماژول
+                توضیحات کاربردی و شفاف درباره نحوه کار هر ماژول
               </p>
             </div>
           </div>
@@ -176,7 +176,7 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl bg-slate-900/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-800 hover:border-rose-500/40 transition-all z-10"
+            className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 hover:border-violet-500/30 transition-all z-10 cursor-pointer"
             title="بستن پنجره"
           >
             <X className="w-5 h-5" />
@@ -184,7 +184,7 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
         </div>
 
         {/* Horizontal Navigation Tabs (Responsive with Scroll) */}
-        <div className="flex items-center gap-2 p-3 bg-black/40 border-b border-emerald-500/20 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-2 p-3 bg-[#060914]/50 border-b border-violet-500/15 overflow-x-auto scrollbar-none">
           {sections.map((sec) => {
             const Icon = sec.icon;
             const isActive = activeSection === sec.id;
@@ -193,13 +193,13 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
                 key={sec.id}
                 type="button"
                 onClick={() => setActiveSection(sec.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap active:scale-95 ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap active:scale-95 cursor-pointer ${
                   isActive
-                    ? "bg-emerald-500 text-slate-950 shadow-[0_0_20px_rgba(16,185,129,0.4)]"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/80 border border-slate-800/80"
+                    ? "bg-violet-600 text-white shadow-md shadow-violet-500/25"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900 border border-transparent"
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? "text-slate-950" : "text-emerald-400"}`} />
+                <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-violet-400"}`} />
                 <span>{sec.title}</span>
               </button>
             );

@@ -32,7 +32,7 @@ import {
   getTehranTimeParts,
 } from "../src/utils/tehranTime.js";
 import { generateAiSecretaryReply } from "./aiSecretary.js";
-import { getSslConfig } from "./sslManager.js";
+import { getSslConfig, getRegisteredDomainConfig } from "./sslManager.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
@@ -369,6 +369,11 @@ export class TelegramManager {
 
   public syncDomainFromSslConfig() {
     try {
+      const reg = getRegisteredDomainConfig();
+      if (reg && reg.domain) {
+        this.setDomainUrl(reg.domain, reg.isHttps, reg.port);
+        return;
+      }
       const sslCfg = getSslConfig();
       if (
         sslCfg &&
@@ -385,7 +390,7 @@ export class TelegramManager {
 
   public setDomainUrl(domain?: string, isHttps: boolean = true, port?: number) {
     if (!domain) return;
-    const cleanDomain = domain.trim().toLowerCase();
+    const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
     if (/^[0-9.]+$/.test(cleanDomain) || cleanDomain.includes("nip.io") || cleanDomain.includes("sslip.io")) {
       return;
     }
@@ -405,6 +410,10 @@ export class TelegramManager {
 
     // If an explicit custom domain is registered, NEVER allow a raw IP to downgrade or overwrite it!
     try {
+      const reg = getRegisteredDomainConfig();
+      if (reg && reg.domain) {
+        if (isIp) return;
+      }
       const sslCfg = getSslConfig();
       if (
         sslCfg &&
@@ -415,7 +424,7 @@ export class TelegramManager {
         !sslCfg.domain.includes("sslip.io")
       ) {
         if (isIp) {
-          return; // strictly preserve registered domain!
+          return;
         }
       }
     } catch (_) {}
@@ -432,7 +441,18 @@ export class TelegramManager {
   }
 
   public getEffectiveAppUrl(): string {
-    // 1. Check registered custom domain in SSL config first (e.g. user set custom domain or subdomain)
+    // 1. Check registered custom domain in domain-config.json first (rock-solid persistence)
+    try {
+      const reg = getRegisteredDomainConfig();
+      if (reg && reg.domain && reg.domain.trim()) {
+        const cleanDomain = reg.domain.trim().toLowerCase();
+        const proto = reg.isHttps ? "https" : "http";
+        const portStr = reg.port && reg.port !== 443 && reg.port !== 80 ? `:${reg.port}` : "";
+        return `${proto}://${cleanDomain}${portStr}`;
+      }
+    } catch (_) {}
+
+    // 2. Check registered custom domain in SSL config
     try {
       const sslCfg = getSslConfig();
       if (
@@ -443,15 +463,13 @@ export class TelegramManager {
         !sslCfg.domain.includes("nip.io") &&
         !sslCfg.domain.includes("sslip.io")
       ) {
-        const cleanDomain = sslCfg.domain.trim().toLowerCase();
+        const cleanDomain = sslCfg.domain.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
         const proto = sslCfg.enabled ? "https" : "http";
 
-        // If detectedAppUrl already contains this domain with a specific port or scheme, prefer it
         if (this.detectedAppUrl && this.detectedAppUrl.toLowerCase().includes(cleanDomain)) {
           return this.detectedAppUrl.replace(/\/$/, "");
         }
 
-        // If user configured explicit web_app_url matching this domain
         if (this.botSettings.web_app_url && this.botSettings.web_app_url.toLowerCase().includes(cleanDomain)) {
           return this.botSettings.web_app_url.replace(/\/$/, "");
         }
@@ -465,7 +483,7 @@ export class TelegramManager {
       }
     } catch (_) {}
 
-    // 2. Check if user configured explicit domain/URL in bot settings (and it's not a raw IP)
+    // 3. Check if user configured explicit domain/URL in bot settings (and it's not a raw IP)
     if (this.botSettings.web_app_url && this.botSettings.web_app_url.startsWith("http")) {
       const cleanUrl = this.botSettings.web_app_url.replace(/\/$/, "");
       const hostOnly = cleanUrl.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
@@ -474,7 +492,7 @@ export class TelegramManager {
       }
     }
 
-    // 3. Check detectedAppUrl if it is a real domain
+    // 4. Check detectedAppUrl if it is a real domain
     if (this.detectedAppUrl && this.detectedAppUrl.startsWith("http")) {
       const hostOnly = this.detectedAppUrl.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
       if (!/^[0-9.]+$/.test(hostOnly) && !hostOnly.includes("nip.io") && !hostOnly.includes("sslip.io")) {
@@ -482,12 +500,12 @@ export class TelegramManager {
       }
     }
 
-    // 4. Fallback to botSettings.web_app_url (even if IP or wildcard)
+    // 5. Fallback to botSettings.web_app_url (even if IP or wildcard)
     if (this.botSettings.web_app_url && this.botSettings.web_app_url.startsWith("http")) {
       return this.botSettings.web_app_url.replace(/\/$/, "");
     }
 
-    // 5. Fallback to SSL config with nip.io wildcard
+    // 6. Fallback to SSL config with nip.io wildcard
     try {
       const sslCfg = getSslConfig();
       if (sslCfg && sslCfg.domain && sslCfg.domain.trim()) {
@@ -497,12 +515,12 @@ export class TelegramManager {
       }
     } catch (_) {}
 
-    // 6. Fallback to detectedAppUrl
+    // 7. Fallback to detectedAppUrl
     if (this.detectedAppUrl && this.detectedAppUrl.startsWith("http")) {
       return this.detectedAppUrl.replace(/\/$/, "");
     }
 
-    // 7. Fallback to process.env.APP_URL
+    // 8. Fallback to process.env.APP_URL
     if (process.env.APP_URL && process.env.APP_URL.startsWith("http")) {
       return process.env.APP_URL.replace(/\/$/, "");
     }

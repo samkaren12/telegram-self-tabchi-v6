@@ -403,19 +403,19 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-lg bg-gradient-to-b from-[#0d1326] to-[#080c1a] border border-violet-500/25 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         dir={lang === "fa" ? "rtl" : "ltr"}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-900/50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-violet-500/15 bg-slate-900/40">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+            <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400">
               <Phone className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-100 text-sm sm:text-base">
+              <h3 className="font-bold text-white text-sm sm:text-base">
                 {t.authModal.title}
               </h3>
               <p className="text-xs text-slate-400">
@@ -435,7 +435,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
           </div>
           <button
             onClick={handleClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -443,12 +443,12 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
 
         {/* Tab switchers (only in Step 1) */}
         {step === "phone" && (
-          <div className="flex border-b border-slate-800/80 bg-slate-950/30 p-1">
+          <div className="flex border-b border-violet-500/15 bg-[#060914]/60 p-1">
             <button
               onClick={() => setActiveTab("phone")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 activeTab === "phone"
-                  ? "bg-slate-800 text-cyan-400 shadow-sm"
+                  ? "bg-violet-600 text-white shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -456,9 +456,9 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
             </button>
             <button
               onClick={() => setActiveTab("session")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 activeTab === "session"
-                  ? "bg-slate-800 text-cyan-400 shadow-sm"
+                  ? "bg-violet-600 text-white shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -501,7 +501,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         placeholder={t.authModal.phonePlaceholder}
                         dir="ltr"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 font-mono text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-center tracking-wider"
+                        className="w-full saas-input rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 font-mono text-sm focus:border-violet-500 transition-all text-center tracking-wider"
                         autoFocus
                       />
                     </div>
@@ -515,10 +515,10 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowAdvancedApi(!showAdvancedApi)}
-                      className="flex items-center justify-between w-full text-xs text-slate-400 hover:text-slate-200 py-1 transition-colors"
+                      className="flex items-center justify-between w-full text-xs text-slate-400 hover:text-slate-200 py-1 transition-colors cursor-pointer"
                     >
                       <span className="flex items-center gap-1.5">
-                        <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                        <Terminal className="w-3.5 h-3.5 text-violet-400" />
                         {t.authModal.advancedApi}
                       </span>
                       {showAdvancedApi ? (
@@ -529,7 +529,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                     </button>
 
                     {showAdvancedApi && (
-                      <div className="mt-3 p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3">
+                      <div className="mt-3 p-3 bg-slate-950/60 border border-violet-500/15 rounded-xl space-y-3">
                         <p className="text-[11px] text-slate-400">
                           {t.authModal.apiHelp}
                         </p>
@@ -543,7 +543,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                             onChange={(e) => setCustomApiId(e.target.value)}
                             placeholder="2496 (Telegram Android Default)"
                             dir="ltr"
-                            className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                            className="w-full saas-input rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-violet-500"
                           />
                         </div>
                         <div>
@@ -556,7 +556,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                             onChange={(e) => setCustomApiHash(e.target.value)}
                             placeholder="8da85b0d5bfe62527e5b244c209159c3"
                             dir="ltr"
-                            className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-cyan-500 focus:outline-none"
+                            className="w-full saas-input rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:border-violet-500"
                           />
                         </div>
                       </div>
@@ -567,7 +567,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-md shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all transform active:scale-98"
+                    className="w-full py-2.5 px-4 rounded-xl saas-btn-primary text-white font-bold text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     {loading ? (
                       <>
@@ -588,8 +588,8 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
               {step === "code" && (
                 <form onSubmit={handleVerifyCode} className="space-y-4">
                   {/* Delivery notification box */}
-                  <div className="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs sm:text-sm flex items-start gap-2.5">
-                    <Send className="w-4 h-4 mt-0.5 flex-shrink-0 text-cyan-400" />
+                  <div className="p-3.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-300 text-xs sm:text-sm flex items-start gap-2.5">
+                    <Send className="w-4 h-4 mt-0.5 shrink-0 text-violet-400" />
                     <div>
                       <p className="font-semibold text-slate-100 mb-0.5">
                         {isCodeViaApp ? t.authModal.codeSentToApp : t.authModal.codeSentToSms}
@@ -611,7 +611,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                       onChange={(e) => setPhoneCode(e.target.value)}
                       placeholder={t.authModal.codePlaceholder}
                       dir="ltr"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 font-mono text-xl focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-center tracking-[0.3em]"
+                      className="w-full saas-input rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 font-mono text-xl focus:border-violet-500 transition-all text-center tracking-[0.3em]"
                       autoFocus
                     />
                   </div>
@@ -624,7 +624,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                         setStep("phone");
                         setPhoneCode("");
                       }}
-                      className="text-cyan-400 hover:underline"
+                      className="text-violet-400 hover:underline cursor-pointer"
                     >
                       {lang === "fa" ? "ویرایش شماره" : "Change number"}
                     </button>
@@ -637,7 +637,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                       <button
                         type="button"
                         onClick={handleSendCode}
-                        className="text-cyan-400 hover:underline font-semibold"
+                        className="text-violet-400 hover:underline font-semibold cursor-pointer"
                       >
                         {t.authModal.resendCode}
                       </button>
@@ -648,7 +648,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-md shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all transform active:scale-98"
+                    className="w-full py-2.5 px-4 rounded-xl saas-btn-primary text-white font-bold text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     {loading ? (
                       <>
@@ -669,7 +669,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
               {step === "2fa" && (
                 <form onSubmit={handleVerify2FA} className="space-y-4">
                   <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs sm:text-sm flex items-start gap-2.5">
-                    <ShieldCheck className="w-5 h-5 flex-shrink-0 text-amber-400 mt-0.5" />
+                    <ShieldCheck className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
                     <div>
                       <p className="font-semibold text-slate-100 mb-0.5">
                         {t.authModal.twoFaTitle}
@@ -696,13 +696,13 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                         onChange={(e) => setTwoFaPassword(e.target.value)}
                         placeholder={t.authModal.passwordPlaceholder}
                         dir="ltr"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 font-mono text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all pr-10"
+                        className="w-full saas-input rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-500 font-mono text-sm focus:border-violet-500 transition-all pr-10"
                         autoFocus
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-200"
+                        className="absolute inset-y-0 right-3 flex items-center text-slate-400 hover:text-slate-200 cursor-pointer"
                       >
                         {showPassword ? (
                           <EyeOff className="w-4 h-4" />
@@ -717,7 +717,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-md shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all transform active:scale-98"
+                    className="w-full py-2.5 px-4 rounded-xl saas-btn-primary text-white font-bold text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     {loading ? (
                       <>
@@ -749,7 +749,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
                   onChange={(e) => setSessionString(e.target.value)}
                   placeholder={t.authModal.sessionPlaceholder}
                   dir="ltr"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 font-mono text-xs focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                  className="w-full saas-input rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 font-mono text-xs focus:border-violet-500 transition-all"
                   autoFocus
                 />
                 <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
@@ -762,7 +762,7 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-sm shadow-md shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all transform active:scale-98"
+                className="w-full py-2.5 px-4 rounded-xl saas-btn-primary text-white font-bold text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
                 {loading ? (
                   <>

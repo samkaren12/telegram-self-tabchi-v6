@@ -20,6 +20,9 @@ import {
   Copy,
   Sparkles,
   Heart,
+  Menu,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount, SystemHealth, AuthSession } from "../types";
@@ -40,6 +43,8 @@ interface NavbarProps {
   onToggleSound?: () => void;
   onOpenHelpModal?: (section?: HelpSectionId) => void;
   onOpenDonateModal?: () => void;
+  onOpenMobileSidebar?: () => void;
+  currentSectionTitle?: string;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -57,6 +62,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSound,
   onOpenHelpModal,
   onOpenDonateModal,
+  onOpenMobileSidebar,
+  currentSectionTitle,
 }) => {
   const t = translations[lang];
   const activeCount = accounts.filter((a) => a.isOnline).length;
@@ -64,148 +71,88 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [copiedCli, setCopiedCli] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 glass-header bg-black/90 border-b border-emerald-500/30 shadow-[0_4px_25px_rgba(0,0,0,0.8)]">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-18 flex items-center justify-between gap-2 sm:gap-4">
-        {/* Brand & Logo with Matrix Green & Crimson Glow */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          {/* Official GitHub Avatar Logo for samkaren12 */}
-          <a
-            href="https://github.com/samkaren12"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="توسعه‌دهنده: github.com/samkaren12"
-            className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 via-emerald-400 to-rose-500 p-0.5 shadow-[0_0_20px_rgba(16,185,129,0.4)] flex-shrink-0 group hover:scale-105 hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] transition-all duration-300 cursor-pointer"
-          >
-            <div className="w-full h-full bg-[#030805] rounded-[14px] overflow-hidden flex items-center justify-center relative">
-              <img
-                src="https://github.com/samkaren12.png"
-                alt="samkaren12"
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                }}
-              />
-              <div className="absolute inset-0 flex items-center justify-center text-emerald-400 -z-10 group-hover:text-emerald-300">
-                <Send className="w-4 h-4 sm:w-5 sm:h-5 transform -rotate-12" />
-              </div>
-            </div>
-            {/* Live Online Ping Badge */}
-            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-[#020503] flex items-center justify-center shadow-[0_0_8px_#10b981]">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-            </span>
-          </a>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base md:text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-white to-rose-400 tracking-tight truncate">
-                {t.appTitle}
-              </h1>
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                24/7 PRO
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 truncate hidden md:block">
-              {t.appSubtitle}
-            </p>
+    <header className="sticky top-0 z-30 glass-header border-b border-violet-500/15">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-3">
+        {/* Left/Start Zone: Mobile Hamburger + Breadcrumb */}
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Mobile Sidebar Hamburger Trigger */}
+          {onOpenMobileSidebar && (
+            <button
+              type="button"
+              onClick={onOpenMobileSidebar}
+              className="md:hidden p-2 rounded-xl bg-slate-900/80 border border-violet-500/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              title="منو"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+
+          {/* Breadcrumb Trail */}
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-400 min-w-0">
+            <span className="hidden sm:inline text-slate-400 font-mono">Console</span>
+            {currentSectionTitle && (
+              <>
+                <span className="hidden sm:inline text-slate-600">
+                  {lang === "fa" ? "‹" : "/"}
+                </span>
+                <span className="text-white font-semibold truncate">
+                  {currentSectionTitle}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Center/Right Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
-          {/* Sudo terminal command quick copy pill */}
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard.writeText("sudo selfandtabchi");
-              setCopiedCli(true);
-              setTimeout(() => setCopiedCli(false), 2000);
-            }}
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-black/80 border border-emerald-500/40 text-[11px] font-mono text-emerald-400 hover:border-emerald-400 hover:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all cursor-pointer"
-            title="کلیک برای کپی دستور sudo selfandtabchi"
-          >
-            <Terminal className="w-3.5 h-3.5 text-emerald-400" />
-            <span>sudo selfandtabchi</span>
-            {copiedCli ? (
-              <Check className="w-3 h-3 text-emerald-300 animate-bounce" />
-            ) : (
-              <Copy className="w-3 h-3 text-slate-500 hover:text-emerald-300" />
-            )}
-          </button>
-
-          {/* Friendly Visual Guide Trigger Button */}
-          {onOpenHelpModal && (
-            <button
-              type="button"
-              onClick={() => onOpenHelpModal()}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 via-emerald-500/10 to-rose-500/15 hover:from-emerald-500/30 hover:to-rose-500/25 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 text-xs font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 cursor-pointer"
-              title="راهنمای تصویری و خودمونی بخش‌ها"
-            >
-              <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span className="hidden xs:inline sm:inline">راهنمای تصویری 💡</span>
-            </button>
-          )}
-
-          {/* Donate & Support Button */}
-          {onOpenDonateModal && (
-            <button
-              type="button"
-              onClick={onOpenDonateModal}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-500/20 to-rose-600/30 hover:from-rose-500/30 hover:to-rose-600/40 border border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white text-xs font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.25)] hover:shadow-[0_0_20px_rgba(239,68,68,0.45)] active:scale-95 cursor-pointer"
-              title="حمایت مالی و دونیت به توسعه‌دهنده (TRON & TON)"
-            >
-              <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-500/30 animate-pulse" />
-              <span className="hidden sm:inline">دونیت 💖</span>
-            </button>
-          )}
-
-          {/* Account Selector (if multiple) */}
+        {/* Right/End Controls Zone */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Active Account Switcher Dropdown */}
           {accounts.length > 0 && (
             <div className="relative">
               <select
                 value={selectedAccount?.phone || ""}
                 onChange={(e) => onSelectAccount(e.target.value)}
-                className="bg-black/80 border border-emerald-500/30 hover:border-emerald-400 text-slate-200 text-xs rounded-xl px-2.5 py-1.5 sm:py-2 focus:outline-none focus:border-emerald-400 transition-all cursor-pointer font-mono shadow-sm"
+                className="bg-slate-900/90 border border-violet-500/25 hover:border-violet-500/50 text-slate-200 text-xs rounded-xl px-2.5 py-1.5 sm:py-2 focus:outline-none focus:border-violet-500 transition-all cursor-pointer font-mono shadow-sm"
               >
                 {accounts.map((acc) => (
-                  <option key={acc.phone} value={acc.phone} className="bg-slate-950 text-white">
-                    {acc.isOnline ? "🟢" : "⚪"} {acc.firstName || acc.phone} ({acc.phone})
+                  <option key={acc.phone} value={acc.phone} className="bg-[#0b0f20] text-white">
+                    {acc.isOnline ? "●" : "○"} {acc.firstName || acc.phone} ({acc.phone})
                   </option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* System status pill */}
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 border border-emerald-500/30 text-xs text-slate-300">
-            <Server className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>
-              {activeCount}/{accounts.length} {lang === "fa" ? "حساب فعال" : "active"}
+          {/* System Status Metric */}
+          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/60 border border-violet-500/15 text-xs text-slate-300">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="font-mono text-slate-300">
+              {activeCount}/{accounts.length} {lang === "fa" ? "اکانت آنلاین" : "online"}
             </span>
           </div>
 
-          {/* Global Sound Notification Toggle */}
+          {/* Sound Notification Toggle */}
           {onToggleSound && (
             <button
               onClick={onToggleSound}
-              className={`p-2 rounded-xl border transition-all text-xs flex items-center justify-center ${
+              className={`p-2 rounded-xl border transition-all text-xs flex items-center justify-center cursor-pointer ${
                 soundEnabled
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
-                  : "bg-black/60 border-slate-800 text-slate-500 hover:text-slate-300"
+                  ? "bg-violet-500/10 border-violet-500/30 text-violet-300 hover:bg-violet-500/20"
+                  : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-300"
               }`}
               title={
                 soundEnabled
                   ? lang === "fa"
-                    ? "اعلان‌های صوتی فعال است"
+                    ? "اعلان‌های صوتی روشن است"
                     : "Sound notifications ON"
                   : lang === "fa"
-                  ? "اعلان‌های صوتی غیرفعال است"
+                  ? "اعلان‌های صوتی خاموش است"
                   : "Sound notifications OFF"
               }
             >
               {soundEnabled ? (
-                <Volume2 className="w-4 h-4 text-emerald-400" />
+                <Volume2 className="w-4 h-4 text-violet-400" />
               ) : (
-                <VolumeX className="w-4 h-4 text-slate-500" />
+                <VolumeX className="w-4 h-4 text-slate-400" />
               )}
             </button>
           )}
@@ -213,66 +160,66 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Language Switcher */}
           <button
             onClick={onToggleLang}
-            className="flex items-center gap-1 px-2.5 py-1.5 sm:py-2 rounded-xl bg-black/60 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/40 text-slate-300 hover:text-white transition-all text-xs font-bold"
+            className="flex items-center gap-1 px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-900/60 hover:bg-slate-800/80 border border-violet-500/15 hover:border-violet-500/35 text-slate-300 hover:text-white transition-all text-xs font-semibold cursor-pointer"
             title={lang === "fa" ? "Switch to English" : "تغییر به فارسی"}
           >
-            <Globe className="w-3.5 h-3.5 text-emerald-400" />
+            <Globe className="w-3.5 h-3.5 text-cyan-400" />
             <span>{lang === "fa" ? "EN" : "فارسی"}</span>
           </button>
+
+          {/* Owner Change Password/Username Button */}
+          {authSession?.role === "owner" && onOpenOwnerPasswordModal && (
+            <button
+              onClick={onOpenOwnerPasswordModal}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-violet-950/40 hover:bg-violet-900/50 border border-violet-500/25 text-violet-300 text-xs font-medium transition-all shadow-sm cursor-pointer"
+              title={lang === "fa" ? "تغییر نام‌کاربری و رمز عبور مالک" : "Change Owner Credentials"}
+            >
+              <KeyRound className="w-3.5 h-3.5 text-violet-400" />
+              <span>{lang === "fa" ? "تغییر رمز" : "Password"}</span>
+            </button>
+          )}
 
           {/* User Session Role Badge */}
           {authSession && (
             <div
               className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold ${
                 authSession.role === "owner"
-                  ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
-                  : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  ? "bg-violet-500/10 border-violet-500/30 text-violet-300"
+                  : "bg-cyan-500/10 border-cyan-500/30 text-cyan-300"
               }`}
             >
               {authSession.role === "owner" ? (
                 <>
-                  <Crown className="w-3.5 h-3.5 text-rose-400" />
-                  <span>{lang === "fa" ? `مالک: ${authSession.username || "samkaren12"}` : `Owner: ${authSession.username}`}</span>
+                  <Crown className="w-3.5 h-3.5 text-violet-400" />
+                  <span className="font-mono text-[11px]">{authSession.username || "samkaren12"}</span>
                 </>
               ) : (
                 <>
-                  <User className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="font-mono">{authSession.customerPhone || authSession.username}</span>
+                  <User className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="font-mono text-[11px]">{authSession.customerPhone || authSession.username}</span>
                 </>
               )}
             </div>
-          )}
-
-          {/* Owner Change Password/Username Button */}
-          {authSession?.role === "owner" && onOpenOwnerPasswordModal && (
-            <button
-              onClick={onOpenOwnerPasswordModal}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-semibold transition-all shadow-sm"
-              title={lang === "fa" ? "تغییر نام‌کاربری و رمز عبور مالک" : "Change Owner Credentials"}
-            >
-              <KeyRound className="w-3.5 h-3.5 text-rose-400" />
-              <span className="hidden md:inline">{lang === "fa" ? "تغییر رمز" : "Password"}</span>
-            </button>
           )}
 
           {/* Logout Button */}
           {onLogout && (
             <button
               onClick={onLogout}
-              className="p-2 rounded-xl bg-black/60 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/40 border border-slate-800 text-slate-400 transition-all text-xs"
+              className="p-2 rounded-xl bg-slate-900/60 hover:bg-rose-950/40 hover:text-rose-300 border border-slate-800 hover:border-rose-500/30 text-slate-400 transition-all text-xs cursor-pointer"
               title={lang === "fa" ? "خروج از پنل" : "Logout"}
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>
           )}
 
-          {/* Connect Account Primary CTA (Owner Only) with Neon Green */}
+          {/* Connect Account Primary CTA (Owner Only) */}
           {(!authSession || authSession.role === "owner") && (
             <button
               onClick={onOpenConnectModal}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-400 hover:from-emerald-400 hover:to-green-300 text-slate-950 font-black text-xs sm:text-sm shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] transition-all transform active:scale-95"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold text-xs sm:text-sm text-white saas-btn-primary transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
+              <Plus className="w-4 h-4" />
               <span className="whitespace-nowrap">{t.connectAccount}</span>
             </button>
           )}

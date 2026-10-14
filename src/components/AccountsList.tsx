@@ -263,23 +263,23 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             <button
               type="button"
               onClick={() => onOpenHelp("accounts")}
-              className="px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              className="px-3 py-2 rounded-xl bg-violet-950/30 hover:bg-violet-900/40 border border-violet-500/20 text-violet-300 font-medium text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
               title="آموزش تصویری اتصال اکانت"
             >
-              <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span>راهنمای اتصال 💡</span>
+              <Lightbulb className="w-3.5 h-3.5 text-violet-400" />
+              <span>راهنمای اتصال</span>
             </button>
           )}
           <button
             onClick={onOpenConnectModal}
-            className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.35)] transition-all active:scale-95"
+            className="px-3.5 py-2 rounded-xl saas-btn-primary text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <Plus className="w-3.5 h-3.5" />
             <span>{lang === "fa" ? "افزودن شماره جدید" : "Add Account"}</span>
           </button>
           <button
             onClick={onRefresh}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-all text-xs flex items-center gap-1.5"
+            className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-violet-500/20 text-slate-300 hover:text-white transition-all text-xs flex items-center gap-1.5 cursor-pointer"
             title="Refresh"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -300,9 +300,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 
       {/* Accounts Grid */}
       {filteredAccounts.length === 0 ? (
-        <div className="glass-panel rounded-3xl p-10 text-center border border-slate-800 space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 mx-auto">
-            <FilterX className="w-6 h-6 text-slate-500" />
+        <div className="glass-panel rounded-2xl p-10 text-center border border-violet-500/20 space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-violet-500/20 flex items-center justify-center text-slate-400 mx-auto">
+            <FilterX className="w-6 h-6 text-slate-400" />
           </div>
           <h4 className="text-sm font-bold text-white">
             {lang === "fa"
@@ -317,7 +317,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           <button
             type="button"
             onClick={() => setFilters(defaultAccountFilters)}
-            className="px-4 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold transition-all cursor-pointer active:scale-95"
+            className="px-4 py-2 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/40 text-violet-300 text-xs font-bold transition-all cursor-pointer active:scale-95"
           >
             {lang === "fa" ? "پاکسازی فیلترها و نمایش همه اکانت‌ها" : "Reset Filters and Show All"}
           </button>
@@ -335,18 +335,18 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           return (
             <div
               key={acc.phone}
-              className={`glass-card-interactive rounded-3xl p-5 sm:p-6 transition-all relative ${
+              className={`glass-card-interactive rounded-2xl p-5 sm:p-6 transition-all relative ${
                 isSelected
-                  ? "border-cyan-500/80 shadow-2xl shadow-cyan-500/15 ring-1 ring-cyan-500/40 bg-slate-900/90"
+                  ? "border-violet-500/80 shadow-2xl shadow-violet-500/15 ring-1 ring-violet-500/40 bg-slate-900/90"
                   : isExpired
                   ? "border-rose-500/50 bg-rose-950/20 shadow-lg shadow-rose-950/30"
-                  : "hover:border-cyan-500/40"
+                  : "hover:border-violet-500/40"
               }`}
             >
               {/* Top info */}
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center text-white font-bold text-lg shadow-md flex-shrink-0">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white font-bold text-base shadow-md shrink-0">
                     {acc.firstName ? acc.firstName[0].toUpperCase() : "U"}
                   </div>
                   <div className="min-w-0">
@@ -363,7 +363,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                 </div>
 
                 {/* Status Badge with Framer Motion Transition Pulse & Select button */}
-                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
+                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 shrink-0">
                   <AccountStatusBadge
                     isOnline={acc.isOnline}
                     phone={acc.phone}
@@ -373,9 +373,9 @@ export const AccountsList: React.FC<AccountsListProps> = ({
                   {/* Select button */}
                   <button
                     onClick={() => onSelectAccount(acc.phone)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex-shrink-0 cursor-pointer ${
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                       isSelected
-                        ? "bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20"
+                        ? "bg-violet-600 text-white font-bold shadow-md shadow-violet-500/20"
                         : "bg-slate-800 text-slate-300 hover:text-white"
                     }`}
                   >
@@ -390,41 +390,41 @@ export const AccountsList: React.FC<AccountsListProps> = ({
 
                 <button
                   onClick={() => setSubscriptionTargetAccount(acc)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-semibold transition-all shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/30 text-xs font-semibold transition-all shadow-sm cursor-pointer"
                   title="Extend or change subscription"
                 >
-                  <Calendar className="w-3.5 h-3.5 text-purple-400" />
-                  <span>{lang === "fa" ? "تمدید اشتراک 📅" : "Extend"}</span>
+                  <Calendar className="w-3.5 h-3.5 text-violet-400" />
+                  <span>{lang === "fa" ? "تمدید اشتراک" : "Extend"}</span>
                 </button>
               </div>
 
-              {/* Aiogram-Style Color-Coded Control Buttons */}
+              {/* Control Buttons */}
               <div className="grid grid-cols-2 gap-2 my-3">
                 <button
                   onClick={() => setBotTargetAccount(acc)}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm transform active:scale-95 ${
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm transform active:scale-95 cursor-pointer ${
                     acc.bot?.enabled && acc.bot?.bot_token
-                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-emerald-500/10"
-                      : "bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                      ? "bg-violet-500/15 border-violet-500/40 text-violet-300 hover:bg-violet-500/25 shadow-violet-500/10"
+                      : "bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
                   title={lang === "fa" ? "ربات تلگرام اختصاصی این شماره" : "Dedicated Telegram Bot"}
                 >
-                  <Bot className={`w-4 h-4 ${acc.bot?.enabled ? "text-emerald-400 animate-pulse" : "text-slate-400"}`} />
+                  <Bot className={`w-4 h-4 ${acc.bot?.enabled ? "text-violet-400" : "text-slate-400"}`} />
                   <span className="truncate">
                     {acc.bot?.enabled && acc.bot?.bot_token
-                      ? (lang === "fa" ? "🟢 ربات تلگرام شماره" : "🟢 Account Bot")
-                      : (lang === "fa" ? "🤖 تنظیم ربات شماره" : "🤖 Setup Bot")}
+                      ? (lang === "fa" ? "ربات تلگرام شماره" : "Account Bot")
+                      : (lang === "fa" ? "تنظیم ربات شماره" : "Setup Bot")}
                   </span>
                 </button>
 
                 <button
                   onClick={() => setCredentialsTargetAccount(acc)}
-                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 transition-all shadow-sm shadow-amber-500/10 transform active:scale-95"
+                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/25 transition-all shadow-sm shadow-cyan-500/10 transform active:scale-95 cursor-pointer"
                   title={lang === "fa" ? "مشخصات ورود مشتری به پنل وب" : "Customer Panel Credentials"}
                 >
-                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <KeyRound className="w-4 h-4 text-cyan-400" />
                   <span className="truncate">
-                    {lang === "fa" ? "🔑 ورود مشتری به پنل" : "🔑 Customer Login"}
+                    {lang === "fa" ? "ورود مشتری به پنل" : "Customer Login"}
                   </span>
                 </button>
               </div>

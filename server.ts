@@ -28,6 +28,9 @@ import {
   attachHttpsServer,
   getPublicServerIp,
   saveCustomSslCertificate,
+  getRegisteredDomainConfig,
+  saveRegisteredDomainConfig,
+  clearRegisteredDomainConfig,
 } from "./server/sslManager.js";
 import { backupService } from "./server/backupService.js";
 import { translateText, SUPPORTED_LANGUAGES } from "./server/translationService.js";
@@ -2205,6 +2208,57 @@ echo "======================================================================"
         success: true,
         ssl: status,
         message: `گواهی امنیتی اختصاصی برای دامنه ${status.domain} با موفقیت نصب و فعال گردید (${status.daysRemaining} روز اعتبار).`,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // Dedicated Domain Management APIs (Permanent, never dropped to raw IP)
+  app.get("/api/domain/get", (_req, res) => {
+    try {
+      const cfg = getRegisteredDomainConfig();
+      const effectiveUrl = telegramManager.getEffectiveAppUrl();
+      return res.json({ success: true, domainConfig: cfg, effectiveUrl });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/domain/set", (req, res) => {
+    try {
+      const { domain, isHttps, port, sslType } = req.body || {};
+      if (!domain || typeof domain !== "string" || !domain.trim()) {
+        return res.status(400).json({ success: false, message: "نام دامنه یا ساب‌دامنه الزامی است." });
+      }
+      const saved = saveRegisteredDomainConfig(
+        domain,
+        isHttps !== undefined ? Boolean(isHttps) : true,
+        port ? Number(port) : 3443,
+        sslType
+      );
+      telegramManager.setDomainUrl(saved.domain, saved.isHttps, saved.port);
+      const effectiveUrl = telegramManager.getEffectiveAppUrl();
+      return res.json({
+        success: true,
+        domainConfig: saved,
+        effectiveUrl,
+        message: `دامنه ${saved.domain} با موفقیت ثبت شد و در ربات و پنل اعمال گردید.`,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/domain/clear", (_req, res) => {
+    try {
+      clearRegisteredDomainConfig();
+      telegramManager.syncDomainFromSslConfig();
+      const effectiveUrl = telegramManager.getEffectiveAppUrl();
+      return res.json({
+        success: true,
+        effectiveUrl,
+        message: "دامنه اختصاصی با موفقیت پاک شد و به آی‌پی عمومی بازگشت.",
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });

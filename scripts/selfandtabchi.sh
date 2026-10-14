@@ -11,15 +11,38 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-PROJECT_DIR="/root/telegram-self-tabchi-v6"
-if [ ! -d "$PROJECT_DIR" ]; then
-  # Fallback to current working directory if script executed locally
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  if [ -f "$SCRIPT_DIR/package.json" ]; then
-    PROJECT_DIR="$SCRIPT_DIR"
-  elif [ -d "/var/www/telegram-self-tabchi-v6" ]; then
-    PROJECT_DIR="/var/www/telegram-self-tabchi-v6"
+# Locate true PROJECT_DIR dynamically (from environment, config file, script location, or known paths)
+if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/package.json" ]; then
+  if [ -f /etc/selfandtabchi.conf ]; then
+    CONF_DIR=$(cat /etc/selfandtabchi.conf 2>/dev/null | tr -d '\r\n')
+    if [ -d "$CONF_DIR" ] && [ -f "$CONF_DIR/package.json" ]; then
+      PROJECT_DIR="$CONF_DIR"
+    fi
   fi
+fi
+
+if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/package.json" ]; then
+  REAL_SCRIPT=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+  CANDIDATE_DIR=$(cd "$(dirname "$REAL_SCRIPT")/.." 2>/dev/null && pwd)
+  if [ -f "$CANDIDATE_DIR/package.json" ]; then
+    PROJECT_DIR="$CANDIDATE_DIR"
+  fi
+fi
+
+if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/package.json" ]; then
+  for dir in "/root/telegram-self-tabchi-v6" "/var/www/telegram-self-tabchi-v6" "/opt/telegram-self-tabchi-v6" "/home/*/telegram-self-tabchi-v6" "$(pwd)"; do
+    for cand in $dir; do
+      if [ -d "$cand" ] && [ -f "$cand/package.json" ]; then
+        PROJECT_DIR="$cand"
+        break 2
+      fi
+    done
+  done
+fi
+
+export PROJECT_DIR
+if [ -d "$PROJECT_DIR" ]; then
+  echo "$PROJECT_DIR" > /etc/selfandtabchi.conf 2>/dev/null || true
 fi
 
 # Color definitions
@@ -202,37 +225,55 @@ do_domain_setup() {
   echo ""
   echo -e "${YELLOW}[*] در حال بررسی و ذخیره تنظیمات دامنه: ${DOMAIN_INPUT}...${NC}"
 
-  # Update internal ssl/domain config
+  # Update internal ssl/domain config & dedicated domain-config.json
   mkdir -p "$PROJECT_DIR/data/ssl"
   node -e "
     const fs = require('fs');
-    const path = '$PROJECT_DIR/data/ssl/ssl-config.json';
-    let cfg = {};
-    if (fs.existsSync(path)) {
-      try { cfg = JSON.parse(fs.readFileSync(path, 'utf8')); } catch(e){}
-    }
-    cfg.domain = '$DOMAIN_INPUT';
-    cfg.serverIp = '$ip';
-    fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
-
+    const domainCfgPath = '$PROJECT_DIR/data/domain-config.json';
+    const sslCfgPath = '$PROJECT_DIR/data/ssl/ssl-config.json';
     const statePath = '$PROJECT_DIR/data/state.json';
+
+    const domCfg = {
+      domain: '$DOMAIN_INPUT',
+      isHttps: true,
+      port: 3443,
+      sslType: 'letsencrypt',
+      updatedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(domainCfgPath, JSON.stringify(domCfg, null, 2));
+
+    let sslCfg = {};
+    if (fs.existsSync(sslCfgPath)) {
+      try { sslCfg = JSON.parse(fs.readFileSync(sslCfgPath, 'utf8')); } catch(e){}
+    }
+    sslCfg.domain = '$DOMAIN_INPUT';
+    sslCfg.serverIp = '$ip';
+    fs.writeFileSync(sslCfgPath, JSON.stringify(sslCfg, null, 2));
+
     if (fs.existsSync(statePath)) {
       try {
         const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
         if (state.botSettings) {
-          state.botSettings.web_app_url = 'https://$DOMAIN_INPUT';
+          state.botSettings.web_app_url = 'https://$DOMAIN_INPUT:3443';
           fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
         }
       } catch(e){}
     }
   " 2>/dev/null || true
 
-  echo -e "${GREEN}✓ دامنه با موفقیت به عنوان دامنه رسمی سرور ثبت گردید.${NC}"
+  # Notify live running node server immediately via API
+  curl -s -X POST http://127.0.0.1:3000/api/domain/set \
+    -H "Content-Type: application/json" \
+    -d "{\"domain\":\"$DOMAIN_INPUT\",\"isHttps\":true,\"port\":3443}" >/dev/null 2>&1 || true
+
+  echo -e "${GREEN}✓ دامنه با موفقیت به عنوان دامنه رسمی سرور و ربات ثبت گردید.${NC}"
   echo ""
   echo -ne "${CYAN}آیا تمایل دارید هم‌اکنون گواهی امنیتی SSL معتبر برای ${DOMAIN_INPUT} دریافت شود؟ (y/n): ${NC}"
   read ISSUE_SSL_NOW
   if [[ "$ISSUE_SSL_NOW" =~ ^[Yy]$ ]]; then
     issue_ssl_for_target "$DOMAIN_INPUT" "$ip"
+  else
+    pm2 restart telegram-self-tabchi-v6 >/dev/null 2>&1 || true
   fi
 
   read -p "برای ادامه Enter بزنید..."
@@ -261,21 +302,39 @@ issue_ssl_for_target() {
   # Attempt Certbot Standalone or OpenSSL SAN
   local certbot_ok=false
   if [[ "$target" != *"nip.io"* && "$target" != *"sslip.io"* && "$target" =~ \. ]]; then
-    echo -e "${YELLOW}[*] تلاش برای دریافت گواهی بین‌المللی رایگان Let's Encrypt...${NC}"
-    fuser -k 80/tcp >/dev/null 2>&1 || true
-    certbot certonly --standalone -d "$target" --non-interactive --agree-tos -m "admin@${target}" --keep-until-expiring 2>/dev/null || true
+    echo -e "${YELLOW}[*] بررسی گواهی رسمی معتبر Let's Encrypt برای ${target}...${NC}"
     if [ -f "/etc/letsencrypt/live/${target}/fullchain.pem" ]; then
       cp "/etc/letsencrypt/live/${target}/fullchain.pem" "$certPath"
       cp "/etc/letsencrypt/live/${target}/privkey.pem" "$keyPath"
       certbot_ok=true
-      echo -e "${GREEN}✓ گواهی رسمی معتبر Let's Encrypt دریافت و نصب گردید.${NC}"
+      echo -e "${GREEN}✓ گواهی معتبر موجود Let's Encrypt بارگذاری گردید.${NC}"
+    else
+      fuser -k 80/tcp >/dev/null 2>&1 || true
+      certbot certonly --standalone -d "$target" --non-interactive --agree-tos -m "admin@${target}" --keep-until-expiring 2>/dev/null || true
+      if [ -f "/etc/letsencrypt/live/${target}/fullchain.pem" ]; then
+        cp "/etc/letsencrypt/live/${target}/fullchain.pem" "$certPath"
+        cp "/etc/letsencrypt/live/${target}/privkey.pem" "$keyPath"
+        certbot_ok=true
+        echo -e "${GREEN}✓ گواهی رسمی معتبر Let's Encrypt دریافت و نصب گردید.${NC}"
+      fi
     fi
   fi
 
   if [ "$certbot_ok" = false ]; then
-    echo -e "${YELLOW}[*] ایجاد گواهی امنیتی پیشرفته High-Grade OpenSSL SAN...${NC}"
-    local cnfPath="$PROJECT_DIR/data/ssl/openssl.cnf"
-    cat <<EOF > "$cnfPath"
+    # If existing cert is still valid on disk, do not overwrite it
+    local has_valid_cert=false
+    if [ -f "$certPath" ]; then
+      local exp_check=$(openssl x509 -checkend 86400 -noout -in "$certPath" 2>/dev/null && echo "VALID" || echo "EXPIRED")
+      if [ "$exp_check" = "VALID" ]; then
+        has_valid_cert=true
+        echo -e "${GREEN}✓ گواهی امنیتی موجود همچنان معتبر است و حفظ شد.${NC}"
+      fi
+    fi
+
+    if [ "$has_valid_cert" = false ]; then
+      echo -e "${YELLOW}[*] ایجاد گواهی امنیتی پیشرفته High-Grade OpenSSL SAN...${NC}"
+      local cnfPath="$PROJECT_DIR/data/ssl/openssl.cnf"
+      cat <<EOF > "$cnfPath"
 [req]
 default_bits = 2048
 prompt = no
@@ -302,17 +361,29 @@ DNS.2 = ${ip}
 DNS.3 = ${ip}.nip.io
 DNS.4 = localhost
 EOF
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "$keyPath" -out "$certPath" -config "$cnfPath" >/dev/null 2>&1
-    echo -e "${GREEN}✓ گواهی امنیتی با موفقیت صادر و فعال گردید.${NC}"
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "$keyPath" -out "$certPath" -config "$cnfPath" >/dev/null 2>&1
+      echo -e "${GREEN}✓ گواهی امنیتی OpenSSL با موفقیت صادر و فعال گردید.${NC}"
+    fi
   fi
 
-  # Update JSON configuration
+  # Update JSON configuration & permanent domain-config
   node -e "
     const fs = require('fs');
-    const path = '$PROJECT_DIR/data/ssl/ssl-config.json';
+    const domainCfgPath = '$PROJECT_DIR/data/domain-config.json';
+    const sslCfgPath = '$PROJECT_DIR/data/ssl/ssl-config.json';
+    const statePath = '$PROJECT_DIR/data/state.json';
+
+    fs.writeFileSync(domainCfgPath, JSON.stringify({
+      domain: '$target',
+      isHttps: true,
+      port: 3443,
+      sslType: '$certbot_ok' === 'true' ? 'letsencrypt' : 'self_signed',
+      updatedAt: new Date().toISOString()
+    }, null, 2));
+
     let cfg = {};
-    if (fs.existsSync(path)) {
-      try { cfg = JSON.parse(fs.readFileSync(path, 'utf8')); } catch(e){}
+    if (fs.existsSync(sslCfgPath)) {
+      try { cfg = JSON.parse(fs.readFileSync(sslCfgPath, 'utf8')); } catch(e){}
     }
     cfg.enabled = true;
     cfg.domain = '$target';
@@ -323,21 +394,25 @@ EOF
     cfg.autoRenew = true;
     cfg.httpsPort = 3443;
     cfg.daysRemaining = 365;
-    fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
+    fs.writeFileSync(sslCfgPath, JSON.stringify(cfg, null, 2));
 
-    const statePath = '$PROJECT_DIR/data/state.json';
     if (fs.existsSync(statePath)) {
       try {
         const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
         if (state.botSettings) {
-          state.botSettings.web_app_url = 'https://$target';
+          state.botSettings.web_app_url = 'https://$target:3443';
           fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
         }
       } catch(e){}
     }
   " 2>/dev/null || true
 
-  # Restart server to attach HTTPS port
+  # Notify live running node server via API
+  curl -s -X POST http://127.0.0.1:3000/api/domain/set \
+    -H "Content-Type: application/json" \
+    -d "{\"domain\":\"$target\",\"isHttps\":true,\"port\":3443,\"sslType\":\"$certbot_ok\"}" >/dev/null 2>&1 || true
+
+  # Restart server in PM2 to reload certificates & sync memory
   pm2 restart telegram-self-tabchi-v6 >/dev/null 2>&1 || true
 
   echo ""

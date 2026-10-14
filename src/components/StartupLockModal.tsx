@@ -20,6 +20,9 @@ import {
   Terminal,
   Zap,
   Heart,
+  Loader2,
+  Cpu,
+  Layers,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { AuthSession } from "../types";
@@ -120,30 +123,26 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
   const isOwnerPortal = role === "owner";
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#020504]/95 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4 overflow-y-auto cyber-matrix-grid">
-      {/* Ambient Cyber Neon Orbs (Emerald Green & Crimson Red) */}
-      <div className="fixed top-1/4 left-1/4 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none -translate-x-1/2 -translate-y-1/2 animate-pulse" />
-      <div className="fixed bottom-1/4 right-1/4 w-80 h-80 bg-rose-500/15 rounded-full blur-3xl pointer-events-none translate-x-1/2 translate-y-1/2 animate-pulse" />
+    <div className="fixed inset-0 z-50 bg-[#060814]/90 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-6 overflow-y-auto cyber-matrix-grid">
+      {/* Ambient Gradient Glows (Violet & Cyan) */}
+      <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-violet-600/15 rounded-full blur-[140px] pointer-events-none -translate-x-1/2 -translate-y-1/2" />
+      <div className="fixed bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/12 rounded-full blur-[140px] pointer-events-none translate-x-1/2 translate-y-1/2" />
+      <div className="fixed top-1/2 right-1/3 w-80 h-80 bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
 
+      {/* Main Glassmorphism Card */}
       <div
-        className={`w-full max-w-lg bg-[#050b07]/90 border ${
-          isOwnerPortal ? "border-emerald-500/50 shadow-[0_0_50px_rgba(16,185,129,0.25)]" : "border-emerald-500/40 shadow-[0_0_50px_rgba(16,185,129,0.2)]"
-        } rounded-3xl p-5 sm:p-8 space-y-6 relative overflow-hidden backdrop-blur-2xl transition-all duration-300 my-auto`}
+        className="w-full max-w-md bg-gradient-to-b from-[#0d1326]/90 to-[#090d1c]/95 border border-violet-500/20 rounded-3xl p-6 sm:p-8 space-y-6 relative overflow-hidden backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_35px_-5px_rgba(139,92,246,0.15)] my-auto transition-all duration-300"
         dir={lang === "fa" ? "rtl" : "ltr"}
       >
-        {/* Holographic Top Scanner Line */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-400 to-rose-500 animate-pulse" />
+        {/* Subtle Ambient Top Accent Bar */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-violet-500/60 to-cyan-400/60" />
 
-        {/* Decorative corner glows */}
-        <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-rose-500/20 rounded-full blur-2xl pointer-events-none" />
-
-        {/* Header with Developer GitHub Avatar & Cyber HUD Ring */}
-        <div className="text-center space-y-3 relative z-10">
+        {/* Header with Developer Avatar & Official Branding */}
+        <div className="text-center space-y-3.5 relative z-10">
           <div className="relative inline-block mx-auto">
-            {/* Spinning Neon Gradient Ring */}
-            <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-full bg-gradient-to-tr from-emerald-500 via-rose-500 to-emerald-400 p-[3px] shadow-[0_0_30px_rgba(16,185,129,0.45)] group hover:scale-105 transition-transform duration-300">
-              <div className="w-full h-full bg-[#020603] rounded-full overflow-hidden flex items-center justify-center relative">
+            {/* Spinning/Subtle Glowing Gradient Ring */}
+            <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-[0_0_30px_rgba(139,92,246,0.35)] group hover:scale-105 transition-all duration-300">
+              <div className="w-full h-full bg-[#0a0e1e] rounded-[14px] overflow-hidden flex items-center justify-center relative">
                 <img
                   src="https://github.com/samkaren12.png"
                   alt="samkaren12 Developer"
@@ -153,53 +152,53 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                   }}
                 />
                 {/* Fallback Icon */}
-                <Crown className="w-9 h-9 text-emerald-400 absolute -z-10" />
+                <Crown className="w-8 h-8 text-violet-400 absolute -z-10" />
               </div>
             </div>
 
-            {/* Live Online & Root Status Ping */}
-            <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-black flex items-center justify-center shadow-[0_0_10px_#10b981]">
-              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+            {/* Live Status Indicator */}
+            <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-[#090d1c] flex items-center justify-center shadow-[0_0_10px_#10b981]">
+              <span className="w-2 h-2 rounded-full bg-white" />
             </span>
           </div>
 
-          {/* Developer & System Branding */}
-          <div className="space-y-1">
+          {/* Badges & Titles */}
+          <div className="space-y-1.5">
             <div className="flex items-center justify-center gap-2 flex-wrap">
-              <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/40 px-2.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+              <span className="text-[11px] font-mono font-semibold text-violet-300 bg-violet-950/60 border border-violet-500/30 px-2.5 py-0.5 rounded-full">
                 CORE v6.2.0 • MTPROTO
               </span>
               <a
                 href="https://github.com/samkaren12"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-mono font-bold text-rose-300 hover:text-white bg-rose-950/70 border border-rose-500/40 hover:border-rose-400 px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-all shadow-[0_0_10px_rgba(239,68,68,0.2)]"
+                className="text-[11px] font-mono font-semibold text-cyan-300 hover:text-white bg-cyan-950/50 border border-cyan-500/30 hover:border-cyan-400 px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-all"
               >
                 <span>DEV: @samkaren12</span>
-                <ExternalLink className="w-3 h-3 text-rose-400" />
+                <ExternalLink className="w-3 h-3 text-cyan-400" />
               </a>
             </div>
 
-            <h2 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-white to-rose-400 tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
               {isOwnerPortal
                 ? (lang === "fa" ? "ورود به پنل مدیریت مالک سرور" : "Master Server Owner Portal")
                 : (lang === "fa" ? "ورود به پنل اختصاصی مشتریان" : "Customer Portal Login")}
             </h2>
 
-            <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+            <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
               {isOwnerPortal
                 ? (lang === "fa"
-                    ? "دسترسی فوق‌امنیتی روت برای پایش حساب‌های متصل، ربات فروشگاهی و اتوماسیون ۲۴ ساعته"
-                    : "Root access portal to supervise all connected accounts, store bot and 24/7 daemon")
+                    ? "دسترسی مدیریت کامل به حساب‌ها، ربات فروشگاهی و اتوماسیون دائمی تلگرام"
+                    : "Full management access to accounts, store bot, and permanent daemon")
                 : (lang === "fa"
-                    ? "مدیریت ساعت زنده روی پروفایل، پیام‌رسان هوشمند، قفل پیوی و تبلیغات خودکار تبچی"
-                    : "Manage your Self-time clock, Auto-reply, Lock PV and Tabchi broadcaster")}
+                    ? "مدیریت ساعت زنده روی پروفایل، منشی هوشمند و تبلیغات خودکار تبچی"
+                    : "Manage your Self-time clock, Auto-reply, and Tabchi broadcaster")}
             </p>
           </div>
         </div>
 
-        {/* Role Selector Tabs (Hacker Green & Black with Red Accent) */}
-        <div className="grid grid-cols-2 p-1.5 bg-[#020503] border border-emerald-500/30 rounded-2xl gap-1.5 shadow-inner">
+        {/* Role Selector Tabs */}
+        <div className="grid grid-cols-2 p-1 bg-[#070b18] border border-violet-500/20 rounded-2xl gap-1 shadow-inner">
           <button
             type="button"
             onClick={() => {
@@ -209,14 +208,14 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                 window.history.pushState({}, "", "/admin");
               } catch (_) {}
             }}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               isOwnerPortal
-                ? "bg-gradient-to-r from-emerald-500 to-green-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]"
-                : "text-slate-400 hover:text-emerald-300 hover:bg-emerald-950/30"
+                ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_4px_16px_rgba(139,92,246,0.35)]"
+                : "text-slate-400 hover:text-slate-200 hover:bg-violet-950/30"
             }`}
           >
-            <Crown className="w-4 h-4" />
-            <span>{lang === "fa" ? "👑 پنل مالک سرور" : "Master Owner"}</span>
+            <Crown className="w-3.5 h-3.5" />
+            <span>{lang === "fa" ? "پنل مالک سرور" : "Master Owner"}</span>
           </button>
 
           <button
@@ -228,14 +227,14 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                 window.history.pushState({}, "", "/client");
               } catch (_) {}
             }}
-            className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               !isOwnerPortal
-                ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]"
-                : "text-slate-400 hover:text-emerald-300 hover:bg-emerald-950/30"
+                ? "bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-[0_4px_16px_rgba(6,182,212,0.35)]"
+                : "text-slate-400 hover:text-slate-200 hover:bg-cyan-950/30"
             }`}
           >
-            <Bot className="w-4 h-4" />
-            <span>{lang === "fa" ? "👤 پنل مشتریان" : "Client Portal"}</span>
+            <Bot className="w-3.5 h-3.5" />
+            <span>{lang === "fa" ? "پنل مشتریان" : "Client Portal"}</span>
           </button>
         </div>
 
@@ -245,7 +244,7 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
             /* OWNER FORM */
             <div className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-emerald-300/90 mb-1.5">
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   {lang === "fa" ? "نام کاربری روت مالک سرور:" : "Server Owner Username:"}
                 </label>
                 <div className="relative">
@@ -255,24 +254,24 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                     onChange={(e) => setOwnerUsername(e.target.value)}
                     placeholder="samkaren12"
                     dir="ltr"
-                    className="w-full bg-[#020704] border border-emerald-500/40 rounded-xl px-4 py-2.5 text-sm font-mono text-emerald-200 placeholder-slate-600 focus:outline-none focus:border-emerald-400 focus:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                    className="w-full saas-input rounded-xl px-4 py-2.5 pl-10 text-sm font-mono text-slate-100 placeholder-slate-500 focus:border-violet-500 transition-all"
                   />
-                  <User className="w-4 h-4 text-emerald-500/60 absolute left-3 top-3.5" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5 pointer-events-none" />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-emerald-300/90">
+                  <label className="text-xs font-medium text-slate-300">
                     {lang === "fa" ? "رمز عبور مالک:" : "Master Password:"}
                   </label>
                   <button
                     type="button"
                     onClick={fillQuickOwnerTest}
-                    className="text-[11px] text-rose-400 hover:text-rose-300 font-mono flex items-center gap-1 transition-colors cursor-pointer"
+                    className="text-[11px] text-violet-400 hover:text-violet-300 font-mono flex items-center gap-1 transition-colors cursor-pointer"
                     title="پر کردن اتوماتیک samkaren12"
                   >
-                    <Zap className="w-3 h-3 text-rose-400" />
+                    <Zap className="w-3 h-3 text-violet-400" />
                     <span>{lang === "fa" ? "پر کردن سریع (تستی)" : "Quick Fill"}</span>
                   </button>
                 </div>
@@ -284,13 +283,13 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                     placeholder="samkaren12"
                     dir="ltr"
                     autoFocus
-                    className="w-full bg-[#020704] border border-emerald-500/40 rounded-xl pl-10 pr-10 py-2.5 text-sm font-mono text-emerald-200 placeholder-slate-600 focus:outline-none focus:border-emerald-400 focus:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                    className="w-full saas-input rounded-xl pl-10 pr-10 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 focus:border-violet-500 transition-all"
                   />
-                  <KeyRound className="w-4 h-4 text-emerald-500/60 absolute left-3 top-3.5" />
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3.5 pointer-events-none" />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-500 hover:text-emerald-300 transition-colors cursor-pointer p-0.5"
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer p-0.5"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -301,7 +300,7 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
             /* CUSTOMER FORM */
             <div className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-emerald-300/90 mb-1.5">
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   {lang === "fa" ? "شماره تلفن یا یوزرنیم تلگرام شما:" : "Your Telegram Phone or Username:"}
                 </label>
                 <div className="relative">
@@ -312,14 +311,14 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                     placeholder="+989123456789"
                     dir="ltr"
                     autoFocus
-                    className="w-full bg-[#020704] border border-emerald-500/40 rounded-xl px-4 py-2.5 text-sm font-mono text-emerald-200 placeholder-slate-600 focus:outline-none focus:border-emerald-400 focus:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                    className="w-full saas-input rounded-xl px-4 py-2.5 pl-10 text-sm font-mono text-slate-100 placeholder-slate-500 focus:border-cyan-500 transition-all"
                   />
-                  <Phone className="w-4 h-4 text-emerald-500/60 absolute left-3 top-3.5" />
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3.5 pointer-events-none" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-emerald-300/90 mb-1.5">
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   {lang === "fa" ? "رمز عبور اختصاصی (دریافت از ربات تلگرام):" : "Password (from Telegram Bot):"}
                 </label>
                 <div className="relative">
@@ -329,13 +328,13 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
                     onChange={(e) => setCustomerPassword(e.target.value)}
                     placeholder="SK-xxxxxx"
                     dir="ltr"
-                    className="w-full bg-[#020704] border border-emerald-500/40 rounded-xl pl-10 pr-10 py-2.5 text-sm font-mono text-emerald-200 placeholder-slate-600 focus:outline-none focus:border-emerald-400 focus:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                    className="w-full saas-input rounded-xl pl-10 pr-10 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 focus:border-cyan-500 transition-all"
                   />
-                  <KeyRound className="w-4 h-4 text-emerald-500/60 absolute left-3 top-3.5" />
+                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3.5 pointer-events-none" />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-slate-500 hover:text-emerald-300 transition-colors cursor-pointer p-0.5"
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer p-0.5"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -343,8 +342,8 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
               </div>
 
               {/* Bot instructions for customers */}
-              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed flex items-start gap-2.5">
-                <Bot className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5 animate-pulse" />
+              <div className="p-3.5 rounded-2xl bg-cyan-950/30 border border-cyan-500/20 text-cyan-200 text-xs leading-relaxed flex items-start gap-2.5">
+                <Bot className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
                 <div>
                   {lang === "fa" ? (
                     <>
@@ -360,28 +359,36 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
             </div>
           )}
 
+          {/* Clean Error Message */}
           {error && (
-            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
               <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Action Buttons: Submit & Friendly Help Modal Trigger */}
-          <div className="space-y-2 pt-1">
+          {/* Action Buttons: Submit & Helpers */}
+          <div className="space-y-2.5 pt-1">
             <button
               type="submit"
               disabled={verifying || (isOwnerPortal ? !ownerPassword : !customerPassword)}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-sm text-black bg-gradient-to-r from-emerald-400 via-green-400 to-rose-400 hover:from-emerald-300 hover:to-rose-300 shadow-[0_0_25px_rgba(16,185,129,0.35)] disabled:opacity-50 transition-all active:scale-[0.98] cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-white saas-btn-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
             >
-              <span>
-                {verifying
-                  ? (lang === "fa" ? "در حال احراز هویت امنیتی..." : "Authenticating...")
-                  : isOwnerPortal
-                  ? (lang === "fa" ? "ورود به پنل مالک سرور ⚡" : "Sign In to Master Portal ⚡")
-                  : (lang === "fa" ? "ورود به پنل مشتری ⚡" : "Sign In to Client Portal ⚡")}
-              </span>
-              <ArrowRight className="w-4 h-4" />
+              {verifying ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{lang === "fa" ? "در حال احراز هویت امنیتی..." : "Authenticating..."}</span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {isOwnerPortal
+                      ? (lang === "fa" ? "ورود به پنل مالک سرور" : "Sign In to Master Portal")
+                      : (lang === "fa" ? "ورود به پنل مشتری" : "Sign In to Client Portal")}
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
 
             {/* Quick Friendly Help Modal Button & Donate Button */}
@@ -389,26 +396,26 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowHelpDialog(true)}
-                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-black/60 hover:bg-emerald-950/30 border border-emerald-500/30 hover:border-emerald-400/60 text-emerald-300 hover:text-white text-xs font-semibold transition-all cursor-pointer"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-slate-900/60 hover:bg-violet-950/30 border border-violet-500/20 hover:border-violet-500/40 text-violet-300 hover:text-white text-xs font-medium transition-all cursor-pointer"
               >
-                <Lightbulb className="w-3.5 h-3.5 text-emerald-400 animate-pulse flex-shrink-0" />
-                <span className="truncate">{lang === "fa" ? "راهنمای ورود 💡" : "Login Guide 💡"}</span>
+                <Lightbulb className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
+                <span className="truncate">{lang === "fa" ? "راهنمای ورود" : "Login Guide"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowDonateDialog(true)}
-                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-black/60 hover:bg-rose-950/30 border border-rose-500/30 hover:border-rose-400/60 text-rose-300 hover:text-white text-xs font-semibold transition-all cursor-pointer"
+                className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-slate-900/60 hover:bg-rose-950/30 border border-rose-500/20 hover:border-rose-500/40 text-rose-300 hover:text-white text-xs font-medium transition-all cursor-pointer"
               >
-                <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-500/30 animate-pulse flex-shrink-0" />
-                <span className="truncate">{lang === "fa" ? "دونیت و حمایت 💖" : "Donate 💖"}</span>
+                <Heart className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                <span className="truncate">{lang === "fa" ? "حمایت مالی" : "Donate"}</span>
               </button>
             </div>
           </div>
         </form>
 
         {/* Footer Credit & System Information */}
-        <div className="pt-3 border-t border-emerald-500/20 text-center flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400 font-mono">
+        <div className="pt-3 border-t border-violet-500/15 text-center flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400 font-mono">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
             <span>24/7 PERMANENT DAEMON</span>
@@ -420,7 +427,7 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
               href="https://github.com/samkaren12"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-emerald-400 hover:text-emerald-300 font-bold hover:underline"
+              className="text-violet-400 hover:text-violet-300 font-semibold hover:underline"
             >
               samkaren12
             </a>
@@ -430,68 +437,68 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
 
       {/* Visual Help & Friendly Tutorial Dialog on Login Screen */}
       {showHelpDialog && (
-        <div className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-60 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div
-            className="w-full max-w-lg bg-[#040805] border border-emerald-500/50 rounded-3xl p-6 sm:p-7 shadow-[0_0_60px_rgba(16,185,129,0.3)] space-y-5 relative overflow-hidden animate-in fade-in zoom-in-95"
+            className="w-full max-w-lg bg-[#0a0e20] border border-violet-500/30 rounded-3xl p-6 sm:p-7 shadow-[0_20px_50px_rgba(0,0,0,0.8)] space-y-5 relative overflow-hidden animate-in fade-in zoom-in-95"
             dir={lang === "fa" ? "rtl" : "ltr"}
           >
             {/* Close Button */}
             <button
               onClick={() => setShowHelpDialog(false)}
-              className="absolute top-4 left-4 sm:left-6 p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-emerald-500/50 transition-all cursor-pointer"
+              className="absolute top-4 left-4 sm:left-6 p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-white hover:border-violet-500/40 transition-all cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             {/* Modal Title */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-md">
-                <Lightbulb className="w-5 h-5 text-emerald-400" />
+              <div className="w-10 h-10 rounded-2xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 shadow-md">
+                <Lightbulb className="w-5 h-5 text-violet-400" />
               </div>
               <div>
-                <h3 className="text-base font-black text-white">
-                  {lang === "fa" ? "راهنمای خودمونی و خیلی راحت ورود" : "Quick Friendly Login Guide"}
+                <h3 className="text-base font-bold text-white">
+                  {lang === "fa" ? "راهنمای سریع ورود به پنل" : "Quick Login Guide"}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  {lang === "fa" ? "چطور در چند ثانیه به پنل لاگین کنید؟" : "How to log in within seconds?"}
+                  {lang === "fa" ? "چطور در چند ثانیه وارد پنل شوید؟" : "How to log in within seconds?"}
                 </p>
               </div>
             </div>
 
             {/* Visual Guide Cards */}
-            <div className="space-y-3.5 text-xs text-slate-300">
+            <div className="space-y-3 text-xs text-slate-300">
               {/* Card 1: Owner */}
-              <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-2">
-                <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                  <Crown className="w-4 h-4 text-emerald-400" />
+              <div className="p-4 rounded-2xl bg-violet-950/20 border border-violet-500/20 space-y-1.5">
+                <div className="flex items-center gap-2 text-violet-300 font-bold">
+                  <Crown className="w-4 h-4 text-violet-400" />
                   <span>{lang === "fa" ? "۱. اگر مالک سرور هستید (Root Master):" : "1. If you are the Server Owner:"}</span>
                 </div>
-                <p className="text-slate-300 leading-relaxed">
+                <p className="text-slate-300 leading-relaxed text-[12px]">
                   {lang === "fa"
-                    ? "به عنوان مالک سرور، نام کاربری پیش‌فرض شما samkaren12 و رمز عبور پیش‌فرض نیز samkaren12 است. همچنین در ترمینال لینوکس با زدن دستور sudo selfandtabchi می‌توانید رمز مالک را عوض کنید یا دکمه «پر کردن سریع» را در فرم بزنید!"
-                    : "As the server owner, the default credentials are username: samkaren12 and password: samkaren12. You can also customize them via sudo selfandtabchi CLI."}
+                    ? "نام کاربری پیش‌فرض samkaren12 و رمز عبور پیش‌فرض نیز samkaren12 است. همچنین در فرم ورود می‌توانید دکمه «پر کردن سریع» را بزنید."
+                    : "The default credentials are username: samkaren12 and password: samkaren12. You can also click 'Quick Fill' in the login form."}
                 </p>
               </div>
 
               {/* Card 2: Customer */}
-              <div className="p-4 rounded-2xl bg-teal-950/30 border border-teal-500/30 space-y-2">
-                <div className="flex items-center gap-2 text-teal-300 font-bold">
-                  <Bot className="w-4 h-4 text-teal-400" />
+              <div className="p-4 rounded-2xl bg-cyan-950/20 border border-cyan-500/20 space-y-1.5">
+                <div className="flex items-center gap-2 text-cyan-300 font-bold">
+                  <Bot className="w-4 h-4 text-cyan-400" />
                   <span>{lang === "fa" ? "۲. اگر خریدار / مشتری هستید (Client):" : "2. If you are a Customer:"}</span>
                 </div>
-                <p className="text-slate-300 leading-relaxed">
+                <p className="text-slate-300 leading-relaxed text-[12px]">
                   {lang === "fa"
-                    ? "وارد ربات تلگرام شماره خودتان شوید و روی دکمه «🔑 دریافت مشخصات ورود به پنل وب» کلیک کنید. ربات بلافاصله شماره تلفن و یک رمز عبور اختصاصی مانند SK-xxxxxx برای شما می‌فرستد. آن را در تب «پنل مشتریان» وارد کنید و وارد شوید!"
-                    : "Go to your Telegram Bot and tap 'Get Web Panel Credentials'. The bot will send you your unique password (e.g. SK-xxxxxx). Then enter it in the Client Portal tab."}
+                    ? "وارد ربات تلگرام شماره خودتان شوید و روی دکمه «🔑 دریافت مشخصات ورود به پنل وب» کلیک کنید. ربات بلافاصله شماره تلفن و رمز اختصاصی (مانند SK-xxxxxx) را برای شما ارسال می‌کند."
+                    : "Go to your Telegram Bot and tap 'Get Web Panel Credentials'. The bot will send you your unique password (e.g. SK-xxxxxx)."}
                 </p>
               </div>
 
               {/* Card 3: Security */}
-              <div className="p-3.5 rounded-2xl bg-black/60 border border-slate-800 flex items-center gap-2 text-[11px] text-slate-400">
+              <div className="p-3.5 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center gap-2 text-[11px] text-slate-400">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 <span>
                   {lang === "fa"
-                    ? "کلیه سشن‌ها و لاگین‌ها بر بستر امنیتی توکن رمزنگاری‌شده و پایش زنده دیمن محافظت می‌شوند."
+                    ? "کلیه سشن‌ها با توکن رمزنگاری‌شده و پایش زنده دیمن محافظت می‌شوند."
                     : "All sessions are encrypted with token protection and 24/7 daemon monitoring."}
                 </span>
               </div>
@@ -500,7 +507,7 @@ export const StartupLockModal: React.FC<StartupLockModalProps> = ({
             {/* Close Button Bottom */}
             <button
               onClick={() => setShowHelpDialog(false)}
-              className="w-full py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition-all cursor-pointer"
+              className="w-full py-2.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 font-bold text-xs transition-all cursor-pointer"
             >
               {lang === "fa" ? "متوجه شدم، رفتن به فرم ورود" : "Got it, back to login"}
             </button>

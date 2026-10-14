@@ -14,6 +14,14 @@ export interface SslRenewalLog {
   daysRemaining?: number;
 }
 
+export interface DomainConfig {
+  domain: string;
+  isHttps: boolean;
+  port?: number;
+  sslType?: "letsencrypt" | "custom" | "self_signed" | "cloudflare";
+  updatedAt: string;
+}
+
 export interface SslStatus {
   enabled: boolean;
   type: "letsencrypt_nip" | "self_signed" | "custom" | "none";
@@ -35,7 +43,9 @@ export interface SslStatus {
   history: SslRenewalLog[];
 }
 
-const SSL_DATA_DIR = path.join(process.cwd(), "data", "ssl");
+const DATA_DIR = path.join(process.cwd(), "data");
+const DOMAIN_CONFIG_FILE = path.join(DATA_DIR, "domain-config.json");
+const SSL_DATA_DIR = path.join(DATA_DIR, "ssl");
 const SSL_CONFIG_FILE = path.join(SSL_DATA_DIR, "ssl-config.json");
 const SSL_LOG_FILE = path.join(SSL_DATA_DIR, "ssl-renewal.log");
 
@@ -46,6 +56,100 @@ let activeHttpsServer: https.Server | null = null;
 function ensureDir(dir: string) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+/**
+ * Retrieve registered domain from dedicated persistent storage
+ */
+export function getRegisteredDomainConfig(): DomainConfig | null {
+  ensureDir(DATA_DIR);
+  if (fs.existsSync(DOMAIN_CONFIG_FILE)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(DOMAIN_CONFIG_FILE, "utf-8"));
+      if (data && data.domain && typeof data.domain === "string" && data.domain.trim()) {
+        const clean = data.domain.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+        if (!/^[0-9.]+$/.test(clean) && !clean.includes("nip.io") && !clean.includes("sslip.io")) {
+          return {
+            domain: clean,
+            isHttps: data.isHttps !== undefined ? Boolean(data.isHttps) : true,
+            port: data.port ? Number(data.port) : 3443,
+            sslType: data.sslType || "letsencrypt",
+            updatedAt: data.updatedAt || new Date().toISOString(),
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Fallback: inspect ssl-config.json
+  if (fs.existsSync(SSL_CONFIG_FILE)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(SSL_CONFIG_FILE, "utf-8"));
+      if (data && data.domain && typeof data.domain === "string" && data.domain.trim()) {
+        const clean = data.domain.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+        if (!/^[0-9.]+$/.test(clean) && !clean.includes("nip.io") && !clean.includes("sslip.io")) {
+          return {
+            domain: clean,
+            isHttps: Boolean(data.enabled),
+            port: data.httpsPort ? Number(data.httpsPort) : 3443,
+            sslType: data.type === "custom" ? "custom" : data.type === "letsencrypt_nip" ? "letsencrypt" : "self_signed",
+            updatedAt: data.lastRenewCheck || new Date().toISOString(),
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+/**
+ * Save registered domain to persistent storage (never lost or downgraded to IP)
+ */
+export function saveRegisteredDomainConfig(
+  domain: string,
+  isHttps: boolean = true,
+  port: number = 3443,
+  sslType: DomainConfig["sslType"] = "letsencrypt"
+): DomainConfig {
+  ensureDir(DATA_DIR);
+  const clean = domain.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+  const cfg: DomainConfig = {
+    domain: clean,
+    isHttps,
+    port: port || 3443,
+    sslType,
+    updatedAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(DOMAIN_CONFIG_FILE, JSON.stringify(cfg, null, 2), "utf-8");
+
+  // Keep ssl-config.json domain in sync
+  try {
+    let sslCfg = getSslConfig();
+    sslCfg.domain = clean;
+    if (isHttps) sslCfg.enabled = true;
+    if (port) sslCfg.httpsPort = port;
+    saveSslConfig(sslCfg);
+  } catch (_) {}
+
+  return cfg;
+}
+
+/**
+ * Clear registered domain configuration
+ */
+export function clearRegisteredDomainConfig(): boolean {
+  try {
+    if (fs.existsSync(DOMAIN_CONFIG_FILE)) {
+      fs.unlinkSync(DOMAIN_CONFIG_FILE);
+    }
+    const sslCfg = getSslConfig();
+    sslCfg.domain = undefined;
+    saveSslConfig(sslCfg);
+    return true;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -122,14 +226,42 @@ export async function getPublicServerIp(): Promise<string> {
 
 /**
  * Inspect certificate file expiration using Node.js built-in X509Certificate
+ * Multi-path candidate resolution, strict domain preservation
  */
 export function inspectCertStatus(status: SslStatus): SslStatus {
-  if (!status.certPath || !fs.existsSync(status.certPath)) {
-    return { ...status, enabled: false, daysRemaining: 0 };
+  const regDomain = getRegisteredDomainConfig();
+  const domain = status.domain || regDomain?.domain;
+
+  // Resolve cert path robustly
+  let certPath = status.certPath;
+  if (!certPath || !fs.existsSync(certPath)) {
+    const p1 = path.join(SSL_DATA_DIR, "server.crt");
+    const p2 = path.join(process.cwd(), "data", "ssl", "server.crt");
+    if (fs.existsSync(p1)) certPath = p1;
+    else if (fs.existsSync(p2)) certPath = p2;
+    else if (domain && fs.existsSync(`/etc/letsencrypt/live/${domain}/fullchain.pem`)) {
+      certPath = `/etc/letsencrypt/live/${domain}/fullchain.pem`;
+    }
+  }
+
+  // Resolve key path robustly
+  let keyPath = status.keyPath;
+  if (!keyPath || !fs.existsSync(keyPath)) {
+    const k1 = path.join(SSL_DATA_DIR, "server.key");
+    const k2 = path.join(process.cwd(), "data", "ssl", "server.key");
+    if (fs.existsSync(k1)) keyPath = k1;
+    else if (fs.existsSync(k2)) keyPath = k2;
+    else if (domain && fs.existsSync(`/etc/letsencrypt/live/${domain}/privkey.pem`)) {
+      keyPath = `/etc/letsencrypt/live/${domain}/privkey.pem`;
+    }
+  }
+
+  if (!certPath || !fs.existsSync(certPath)) {
+    return { ...status, domain, certPath, keyPath, enabled: false, daysRemaining: 0 };
   }
 
   try {
-    const certPem = fs.readFileSync(status.certPath, "utf-8");
+    const certPem = fs.readFileSync(certPath, "utf-8");
 
     // 1. Primary: Use Node built-in X509Certificate (robust, no subprocess)
     try {
@@ -141,6 +273,9 @@ export function inspectCertStatus(status: SslStatus): SslStatus {
           const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
           return {
             ...status,
+            domain,
+            certPath,
+            keyPath,
             expiresAt: expiresDate.toISOString(),
             daysRemaining,
             enabled: daysRemaining > 0,
@@ -151,7 +286,7 @@ export function inspectCertStatus(status: SslStatus): SslStatus {
 
     // 2. Secondary fallback: openssl CLI
     try {
-      const out = execSync(`openssl x509 -enddate -noout -in "${status.certPath}"`, {
+      const out = execSync(`openssl x509 -enddate -noout -in "${certPath}"`, {
         encoding: "utf-8",
         timeout: 4000,
       });
@@ -164,6 +299,9 @@ export function inspectCertStatus(status: SslStatus): SslStatus {
           const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
           return {
             ...status,
+            domain,
+            certPath,
+            keyPath,
             expiresAt: expiresDate.toISOString(),
             daysRemaining,
             enabled: daysRemaining > 0,
@@ -173,18 +311,21 @@ export function inspectCertStatus(status: SslStatus): SslStatus {
     } catch (_) {}
 
     // 3. Fallback: file mtime check (valid for 365 days from mtime)
-    const stat = fs.statSync(status.certPath);
+    const stat = fs.statSync(certPath);
     const estExpire = new Date(stat.mtimeMs + 365 * 24 * 60 * 60 * 1000);
     const diffMs = estExpire.getTime() - Date.now();
     const daysRemaining = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
     return {
       ...status,
+      domain,
+      certPath,
+      keyPath,
       expiresAt: estExpire.toISOString(),
       daysRemaining,
       enabled: daysRemaining > 0,
     };
   } catch (_) {
-    return status;
+    return { ...status, domain, certPath, keyPath };
   }
 }
 
@@ -319,23 +460,31 @@ export function saveCustomSslCertificate(
 export async function generateServerIpSsl(customIp?: string, customDomain?: string): Promise<SslStatus> {
   ensureDir(SSL_DATA_DIR);
   const current = getSslConfig();
+  const regDomain = getRegisteredDomainConfig();
 
   const rawIp = customIp || current.serverIp || (await getPublicServerIp());
   const serverIp = /^[0-9a-fA-F.:]+$/.test(rawIp.trim()) ? rawIp.trim() : "127.0.0.1";
 
-  // Retain existing configured domain if user didn't provide a new one
-  const existingDomain = current.domain && !current.domain.includes("nip.io") && !current.domain.includes("sslip.io")
-    ? current.domain
-    : undefined;
-
+  // Retain existing configured domain strictly
+  const candidateDomain = customDomain?.trim() || regDomain?.domain || current.domain;
   let selectedDomain = `${serverIp}.nip.io`;
-  const domainCandidate = customDomain?.trim() || existingDomain;
 
-  if (domainCandidate) {
-    const cleanDom = domainCandidate.toLowerCase();
-    if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(cleanDom)) {
+  if (candidateDomain) {
+    const cleanDom = candidateDomain.toLowerCase().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+    if (!/^[0-9.]+$/.test(cleanDom)) {
       selectedDomain = cleanDom;
     }
+  }
+
+  const isRealDomain =
+    selectedDomain &&
+    !selectedDomain.includes("nip.io") &&
+    !selectedDomain.includes("sslip.io") &&
+    selectedDomain.includes(".");
+
+  // If real domain, ensure it is permanently recorded in domain-config.json
+  if (isRealDomain) {
+    saveRegisteredDomainConfig(selectedDomain, true, current.httpsPort || 3443);
   }
 
   const nipDomain = `${serverIp}.nip.io`;
@@ -347,7 +496,6 @@ export async function generateServerIpSsl(customIp?: string, customDomain?: stri
 
   // Check if Let's Encrypt cert already exists on VPS for this domain
   let certbotSucceeded = false;
-  const isRealDomain = selectedDomain && !selectedDomain.includes("nip.io") && !selectedDomain.includes("sslip.io") && selectedDomain.includes(".");
 
   if (isRealDomain) {
     const liveCert = `/etc/letsencrypt/live/${selectedDomain}/fullchain.pem`;
@@ -380,8 +528,27 @@ export async function generateServerIpSsl(customIp?: string, customDomain?: stri
     }
   }
 
+  // If certbot did not succeed, DO NOT overwrite an existing valid certificate!
   if (!certbotSucceeded) {
-    // OpenSSL SAN configuration file allowing direct IP and custom domain
+    const inspected = inspectCertStatus(current);
+    if (inspected.enabled && (inspected.daysRemaining || 0) > 0 && fs.existsSync(certPath)) {
+      // Retain existing working certificate without overwriting
+      appendSslLog({
+        action: "check",
+        status: "info",
+        message: `گواهی قبلی برای ${selectedDomain} همچنان دارای ${inspected.daysRemaining} روز اعتبار است و بدون تغییر حفظ شد.`,
+        daysRemaining: inspected.daysRemaining,
+      });
+      const retained: SslStatus = {
+        ...inspected,
+        domain: selectedDomain,
+        serverIp,
+      };
+      saveSslConfig(retained);
+      return retained;
+    }
+
+    // Only generate fallback OpenSSL SAN if no valid certificate exists
     const opensslConfig = `[req]
 default_bits = 2048
 prompt = no
@@ -393,7 +560,6 @@ distinguished_name = dn
 C = IR
 ST = Tehran
 L = Tehran
-O = Telegram Automation Security
 OU = Automated VPS SSL
 CN = ${selectedDomain}
 
@@ -453,12 +619,19 @@ DNS.5 = localhost
 /**
  * Automated Renewal Worker
  * Checks expiration; if less than threshold days remain, automatically executes renewal.
- * PRESERVES CUSTOM DOMAIN!
+ * PRESERVES CUSTOM DOMAIN PERMANENTLY!
  */
 export async function performAutoRenewCheck(forceRenew: boolean = false): Promise<{ renewed: boolean; message: string }> {
   const current = getSslConfig();
+  const regDomain = getRegisteredDomainConfig();
   const nowStr = new Date().toISOString();
   const threshold = current.thresholdDays || 30;
+
+  const targetDomain =
+    regDomain?.domain ||
+    (current.domain && !current.domain.includes("nip.io") && !current.domain.includes("sslip.io")
+      ? current.domain
+      : undefined);
 
   if (!current.enabled) {
     appendSslLog({
@@ -475,7 +648,7 @@ export async function performAutoRenewCheck(forceRenew: boolean = false): Promis
   if (current.type === "custom" && !forceRenew) {
     if (daysRemaining > 0) {
       current.lastRenewCheck = nowStr;
-      current.lastRenewResult = `گواهی اختصاصی کلودفلر/دستی برای ${current.domain} معتبر است (${daysRemaining} روز باقی‌مانده).`;
+      current.lastRenewResult = `گواهی اختصاصی کلودفلر/دستی برای ${current.domain || targetDomain} معتبر است (${daysRemaining} روز باقی‌مانده).`;
       saveSslConfig(current);
       return { renewed: false, message: current.lastRenewResult };
     }
@@ -483,7 +656,7 @@ export async function performAutoRenewCheck(forceRenew: boolean = false): Promis
 
   if (!forceRenew && daysRemaining > threshold) {
     current.lastRenewCheck = nowStr;
-    current.lastRenewResult = `گواهی معتبر است (${daysRemaining} روز باقی‌مانده برای ${current.domain || current.serverIp}، آستانه تمدید: ${threshold} روز). اتصال کاملاً امن است.`;
+    current.lastRenewResult = `گواهی معتبر است (${daysRemaining} روز باقی‌مانده برای ${current.domain || targetDomain || current.serverIp}، آستانه تمدید: ${threshold} روز). اتصال کاملاً امن است.`;
     saveSslConfig(current);
 
     appendSslLog({
@@ -498,10 +671,6 @@ export async function performAutoRenewCheck(forceRenew: boolean = false): Promis
 
   // Renewal triggered (either below threshold or forced)
   try {
-    const targetDomain = current.domain && !current.domain.includes("nip.io") && !current.domain.includes("sslip.io")
-      ? current.domain
-      : undefined;
-
     appendSslLog({
       action: "renew",
       status: "info",
@@ -511,10 +680,10 @@ export async function performAutoRenewCheck(forceRenew: boolean = false): Promis
       daysRemaining,
     });
 
-    // Pass BOTH serverIp and domain to preserve the user's custom domain!
+    // Pass BOTH serverIp and targetDomain to preserve the user's domain!
     const updated = await generateServerIpSsl(current.serverIp, targetDomain);
     updated.lastRenewCheck = nowStr;
-    updated.lastRenewResult = `تمدید گواهی SSL با موفقیت اجرا شد. اعتبار جدید: ${updated.daysRemaining} روز برای ${updated.domain || updated.serverIp}.`;
+    updated.lastRenewResult = `تمدید گواهی SSL با موفقیت اجرا شد. اعتبار جدید: ${updated.daysRemaining} روز برای ${updated.domain || targetDomain || updated.serverIp}.`;
     saveSslConfig(updated);
 
     appendSslLog({

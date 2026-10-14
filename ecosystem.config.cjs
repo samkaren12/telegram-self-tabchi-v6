@@ -2,6 +2,7 @@ module.exports = {
   apps: [
     {
       name: "telegram-self-tabchi-v6",
+      cwd: __dirname,
       script: "npm",
       args: "run start",
       instances: 1,

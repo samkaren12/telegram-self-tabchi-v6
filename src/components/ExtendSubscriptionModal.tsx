@@ -91,18 +91,18 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
       dir={lang === "fa" ? "rtl" : "ltr"}
     >
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in duration-200">
+      <div className="bg-gradient-to-b from-[#0d1326] to-[#080c1a] border border-violet-500/25 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/50">
+        <div className="flex items-center justify-between p-5 border-b border-violet-500/15 bg-slate-900/40">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-emerald-500 p-0.5 flex items-center justify-center text-slate-950">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-500 p-0.5 flex items-center justify-center text-white shadow-md">
               <Calendar className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-100">
+              <h3 className="text-base font-bold text-white">
                 {lang === "fa" ? "تمدید و مدیریت اشتراک اکانت" : "Extend Account Subscription"}
               </h3>
               <p className="text-xs text-slate-400 font-mono" dir="ltr">
@@ -112,7 +112,7 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -122,19 +122,19 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
         <div className="p-6 space-y-5">
           {error && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-400 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Current Status Box */}
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-violet-500/15 space-y-2">
             <div className="text-xs text-slate-400">
               {lang === "fa" ? "وضعیت فعلی اشتراک:" : "Current Subscription Status:"}
             </div>
             <div className="flex items-center justify-between">
               {sub?.is_unlimited ? (
-                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                <div className="flex items-center gap-2 text-violet-400 font-bold text-sm">
                   <InfinityIcon className="w-4 h-4" />
                   <span>{lang === "fa" ? "نامحدود (دائمی)" : "Unlimited (Permanent)"}</span>
                 </div>
@@ -183,26 +183,26 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
               <button
                 type="button"
                 onClick={() => setIsUnlimited(true)}
-                className={`p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all ${
+                className={`p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${
                   isUnlimited
-                    ? "bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-md shadow-emerald-500/10"
+                    ? "bg-violet-500/15 border-violet-500 text-violet-300 shadow-md shadow-violet-500/10"
                     : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
                 }`}
               >
-                <InfinityIcon className="w-4 h-4" />
+                <InfinityIcon className="w-4 h-4 text-violet-400" />
                 <span>{lang === "fa" ? "اشتراک نامحدود (دائمی)" : "Unlimited Plan"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsUnlimited(false)}
-                className={`p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all ${
+                className={`p-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-bold transition-all cursor-pointer ${
                   !isUnlimited
-                    ? "bg-cyan-500/10 border-cyan-500 text-cyan-400 shadow-md shadow-cyan-500/10"
+                    ? "bg-cyan-500/15 border-cyan-500 text-cyan-300 shadow-md shadow-cyan-500/10"
                     : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
                 }`}
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="w-4 h-4 text-cyan-400" />
                 <span>{lang === "fa" ? "تعیین تعداد روز" : "Set Days Limit"}</span>
               </button>
             </div>
@@ -210,7 +210,7 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
 
           {/* Days Input & Presets (if not unlimited) */}
           {!isUnlimited && (
-            <div className="space-y-3 p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div className="space-y-3 p-4 rounded-xl bg-slate-950/70 border border-violet-500/15">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-300">
                   {lang === "fa" ? "تعداد روزهای اضافه شونده:" : "Days to Add:"}
@@ -227,7 +227,7 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
                     key={p}
                     type="button"
                     onClick={() => setDaysToAdd(p)}
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                       daysToAdd === p
                         ? "bg-cyan-500 text-slate-950 font-bold"
                         : "bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200"
@@ -246,7 +246,7 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
                   max="3650"
                   value={daysToAdd}
                   onChange={(e) => setDaysToAdd(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-100 text-sm focus:outline-none focus:border-cyan-500 font-mono"
+                  className="w-full saas-input rounded-xl px-3 py-2 text-slate-100 text-sm focus:border-cyan-500 font-mono"
                   placeholder={lang === "fa" ? "تعداد روز دلخواه..." : "Custom days..."}
                 />
                 <span className="text-xs text-slate-400 whitespace-nowrap">
@@ -272,17 +272,17 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={lang === "fa" ? "مثلا: مشتری vip یا نام دارنده شماره..." : "e.g. VIP Customer..."}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
+              className="w-full saas-input rounded-xl px-3 py-2 text-slate-200 text-xs focus:border-violet-500"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-5 border-t border-slate-800 bg-slate-900/50 flex items-center justify-end gap-3">
+        <div className="p-5 border-t border-violet-500/15 bg-slate-900/40 flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
           >
             {lang === "fa" ? "انصراف" : "Cancel"}
           </button>
@@ -290,7 +290,7 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
             type="button"
             onClick={handleSave}
             disabled={loading}
-            className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-xs shadow-md shadow-cyan-500/20 transition-all transform active:scale-95 disabled:opacity-50 flex items-center gap-2"
+            className="px-5 py-2.5 rounded-xl saas-btn-primary text-white font-bold text-xs shadow-md disabled:opacity-50 flex items-center gap-2 cursor-pointer"
           >
             {loading ? (
               <span>{lang === "fa" ? "در حال ثبت..." : "Saving..."}</span>
@@ -306,3 +306,4 @@ export const ExtendSubscriptionModal: React.FC<ExtendSubscriptionModalProps> = (
     </div>
   );
 };
+

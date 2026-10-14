@@ -126,31 +126,27 @@ export const DonateModal: React.FC<DonateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className="relative w-full max-w-lg bg-gradient-to-br from-[#020503] via-[#040c06] to-[#0a0304] border-2 border-emerald-500/40 rounded-3xl p-5 sm:p-7 shadow-[0_0_60px_rgba(16,185,129,0.3)] space-y-6 overflow-hidden my-auto max-h-[94vh] overflow-y-auto"
+        className="relative w-full max-w-lg bg-gradient-to-b from-[#0d1326] to-[#080c1a] border border-violet-500/25 rounded-2xl p-5 sm:p-7 shadow-2xl space-y-5 overflow-hidden my-auto max-h-[94vh] overflow-y-auto"
         dir={lang === "fa" ? "rtl" : "ltr"}
       >
-        {/* Holographic Scanner Top Border */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 via-rose-500 to-emerald-400 animate-pulse" />
-
-        {/* Ambient Glows */}
-        <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-rose-500/20 rounded-full blur-2xl pointer-events-none" />
+        {/* Subtle Accent Top Border */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-violet-500 via-rose-500 to-cyan-400" />
 
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 left-4 sm:left-6 p-2 rounded-xl bg-black/70 border border-slate-800 text-slate-400 hover:text-white hover:border-emerald-500/50 transition-all cursor-pointer z-10"
+          className="absolute top-4 left-4 sm:left-6 p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-violet-500/40 transition-all cursor-pointer z-10"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Header with Developer Avatar */}
-        <div className="text-center space-y-3 relative z-10 pt-2">
+        <div className="text-center space-y-3 relative z-10 pt-1">
           <div className="relative inline-block mx-auto">
-            <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-gradient-to-tr from-emerald-500 via-rose-500 to-emerald-400 p-[3px] shadow-[0_0_25px_rgba(16,185,129,0.4)]">
-              <div className="w-full h-full bg-[#020603] rounded-full overflow-hidden flex items-center justify-center">
+            <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-rose-500 p-[2px] shadow-[0_0_20px_rgba(139,92,246,0.35)]">
+              <div className="w-full h-full bg-[#0a0e20] rounded-[14px] overflow-hidden flex items-center justify-center">
                 <img
                   src="https://github.com/samkaren12.png"
                   alt="samkaren12 Developer"
@@ -164,28 +160,28 @@ export const DonateModal: React.FC<DonateModalProps> = ({
             </div>
 
             {/* Heart Badge */}
-            <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-rose-500 border-2 border-black flex items-center justify-center shadow-[0_0_10px_#ef4444]">
+            <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-rose-500 border-2 border-[#0a0e20] flex items-center justify-center shadow-md">
               <Heart className="w-3 h-3 text-white fill-current" />
             </span>
           </div>
 
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-violet-500/15 text-violet-300 border border-violet-500/30">
                 DONATION & SUPPORT
               </span>
               <a
                 href="https://github.com/samkaren12"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] font-mono text-emerald-400 hover:text-emerald-300 flex items-center gap-1 hover:underline"
+                className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1 hover:underline"
               >
                 <span>@samkaren12</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
 
-            <h3 className="text-lg sm:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-white to-rose-400">
+            <h3 className="text-lg sm:text-xl font-extrabold text-white">
               {lang === "fa" ? "حمایت مالی و دونیت به توسعه‌دهنده 💖" : "Support & Donate to Developer 💖"}
             </h3>
 
@@ -200,7 +196,7 @@ export const DonateModal: React.FC<DonateModalProps> = ({
         {/* Wallets Container */}
         <div className="space-y-4 relative z-10 text-xs">
           {/* 1. TRON Wallet (TRX & USDT-TRC20) */}
-          <div className="p-4 sm:p-4.5 rounded-2xl bg-black/70 border border-rose-500/35 shadow-inner space-y-3 hover:border-rose-400/70 transition-all group">
+          <div className="p-4 rounded-xl bg-slate-950/70 border border-rose-500/25 shadow-inner space-y-3 hover:border-rose-400/50 transition-all group">
             <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
               <div className="flex items-center gap-2.5 min-w-0">
                 {/* Official Tron Logo Badge */}
