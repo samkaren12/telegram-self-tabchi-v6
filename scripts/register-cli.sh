@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Telegram Self & Tabchi CLI Installer / Registerer
-# Quickly installs or fixes the 'sudo selfandtabchi' global terminal command
+# Quickly installs and activates 'sudo selfandtabchi' command on VPS
 # ==============================================================================
 
 set -e
@@ -12,69 +12,59 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Detect project directory
+PROJECT_DIR=""
+CANDIDATES=(
+  "$(pwd)"
+  "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$0")")/.."
+  "/root/telegram-self-tabchi-v6"
+  "/root/selfandtabchi"
+  "/root/telegram-self"
+  "/var/www/telegram-self-tabchi-v6"
+  "/opt/telegram-self-tabchi-v6"
+  /home/*/telegram-self-tabchi-v6
+)
 
-if [ ! -f "$PROJECT_DIR/package.json" ]; then
-  # Fallback candidate search
-  for dir in "/root/telegram-self-tabchi-v6" "/var/www/telegram-self-tabchi-v6" "/opt/telegram-self-tabchi-v6" "$(pwd)"; do
-    if [ -f "$dir/package.json" ]; then
-      PROJECT_DIR="$dir"
-      break
-    fi
-  done
+for cand in "${CANDIDATES[@]}"; do
+  if [ -d "$cand" ] && ([ -f "$cand/package.json" ] || [ -f "$cand/self_tabchi.py" ] || [ -f "$cand/scripts/selfandtabchi.sh" ]); then
+    PROJECT_DIR="$(cd "$cand" 2>/dev/null && pwd)"
+    break
+  fi
+done
+
+if [ -z "$PROJECT_DIR" ]; then
+  PROJECT_DIR="$(pwd)"
 fi
 
 echo "$PROJECT_DIR" > /etc/selfandtabchi.conf
-chmod 644 /etc/selfandtabchi.conf
+chmod 644 /etc/selfandtabchi.conf 2>/dev/null || true
 
-cat << 'WRAPPER_EOF' > /tmp/selfandtabchi_wrapper
-#!/usr/bin/env bash
-# Global CLI launcher for Telegram Self & Tabchi
-if [ "$EUID" -ne 0 ]; then
-  echo -e "\033[1;31m[!] خطا: برای اجرای دستیار مدیریت لطفاً از دستور زیر با دسترسی روت یا sudo استفاده کنید:\033[0m"
-  echo "    sudo selfandtabchi"
-  exit 1
+# Obtain the full selfandtabchi script
+CLI_TARGET_SRC=""
+if [ -f "$PROJECT_DIR/scripts/selfandtabchi.sh" ]; then
+  CLI_TARGET_SRC="$PROJECT_DIR/scripts/selfandtabchi.sh"
+elif [ -f "./scripts/selfandtabchi.sh" ]; then
+  CLI_TARGET_SRC="./scripts/selfandtabchi.sh"
 fi
 
-PROJECT_DIR=""
-if [ -f /etc/selfandtabchi.conf ]; then
-  CONF_DIR=$(cat /etc/selfandtabchi.conf 2>/dev/null | tr -d '\r\n')
-  if [ -d "$CONF_DIR" ] && [ -f "$CONF_DIR/scripts/selfandtabchi.sh" ]; then
-    PROJECT_DIR="$CONF_DIR"
-  fi
-fi
-
-if [ -z "$PROJECT_DIR" ]; then
-  for dir in "/root/telegram-self-tabchi-v6" "/var/www/telegram-self-tabchi-v6" "/opt/telegram-self-tabchi-v6" "/home/*/telegram-self-tabchi-v6" "$(pwd)"; do
-    for cand in $dir; do
-      if [ -d "$cand" ] && [ -f "$cand/scripts/selfandtabchi.sh" ]; then
-        PROJECT_DIR="$cand"
-        echo "$PROJECT_DIR" > /etc/selfandtabchi.conf 2>/dev/null || true
-        break 2
-      fi
-    done
-  done
-fi
-
-if [ -n "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/scripts/selfandtabchi.sh" ]; then
-  chmod +x "$PROJECT_DIR/scripts/selfandtabchi.sh" 2>/dev/null || true
-  export PROJECT_DIR
-  exec bash "$PROJECT_DIR/scripts/selfandtabchi.sh" "$@"
+if [ -n "$CLI_TARGET_SRC" ] && [ -f "$CLI_TARGET_SRC" ]; then
+  cp -f "$CLI_TARGET_SRC" /usr/local/bin/selfandtabchi
+  cp -f "$CLI_TARGET_SRC" /usr/bin/selfandtabchi 2>/dev/null || true
+  cp -f "$CLI_TARGET_SRC" /bin/selfandtabchi 2>/dev/null || true
 else
-  echo -e "\033[1;31m[!] مسیر پروژه یافت نشد. لطفاً در پوشه پروژه دستور را اجرا کنید:\033[0m"
-  echo "    cd /root/telegram-self-tabchi-v6 && sudo bash scripts/selfandtabchi.sh"
-  exit 1
+  # Download directly from GitHub if not found locally
+  curl -fsSL "https://raw.githubusercontent.com/samkaren12/telegram-self-tabchi-v6/main/scripts/selfandtabchi.sh" -o /usr/local/bin/selfandtabchi 2>/dev/null || true
+  cp -f /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi 2>/dev/null || true
 fi
-WRAPPER_EOF
 
-chmod +x "$PROJECT_DIR/scripts/selfandtabchi.sh"
-cp -f "$PROJECT_DIR/scripts/selfandtabchi.sh" /usr/local/bin/selfandtabchi 2>/dev/null || true
-cp -f "$PROJECT_DIR/scripts/selfandtabchi.sh" /usr/bin/selfandtabchi 2>/dev/null || true
-cp -f "$PROJECT_DIR/scripts/selfandtabchi.sh" /bin/selfandtabchi 2>/dev/null || true
-chmod 755 /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi /bin/selfandtabchi 2>/dev/null || true
+chmod 755 /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi 2>/dev/null || true
 hash -r 2>/dev/null || true
 
-echo -e "\033[1;32m✓ دستور sudo selfandtabchi با موفقیت فعال شد!\033[0m"
-echo -e "\033[1;36mهم‌اکنون در هر کجای سرور می‌توانید تایپ کنید:\033[0m"
-echo -e "   \033[1;33msudo selfandtabchi\033[0m"
+echo -e "\033[1;32m═══════════════════════════════════════════════════════════════════════════\033[0m"
+echo -e "\033[1;32m✓ دستور سیستمی sudo selfandtabchi با موفقیت در سرور شما نصب و فعال شد!\033[0m"
+echo -e "\033[1;36mمسیر پروژه:\033[0m \033[1;37m$PROJECT_DIR\033[0m"
+echo -e "\033[1;32m═══════════════════════════════════════════════════════════════════════════\033[0m"
+echo ""
+echo -e "\033[1;33mهم‌اکنون کافیست در ترمینال دستور زیر را تایپ کنید:\033[0m"
+echo -e "   \033[1;32msudo selfandtabchi\033[0m"
+echo ""

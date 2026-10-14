@@ -30,18 +30,20 @@ if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/pack
 fi
 
 if [ -z "$PROJECT_DIR" ] || [ ! -d "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/package.json" ]; then
-  for dir in "/root/telegram-self-tabchi-v6" "/var/www/telegram-self-tabchi-v6" "/opt/telegram-self-tabchi-v6" "/home/*/telegram-self-tabchi-v6" "$(pwd)"; do
-    for cand in $dir; do
-      if [ -d "$cand" ] && [ -f "$cand/package.json" ]; then
-        PROJECT_DIR="$cand"
-        break 2
-      fi
-    done
+  for dir in "$(pwd)" "/root/telegram-self-tabchi-v6" "/root/selfandtabchi" "/root/telegram-self" "/var/www/telegram-self-tabchi-v6" "/opt/telegram-self-tabchi-v6" /home/*/telegram-self-tabchi-v6; do
+    if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
+      PROJECT_DIR="$dir"
+      break
+    fi
   done
 fi
 
+if [ -z "$PROJECT_DIR" ]; then
+  PROJECT_DIR="$(pwd)"
+fi
+
 export PROJECT_DIR
-if [ -d "$PROJECT_DIR" ]; then
+if [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/package.json" ]; then
   echo "$PROJECT_DIR" > /etc/selfandtabchi.conf 2>/dev/null || true
 fi
 
@@ -63,12 +65,9 @@ get_public_ip() {
     return
   fi
   local found_ip=""
-  found_ip=$(curl -s --connect-timeout 1 --max-time 2 https://api.ipify.org 2>/dev/null)
-  if [ -z "$found_ip" ]; then
-    found_ip=$(curl -s --connect-timeout 1 --max-time 2 https://icanhazip.com 2>/dev/null)
-  fi
-  if [ -z "$found_ip" ]; then
-    found_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  found_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  if [ -z "$found_ip" ] || [ "$found_ip" = "127.0.0.1" ]; then
+    found_ip=$(curl -s --connect-timeout 1 --max-time 1 https://api.ipify.org 2>/dev/null || echo "")
   fi
   if [ -z "$found_ip" ]; then
     found_ip="127.0.0.1"
