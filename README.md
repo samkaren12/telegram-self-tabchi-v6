@@ -1,3 +1,5 @@
+![1000100181](https://github.com/user-attachments/assets/90abe9b0-421f-4342-bcd7-ba5cdd14e384)
+
 <div align="center">
 
 # ⚡ TELEGRAM SELF & TABCHI — HACKER EDITION v6 PRO
