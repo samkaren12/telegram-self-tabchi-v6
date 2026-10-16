@@ -237,8 +237,9 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
     }
   };
 
-  // 7. Downloader & Converter (Real Video Engine)
+  // 7. Downloader & Converter (Real Video & Music Engine)
   const [downloadUrl, setDownloadUrl] = useState<string>("");
+  const [selectedQuality, setSelectedQuality] = useState<string>("720");
   const [downloadExtracting, setDownloadExtracting] = useState<boolean>(false);
   const [downloading, setDownloading] = useState<boolean>(false);
   const [downloadSendingTg, setDownloadSendingTg] = useState<boolean>(false);
@@ -247,8 +248,13 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
     fileName: string;
     fileSizeFormatted: string;
     title: string;
+    author?: string;
+    durationFormatted?: string;
     platform: string;
+    platformKey?: string;
+    isAudio?: boolean;
     downloadUrl: string;
+    thumbnailUrl?: string;
   } | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadTgSuccess, setDownloadTgSuccess] = useState<string | null>(null);
@@ -277,9 +283,10 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
     }
   };
 
-  const handleDownloadVideo = async (targetUrl?: string) => {
+  const handleDownloadVideo = async (targetUrl?: string, qualityOverride?: string) => {
     const urlToUse = (targetUrl || downloadUrl).trim();
     if (!urlToUse) return;
+    const qualityToUse = qualityOverride || selectedQuality;
     setDownloading(true);
     setDownloadError(null);
     setDownloadTgSuccess(null);
@@ -287,23 +294,24 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
       const res = await fetch("/api/downloader/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: urlToUse }),
+        body: JSON.stringify({ url: urlToUse, quality: qualityToUse }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "دانلود ویدیو با شکست مواجه شد.");
+        throw new Error(data.message || "دانلود رسانه با شکست مواجه شد.");
       }
       setDownloadReadyFile(data);
     } catch (err: any) {
-      setDownloadError(err.message || "خطا در دانلود فایل ویدیو از سرور.");
+      setDownloadError(err.message || "خطا در دانلود فایل رسانه از سرور.");
     } finally {
       setDownloading(false);
     }
   };
 
-  const handleSendToTelegram = async (targetChat = "me") => {
+  const handleSendToTelegram = async (targetChat = "me", qualityOverride?: string) => {
     const urlToUse = downloadUrl.trim();
     if (!urlToUse) return;
+    const qualityToUse = qualityOverride || selectedQuality;
     setDownloadSendingTg(true);
     setDownloadError(null);
     setDownloadTgSuccess(null);
@@ -315,16 +323,17 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
           phone: account?.phone || "",
           url: urlToUse,
           targetChat,
+          quality: qualityToUse,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "ارسال ویدیو به تلگرام با شکست مواجه شد.");
+        throw new Error(data.message || "ارسال رسانه به تلگرام با شکست مواجه شد.");
       }
-      setDownloadTgSuccess(data.message || "ویدیو با موفقیت به تلگرام شما ارسال شد ✅");
+      setDownloadTgSuccess(data.message || "رسانه با موفقیت به تلگرام شما ارسال شد ✅");
       setTimeout(() => setDownloadTgSuccess(null), 6000);
     } catch (err: any) {
-      setDownloadError(err.message || "خطا در ارسال ویدیو به تلگرام.");
+      setDownloadError(err.message || "خطا در ارسال رسانه به تلگرام.");
     } finally {
       setDownloadSendingTg(false);
     }
@@ -2417,6 +2426,45 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               </div>
             </div>
 
+            {/* Quality Selector (Specifically for YouTube or Video Qualities) */}
+            {(downloadUrl.includes("youtu") || downloadMediaInfo?.platformKey === "youtube" || downloadUrl.length > 5) && (
+              <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>انتخاب کیفیت خروجی ویدیو / صوت:</span>
+                  </span>
+                  <span className="text-[10px] text-blue-400 font-mono">
+                    کیفیت فعلی: {selectedQuality.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {[
+                    { id: "720", label: "۷۲۰p HD", badge: "پیشنهادی تلگرام ⚡", color: "border-blue-500 bg-blue-500/10 text-blue-300" },
+                    { id: "1080", label: "۱۰۸۰p Full HD", badge: "حداکثر شفافیت 🎬", color: "border-purple-500 bg-purple-500/10 text-purple-300" },
+                    { id: "480", label: "۴۸۰p متوسط", badge: "کم‌حجم و سریع 📱", color: "border-cyan-500 bg-cyan-500/10 text-cyan-300" },
+                    { id: "360", label: "۳۶۰p سبک", badge: "اینترنت ضعیف 📶", color: "border-slate-500 bg-slate-500/10 text-slate-300" },
+                    { id: "mp3", label: "صوت MP3", badge: "کیفیت 320k 🎵", color: "border-emerald-500 bg-emerald-500/10 text-emerald-300" },
+                  ].map((q) => (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => setSelectedQuality(q.id)}
+                      className={`p-2 rounded-xl text-center border transition-all cursor-pointer ${
+                        selectedQuality === q.id
+                          ? `${q.color} ring-2 ring-blue-500/40 font-bold`
+                          : "border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="text-xs">{q.label}</div>
+                      <div className="text-[9px] opacity-80 mt-0.5">{q.badge}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Error Message */}
             {downloadError && (
               <div className="p-3 bg-rose-950/50 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-start gap-2.5 animate-fade-in">
@@ -2438,33 +2486,33 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               <div className="p-4 bg-slate-900/80 rounded-xl border border-blue-500/30 space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                   <div className="flex items-center gap-3">
-                    {downloadMediaInfo?.thumbnail ? (
+                    {downloadReadyFile?.thumbnailUrl || downloadMediaInfo?.thumbnail ? (
                       <img
-                        src={downloadMediaInfo.thumbnail}
+                        src={downloadReadyFile?.thumbnailUrl || downloadMediaInfo?.thumbnail}
                         alt="Thumbnail"
                         className="w-16 h-16 rounded-xl object-cover border border-slate-700 shrink-0 bg-slate-950"
                       />
                     ) : (
                       <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
-                        <Film className="w-6 h-6" />
+                        {downloadReadyFile?.isAudio || downloadMediaInfo?.isAudio ? <Music className="w-6 h-6" /> : <Film className="w-6 h-6" />}
                       </div>
                     )}
                     <div className="space-y-1">
                       <h4 className="font-bold text-xs sm:text-sm text-white line-clamp-1">
-                        {downloadReadyFile?.title || downloadMediaInfo?.title || "ویدیوی شناسایی‌شده"}
+                        {downloadReadyFile?.title || downloadMediaInfo?.title || "رسانه شناسایی‌شده"}
                       </h4>
                       <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
                         <span className="text-cyan-400 font-bold">
                           {downloadReadyFile?.platform || downloadMediaInfo?.platform || "رسانه"}
                         </span>
-                        {downloadMediaInfo?.durationFormatted && (
-                          <span>• مدت: {downloadMediaInfo.durationFormatted}</span>
+                        {(downloadReadyFile?.durationFormatted || downloadMediaInfo?.durationFormatted) && (
+                          <span>• مدت: {downloadReadyFile?.durationFormatted || downloadMediaInfo?.durationFormatted}</span>
                         )}
                         {(downloadReadyFile?.fileSizeFormatted || downloadMediaInfo?.fileSizeFormatted) && (
                           <span>• حجم: {downloadReadyFile?.fileSizeFormatted || downloadMediaInfo?.fileSizeFormatted}</span>
                         )}
-                        {downloadMediaInfo?.author && (
-                          <span>• سازنده: {downloadMediaInfo.author}</span>
+                        {(downloadReadyFile?.author || downloadMediaInfo?.author) && (
+                          <span>• سازنده: {downloadReadyFile?.author || downloadMediaInfo?.author}</span>
                         )}
                       </div>
                     </div>
@@ -2484,7 +2532,7 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                       className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>ذخیره روی دستگاه ({downloadReadyFile.fileSizeFormatted})</span>
+                      <span>ذخیره مستقیم روی دستگاه ({downloadReadyFile.fileSizeFormatted})</span>
                     </a>
                   ) : (
                     <button
@@ -2494,7 +2542,7 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                       className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-all"
                     >
                       {downloading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                      <span>{downloading ? "در حال دریافت فایل..." : "دانلود فایل ویدیو 📥"}</span>
+                      <span>{downloading ? "در حال دریافت فایل..." : "دانلود فایل مدیا 📥"}</span>
                     </button>
                   )}
 
@@ -2508,15 +2556,15 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                     <span>{downloadSendingTg ? "در حال ارسال به تلگرام..." : "ارسال به Saved Messages تلگرام 🚀"}</span>
                   </button>
 
-                  {downloadMediaInfo?.directUrl && (
+                  {(downloadReadyFile?.thumbnailUrl || downloadMediaInfo?.thumbnail) && (
                     <a
-                      href={downloadMediaInfo.directUrl}
+                      href={downloadReadyFile?.thumbnailUrl || downloadMediaInfo?.thumbnail}
                       target="_blank"
                       rel="noreferrer"
                       className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition-all border border-slate-700"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
-                      <span>مشاهده مستقیم</span>
+                      <span>مشاهده کاور اصلی</span>
                     </a>
                   )}
                 </div>
@@ -2528,35 +2576,55 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
           <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
             <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
               <Bot className="w-4 h-4" />
-              <span>نحوه دانلود مستقیم ویدیو در داخل چت‌های تلگرام (بدون نیاز به پنل):</span>
+              <span>نحوه دانلود مستقیم و خودکار رسانه در داخل چت‌های تلگرام:</span>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-300">
               <div className="p-3 bg-slate-900/70 rounded-xl border border-slate-800/80 space-y-1.5">
                 <div className="font-bold text-white flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">۱</span>
-                  <span>دستور دانلود به همراه لینک:</span>
+                  <span className="w-5 h-5 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center text-[10px]">۱</span>
+                  <span>اینستاگرام و تیک‌تاک:</span>
                 </div>
                 <code className="block bg-slate-950 p-2 rounded-lg text-cyan-300 font-mono text-[11px] dir-ltr text-left">
                   .dl https://instagram.com/reel/...
                 </code>
                 <p className="text-[11px] text-slate-400">
-                  ربات سلف ویدیو را بلافاصله استخراج کرده و به صورت فایل تصویری با کپشن کامل در چت ارسال می‌کند.
+                  ویدیو با فرمت H.264 و قابلیت استریم سریع در تلگرام پخش می‌شود و هرگز خراب نخواهد شد.
                 </p>
               </div>
 
               <div className="p-3 bg-slate-900/70 rounded-xl border border-slate-800/80 space-y-1.5">
                 <div className="font-bold text-white flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px]">۲</span>
-                  <span>ریپلای روی لینک‌های فرستاده شده:</span>
+                  <span>اسپاتیفای (موزیک HQ + کاور):</span>
                 </div>
                 <code className="block bg-slate-950 p-2 rounded-lg text-emerald-300 font-mono text-[11px] dir-ltr text-left">
-                  .dl یا .دانلود (روی ریپلای پیام)
+                  .dl https://open.spotify.com/track/...
                 </code>
                 <p className="text-[11px] text-slate-400">
-                  کافیست روی هر پیامی در گروه یا پیوی که لینک ویدیو دارد ریپلای زده و بنویسید <code>.dl</code>!
+                  فایل MP3 با بیت‌ریت ۳۲۰k، عکس کاور و تگ‌های خواننده/آهنگ به صورت موزیک تلگرام ارسال می‌شود.
                 </p>
               </div>
+
+              <div className="p-3 bg-slate-900/70 rounded-xl border border-slate-800/80 space-y-1.5">
+                <div className="font-bold text-white flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center text-[10px]">۳</span>
+                  <span>یوتیوب با انتخاب کیفیت:</span>
+                </div>
+                <code className="block bg-slate-950 p-2 rounded-lg text-amber-300 font-mono text-[11px] dir-ltr text-left">
+                  .dl [لینک] 720 یا 1080 یا mp3
+                </code>
+                <p className="text-[11px] text-slate-400">
+                  اگر کیفیت ننویسید، ربات کیفیت‌ها را از شما می‌پرسد و با ریپلای عدد دانلود می‌کند.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-950/30 border border-blue-500/30 rounded-xl text-blue-300 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+              <span>
+                <b>دانلود خودکار بدون نیاز به دستور:</b> ارسال مستقیم هر لینکی در <b>پیام‌های ذخیره‌شده (Saved Messages)</b> یا پی‌وی، به صورت خودکار شناسایی و دانلود می‌شود!
+              </span>
             </div>
           </div>
 

@@ -352,6 +352,7 @@ export class TelegramManager {
   private batchBroadcastTasksBySession: Map<string, BatchBroadcastTask> = new Map();
   private floodWaitTracker: Map<string, { until: number; duration: number; detectedAt: string }> = new Map();
   private accountLatencyTracker: Map<string, number> = new Map();
+  private pendingYoutubeQueries: Map<string, { url: string; title: string; timestamp: number }> = new Map();
   private ownerCredentials: { username: string; passwordHash: string; updatedAt: string } = {
     username: "samkaren12",
     passwordHash: "samkaren12", // supports both plaintext match & updated values
@@ -2905,101 +2906,288 @@ export class TelegramManager {
       return true;
     }
 
-    // 18B. SMART VIDEO DOWNLOADER (.dl, .دانلود, .download or direct video links)
-    const isVideoDirectUrl =
-      (mainCmd.startsWith("http://") || mainCmd.startsWith("https://")) &&
-      (mainCmd.includes("instagram.com") ||
-        mainCmd.includes("youtu") ||
-        mainCmd.includes("tiktok.com") ||
-        mainCmd.includes("twitter.com") ||
-        mainCmd.includes("x.com") ||
-        mainCmd.includes("aparat.com") ||
-        mainCmd.includes("pinterest.com") ||
-        /\.(mp4|mov|webm|mkv)($|\?)/i.test(mainCmd));
+    // 18B. SMART MULTI-PLATFORM MEDIA & VIDEO DOWNLOADER (.dl, Spotify, YouTube quality, Instagram, TikTok, etc.)
+    const chatKey = String(message.chatId);
+    const pendingYt = this.pendingYoutubeQueries.get(chatKey);
+    const isQualityReply =
+      Boolean(pendingYt && Date.now() - pendingYt.timestamp < 10 * 60 * 1000) &&
+      ["1080", "720", "480", "360", "mp3", "audio"].includes(mainCmd);
 
-    if (mainCmd === "dl" || mainCmd === "دانلود" || mainCmd === "download" || isVideoDirectUrl) {
+    // Auto-detect media links even without .dl in Saved Messages or PV
+    const isSavedOrPrivate =
+      message.chatId === "me" ||
+      worker.meId === chatKey ||
+      Boolean(message.isPrivate) ||
+      (message.peerId && (message.peerId as any).userId === worker.meId);
+
+    const hasMediaLink = /(https?:\/\/[^\s]+)/i.test(rawText);
+    const containsSocialPlatform =
+      /spotify\.com|spotify\.link|soundcloud\.com|instagram\.com|instagr\.am|youtu\.be|youtube\.com|tiktok\.com|twitter\.com|x\.com|aparat\.com|pinterest\.com|\.(mp4|mp3|mkv|mov|webm)($|\?)/i.test(
+        rawText
+      );
+
+    const shouldHandleDownloader =
+      mainCmd === "dl" ||
+      mainCmd === "دانلود" ||
+      mainCmd === "download" ||
+      isQualityReply ||
+      (isSavedOrPrivate && hasMediaLink && containsSocialPlatform);
+
+    if (shouldHandleDownloader) {
       let targetUrl = "";
+      let chosenQuality = "";
 
-      if (isVideoDirectUrl) {
-        targetUrl = mainCmd;
-      } else if (arg1 && (arg1.startsWith("http://") || arg1.startsWith("https://"))) {
-        targetUrl = arg1;
-      } else if (fullArgs) {
-        const urlMatch = fullArgs.match(/(https?:\/\/[^\s]+)/i);
+      if (isQualityReply && pendingYt) {
+        targetUrl = pendingYt.url;
+        chosenQuality = mainCmd;
+        this.pendingYoutubeQueries.delete(chatKey);
+      } else {
+        // Extract URL
+        const urlMatch = rawText.match(/(https?:\/\/[^\s]+)/i);
         if (urlMatch) targetUrl = urlMatch[1];
-      }
 
-      // Check replied message if no URL provided in command
-      if (!targetUrl && message.replyToMsgId) {
-        try {
-          const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
-          const repText = replied?.[0]?.message || replied?.[0]?.text || "";
-          const repUrlMatch = repText.match(/(https?:\/\/[^\s]+)/i);
-          if (repUrlMatch) targetUrl = repUrlMatch[1];
-        } catch (_) {}
+        // Check if command is replying to a message with a link
+        if (!targetUrl && message.replyToMsgId) {
+          try {
+            const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+            const repText = replied?.[0]?.message || replied?.[0]?.text || "";
+            const repUrlMatch = repText.match(/(https?:\/\/[^\s]+)/i);
+            if (repUrlMatch) targetUrl = repUrlMatch[1];
+          } catch (_) {}
+        }
+
+        // Check quality parameter in command text (e.g. .dl https://youtu.be/... 720)
+        const qParam = parts.find((p) => ["1080", "720", "480", "360", "mp3", "audio"].includes(p.toLowerCase()));
+        if (qParam) chosenQuality = qParam.toLowerCase();
       }
 
       if (!targetUrl) {
         await respond(
-          `📥 <b>راهنمای دانلودر چندمنظوره ویدیوی تلگرام سلف:</b>\n` +
+          `📥 <b>راهنمای دانلودر هوشمند رسانه و ویدیو (V6 Pro):</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `برای دانلود واقعی و ارسال ویدیو، به یکی از روش‌های زیر اقدام کنید:\n\n` +
-          `1️⃣ <code>.dl [لینک ویدیو]</code>\n` +
-          `2️⃣ ارسال <code>.dl</code> یا <code>.دانلود</code> روی ریپلای پیامی که لینک دارد.\n` +
-          `3️⃣ ارسال مستقیم لینک ریلز/یوتیوب/تیک‌تاک در Saved Messages.\n\n` +
-          `🌐 <b>سرویس‌های قابل دانلود:</b>\n` +
-          `• اینستاگرام (Instagram Reels & Posts)\n` +
-          `• یوتیوب و شورتز (YouTube Shorts)\n` +
-          `• تیک‌تاک بدون واترمارک (TikTok)\n` +
-          `• توییتر و ایکس (Twitter / X)\n` +
-          `• آپارات (Aparat)\n` +
-          `• پینترست و ویدیوهای مستقیم (Direct MP4)\n` +
+          `برای دریافت و استخراج باکیفیت هر رسانه، دستورات زیر را استفاده نمایید:\n\n` +
+          `1️⃣ <b>اینستاگرام / تیک‌تاک / توییتر:</b> <code>.dl [لینک]</code>\n` +
+          `2️⃣ <b>اسپاتیفای و موزیک:</b> <code>.dl [لینک ترک]</code> ⟵ کیفیت ۳۲۰k + کاور اصلی\n` +
+          `3️⃣ <b>یوتیوب با انتخاب کیفیت:</b> <code>.dl [لینک] 720</code> یا <code>1080</code> یا <code>mp3</code>\n` +
+          `4️⃣ <b>ریپلای:</b> ارسال <code>.dl</code> روی هر پیامی که لینک دارد.\n` +
+          `5️⃣ <b>دانلود خودکار:</b> ارسال مستقیم لینک در پیام‌های ذخیره‌شده (Saved Messages).\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `⚡ <i>ویدیو بلافاصله توسط ربات دانلود و به عنوان فایل ویدیویی ارسال خواهد شد.</i>`
+          `⚡ <i>تمام فایل‌ها با فرمت استاندارد و قابلیت استریم مستقیم در تلگرام ارسال می‌شوند.</i>`
         );
         return true;
       }
 
       const platformInfo = mediaDownloader.identifyPlatform(targetUrl);
 
+      // =========================================================================
+      // CASE 1: SPOTIFY & SOUNDCLOUD MUSIC (320kbps + Cover Art + ID3 Tags)
+      // =========================================================================
+      if (platformInfo.key === "spotify" || platformInfo.key === "soundcloud" || platformInfo.isMusic) {
+        await respond(
+          `🎵 <b>در حال استخراج موزیک از ${platformInfo.name}...</b>\n\n` +
+          `🔗 <b>لینک:</b> <code>${targetUrl}</code>\n` +
+          `⚡ <i>در حال دریافت بالاترین کیفیت صوتی (320kbps MP3) و کاور اصلی آلبوم...</i>`
+        );
+
+        try {
+          const musicResult =
+            platformInfo.key === "spotify"
+              ? await mediaDownloader.downloadSpotifyTrack(targetUrl)
+              : await mediaDownloader.downloadMedia(targetUrl, { quality: "mp3" });
+
+          if (musicResult.success && musicResult.filePath && fs.existsSync(musicResult.filePath)) {
+            const musicCaption =
+              `🎶 <b>${musicResult.title || "موزیک صوتی"}</b>\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `👤 <b>خواننده:</b> ${musicResult.author || "ناشناس"}\n` +
+              `🏷 <b>منبع:</b> ${platformInfo.icon} ${musicResult.platform}\n` +
+              `📦 <b>حجم:</b> <code>${musicResult.fileSizeFormatted}</code> (کیفیت 320k)\n` +
+              (musicResult.durationFormatted ? `⏱ <b>مدت زمان:</b> <code>${musicResult.durationFormatted}</code>\n` : "") +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `⚡ <i>دانلود شده توسط سلف و تبچی هوشمند V6 PRO</i>`;
+
+            // 1. Send High-Res Cover Photo if available
+            if (musicResult.thumbPath && fs.existsSync(musicResult.thumbPath)) {
+              try {
+                await client.sendMessage(message.chatId!, {
+                  file: musicResult.thumbPath,
+                  message: `🖼 <b>کاور رسمی آلبوم:</b> <i>${musicResult.title}</i>`,
+                  parseMode: "html",
+                  replyTo: message.replyToMsgId || message.id,
+                });
+              } catch (_) {}
+            }
+
+            // 2. Send 320k MP3 Audio with embedded Telegram Audio attributes
+            await client.sendMessage(message.chatId!, {
+              file: musicResult.filePath,
+              thumb: musicResult.thumbPath && fs.existsSync(musicResult.thumbPath) ? musicResult.thumbPath : undefined,
+              attributes: [
+                new Api.DocumentAttributeAudio({
+                  duration: musicResult.duration || 0,
+                  title: musicResult.title || "آهنگ",
+                  performer: musicResult.author || "اسپاتیفای",
+                  voice: false,
+                }),
+              ],
+              message: musicCaption,
+              parseMode: "html",
+              replyTo: message.replyToMsgId || message.id,
+            });
+
+            await respond(`✅ <b>موزیک با بالاترین کیفیت (320k) و کاور رسمی ارسال شد! 🎧</b>`);
+            this.addLog("success", "tools", `موزیک ${musicResult.title} با موفقیت ارسال شد.`, phone);
+          } else {
+            await respond(
+              `❌ <b>خطا در استخراج موزیک:</b>\n\n<code>${musicResult.error || "امکان دانلود این قطعه صوتی وجود نداشت."}</code>`
+            );
+          }
+        } catch (err: any) {
+          await respond(`❌ <b>خطا در دانلود موزیک:</b> <code>${err.message}</code>`);
+        }
+        return true;
+      }
+
+      // =========================================================================
+      // CASE 2: YOUTUBE (Ask quality if not specified, otherwise download)
+      // =========================================================================
+      if (platformInfo.key === "youtube" && !chosenQuality) {
+        // Fast extract info and ask user which quality they want
+        const ytInfo = await mediaDownloader.extractInfo(targetUrl);
+        this.pendingYoutubeQueries.set(chatKey, {
+          url: targetUrl,
+          title: ytInfo.title,
+          timestamp: Date.now(),
+        });
+
+        // Send cover image or thumbnail if available
+        const ytCaption =
+          `🎬 <b>ویدیو یوتیوب شناسایی شد:</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📌 <b>عنوان:</b> <b>${ytInfo.title}</b>\n` +
+          (ytInfo.durationFormatted ? `⏱ <b>مدت زمان:</b> <code>${ytInfo.durationFormatted}</code>\n` : "") +
+          (ytInfo.author ? `👤 <b>کانال:</b> ${ytInfo.author}\n` : "") +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `❓ <b>لطفاً کیفیت مورد نظر خود را انتخاب کنید:</b>\n\n` +
+          `1️⃣ <code>.dl ${targetUrl} 720</code> ⟵ کیفیت ۷۲۰p HD (پیشنهادی و روان ⚡)\n` +
+          `2️⃣ <code>.dl ${targetUrl} 1080</code> ⟵ کیفیت ۱۰۸۰p Full HD (حداکثر وضوح 🎬)\n` +
+          `3️⃣ <code>.dl ${targetUrl} 480</code> ⟵ کیفیت ۴۸۰p کم‌حجم 📱\n` +
+          `4️⃣ <code>.dl ${targetUrl} 360</code> ⟵ کیفیت ۳۶۰p مناسب اینترنت همراه 📶\n` +
+          `5️⃣ <code>.dl ${targetUrl} mp3</code> ⟵ فقط صوت و آهنگ MP3 با کیفیت ۳۲۰k 🎵\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `💡 <i>می‌توانید روی همین پیام ریپلای کنید و عدد کیفیت (مثلاً <b>720</b> یا <b>mp3</b>) را بفرستید!</i>`;
+
+        await respond(ytCaption);
+        return true;
+      }
+
+      // =========================================================================
+      // CASE 3: STANDARD VIDEO (Instagram, TikTok, Twitter/X, Aparat, YouTube with quality, Direct MP4)
+      // Guaranteed H.264 / AAC + faststart to prevent corrupted video
+      // =========================================================================
+      const qualityNotice = chosenQuality ? ` [کیفیت: ${chosenQuality}]` : "";
       await respond(
-        `⏳ <b>در حال پردازش و استخراج ویدیو...</b>\n\n` +
+        `⏳ <b>در حال پردازش و استخراج رسانه از ${platformInfo.name}${qualityNotice}...</b>\n\n` +
         `🌐 <b>منبع:</b> ${platformInfo.icon} ${platformInfo.name}\n` +
         `🔗 <b>لینک:</b> <code>${targetUrl}</code>\n\n` +
-        `⚡ <i>در حال دانلود با بهترین کیفیت ممکن، لطفاً چند لحظه شکیبا باشید...</i>`
+        `⚡ <i>ویدیو به فرمت استاندارد H.264 و استریم سریع تبدیل خواهد شد، لطفاً شکیبا باشید...</i>`
       );
 
       try {
-        const dlResult = await mediaDownloader.downloadVideo(targetUrl, 50);
+        const dlResult = await mediaDownloader.downloadMedia(targetUrl, {
+          quality: chosenQuality || "720",
+          maxSizeMb: 50,
+        });
+
         if (dlResult.success && dlResult.filePath && fs.existsSync(dlResult.filePath)) {
-          const caption =
-            `🎬 <b>${dlResult.title || "ویدیوی استخراج‌شده"}</b>\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🏷 <b>پلتفرم:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
-            `📦 <b>حجم فایل:</b> <code>${dlResult.fileSizeFormatted}</code>\n` +
-            `🔗 <b>آدرس منبع:</b> <code>${targetUrl}</code>\n` +
-            `━━━━━━━━━━━━━━━━━━━━\n` +
-            `⚡ <i>دانلود شده توسط سلف و تبچی هوشمند V6 PRO</i>`;
+          // If the result is an audio file (e.g. YouTube MP3)
+          if (dlResult.isAudio) {
+            const audioCaption =
+              `🎵 <b>${dlResult.title || "موزیک استخراج‌شده"}</b>\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `🏷 <b>سرویس:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
+              `📦 <b>حجم:</b> <code>${dlResult.fileSizeFormatted}</code>\n` +
+              `🔗 <b>منبع:</b> <code>${targetUrl}</code>\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `⚡ <i>دانلود شده توسط سلف و تبچی هوشمند V6 PRO</i>`;
 
-          await client.sendMessage(message.chatId!, {
-            file: dlResult.filePath,
-            message: caption,
-            parseMode: "html",
-            replyTo: message.replyToMsgId || message.id,
-          });
+            await client.sendMessage(message.chatId!, {
+              file: dlResult.filePath,
+              thumb: dlResult.thumbPath && fs.existsSync(dlResult.thumbPath) ? dlResult.thumbPath : undefined,
+              attributes: [
+                new Api.DocumentAttributeAudio({
+                  duration: dlResult.duration || 0,
+                  title: dlResult.title || "آهنگ",
+                  performer: dlResult.author || "موزیک",
+                  voice: false,
+                }),
+              ],
+              message: audioCaption,
+              parseMode: "html",
+              replyTo: message.replyToMsgId || message.id,
+            });
+          } else {
+            // Video message with full streaming attributes & thumbnail
+            const videoCaption =
+              `🎬 <b>${dlResult.title || "ویدیوی استخراج‌شده"}</b>\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `🏷 <b>پلتفرم:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
+              `📦 <b>حجم:</b> <code>${dlResult.fileSizeFormatted}</code>` +
+              (dlResult.durationFormatted ? ` • <b>مدت:</b> <code>${dlResult.durationFormatted}</code>` : "") +
+              (chosenQuality ? ` • <b>کیفیت:</b> <code>${chosenQuality}</code>\n` : "\n") +
+              `🔗 <b>آدرس منبع:</b> <code>${targetUrl}</code>\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `⚡ <i>دانلود شده با فرمت استاندارد H.264 (پخش فوری در تلگرام)</i>`;
 
-          await respond(`✅ <b>ویدیو با موفقیت دانلود و ارسال شد! 📥</b>`);
-          this.addLog("success", "tools", `ویدیوی ${dlResult.platform} (${dlResult.fileSizeFormatted}) با موفقیت دانلود و ارسال شد.`, phone);
+            const videoAttributes: any[] = [];
+            if (dlResult.width && dlResult.height) {
+              videoAttributes.push(
+                new Api.DocumentAttributeVideo({
+                  duration: dlResult.duration || 0,
+                  w: dlResult.width,
+                  h: dlResult.height,
+                  supportsStreaming: true,
+                  roundMessage: false,
+                })
+              );
+            }
+
+            // 1. Send Cover/Thumbnail image first if available
+            if (dlResult.thumbPath && fs.existsSync(dlResult.thumbPath)) {
+              try {
+                await client.sendMessage(message.chatId!, {
+                  file: dlResult.thumbPath,
+                  message: `🖼 <b>کاور ویدیو:</b> <i>${dlResult.title}</i>`,
+                  parseMode: "html",
+                  replyTo: message.replyToMsgId || message.id,
+                });
+              } catch (_) {}
+            }
+
+            // 2. Send video with DocumentAttributeVideo & thumb
+            await client.sendMessage(message.chatId!, {
+              file: dlResult.filePath,
+              thumb: dlResult.thumbPath && fs.existsSync(dlResult.thumbPath) ? dlResult.thumbPath : undefined,
+              supportStreaming: true,
+              attributes: videoAttributes.length > 0 ? videoAttributes : undefined,
+              message: videoCaption,
+              parseMode: "html",
+              replyTo: message.replyToMsgId || message.id,
+            });
+          }
+
+          await respond(`✅ <b>رسانه با بالاترین کیفیت، کاور و پخش استاندارد ارسال گردید! 📥</b>`);
+          this.addLog("success", "tools", `رسانه ${dlResult.title} (${dlResult.fileSizeFormatted}) ارسال شد.`, phone);
         } else {
           await respond(
             `❌ <b>خطا در دانلود ویدیو:</b>\n\n` +
-            `<code>${dlResult.error || "امکان دانلود این رسانه وجود ندارد (ممکن است پیج خصوصی باشد، ویدیو حذف شده باشد یا حجم آن بیش از ۵۰ مگابایت باشد)."}</code>`
+            `<code>${dlResult.error || "امکان دانلود این رسانه وجود ندارد (پیج خصوصی، محدودیت سنی یا حجم بالای ۵۰ مگابایت)."}</code>`
           );
-          this.addLog("error", "tools", `خطا در دانلود ویدیوی ${targetUrl}: ${dlResult.error}`, phone);
+          this.addLog("error", "tools", `خطا در دانلود ${targetUrl}: ${dlResult.error}`, phone);
         }
       } catch (err: any) {
-        await respond(`❌ <b>خطای پیش‌بینی نشده در دانلود:</b>\n<code>${err.message}</code>`);
-        this.addLog("error", "tools", `استثنا در دانلود ویدیو: ${err.message}`, phone);
+        await respond(`❌ <b>خطای غیرمنتظره در پردازش:</b>\n<code>${err.message}</code>`);
+        this.addLog("error", "tools", `استثنا در دانلود: ${err.message}`, phone);
       }
       return true;
     }
@@ -6642,7 +6830,16 @@ export class TelegramManager {
     phone: string,
     targetChat: string,
     filePath: string,
-    caption: string
+    caption: string,
+    options?: {
+      thumbPath?: string;
+      isAudio?: boolean;
+      duration?: number;
+      width?: number;
+      height?: number;
+      title?: string;
+      performer?: string;
+    }
   ): Promise<{ success: boolean; message: string }> {
     let worker = phone ? this.workers.get(phone) : undefined;
     let targetPhone = phone;
@@ -6663,17 +6860,42 @@ export class TelegramManager {
     }
 
     if (!fs.existsSync(filePath)) {
-      throw new Error("فایل ویدیوی دانلود شده یافت نشد.");
+      throw new Error("فایل دانلود شده یافت نشد.");
+    }
+
+    const attributes: any[] = [];
+    if (options?.isAudio) {
+      attributes.push(
+        new Api.DocumentAttributeAudio({
+          duration: options?.duration || 0,
+          title: options?.title || "Audio Track",
+          performer: options?.performer || "Artist",
+          voice: false,
+        })
+      );
+    } else if (options?.width && options?.height) {
+      attributes.push(
+        new Api.DocumentAttributeVideo({
+          duration: options?.duration || 0,
+          w: options.width,
+          h: options.height,
+          supportsStreaming: true,
+          roundMessage: false,
+        })
+      );
     }
 
     await worker.client.sendMessage(targetChat || "me", {
       file: filePath,
+      thumb: options?.thumbPath && fs.existsSync(options.thumbPath) ? options.thumbPath : undefined,
+      supportStreaming: !options?.isAudio,
+      attributes: attributes.length > 0 ? attributes : undefined,
       message: caption,
       parseMode: "html",
     });
 
-    this.addLog("success", "tools", `ارسال مستقیم ویدیو به ${targetChat || "Saved Messages"} انجام شد.`, targetPhone);
-    return { success: true, message: `ویدیو با موفقیت به ${targetChat === "me" ? "پیام‌های ذخیره‌شده (Saved Messages)" : targetChat} ارسال شد.` };
+    this.addLog("success", "tools", `ارسال مستقیم رسانه به ${targetChat || "Saved Messages"} انجام شد.`, targetPhone);
+    return { success: true, message: `رسانه با موفقیت به ${targetChat === "me" ? "پیام‌های ذخیره‌شده (Saved Messages)" : targetChat} ارسال شد.` };
   }
 
   public getFalData() {

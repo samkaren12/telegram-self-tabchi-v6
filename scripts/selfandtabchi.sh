@@ -235,22 +235,27 @@ do_update() {
   cd "$PROJECT_DIR"
 
   # If git repo exists
-  if [ -d ".git" ]; then
+  if [ -d ".git" ] || git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo -e "${BLUE}[1/4] دریافت سورس جدید از مخزن Git...${NC}"
+    git stash save "cli-update-backup-$(date +%s)" 2>/dev/null || true
     git fetch origin 2>/dev/null || true
-    git reset --hard origin/main 2>/dev/null || git pull --rebase 2>/dev/null || true
+    git pull --rebase origin main 2>/dev/null || git pull --rebase origin master 2>/dev/null || git pull 2>/dev/null || true
   fi
 
   echo -e "${BLUE}[2/4] نصب و همگام‌سازی وابستگی‌ها (npm install)...${NC}"
-  npm install --legacy-peer-deps --no-audit 2>/dev/null || npm install
+  npm install --legacy-peer-deps --no-audit 2>/dev/null || npm install --legacy-peer-deps 2>/dev/null || true
+
+  if command -v yt-dlp >/dev/null 2>&1; then
+    echo -e "${CYAN}[*] بروزرسانی دانلودر رسانه‌ها (yt-dlp)...${NC}"
+    yt-dlp -U 2>/dev/null || true
+  fi
 
   echo -e "${BLUE}[3/4] کامپایل و بیلد مجدد پروژه (npm run build)...${NC}"
-  npm run build:server || npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs || true
-  npm run build:client || npx vite build || true
+  npm run build || (npm run build:server && npm run build:client) || true
 
   echo -e "${BLUE}[4/4] ری‌استارت پروسه سرور در PM2...${NC}"
   if command -v pm2 >/dev/null 2>&1; then
-    pm2 restart telegram-self-tabchi-v6 2>/dev/null || ./start.sh
+    pm2 reload telegram-self-tabchi-v6 2>/dev/null || pm2 restart telegram-self-tabchi-v6 2>/dev/null || ./start.sh
   else
     ./start.sh
   fi

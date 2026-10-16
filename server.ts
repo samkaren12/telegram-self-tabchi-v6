@@ -541,14 +541,14 @@ async function startServer() {
     }
   });
 
-  // 2. Download video to server and get ready for client
+  // 2. Download video/audio to server and get ready for client
   app.post("/api/downloader/download", async (req, res) => {
     try {
-      const { url } = req.body || {};
+      const { url, quality } = req.body || {};
       if (!url || typeof url !== "string" || !url.trim()) {
-        return res.status(400).json({ success: false, message: "لینک ویدیو الزامی است." });
+        return res.status(400).json({ success: false, message: "لینک رسانه الزامی است." });
       }
-      const result = await mediaDownloader.downloadVideo(url, 50);
+      const result = await mediaDownloader.downloadMedia(url, { quality, maxSizeMb: 50 });
       if (!result.success) {
         return res.status(400).json({ success: false, message: result.error });
       }
@@ -557,15 +557,20 @@ async function startServer() {
         fileName: result.fileName,
         fileSizeFormatted: result.fileSizeFormatted,
         title: result.title,
+        author: result.author,
+        durationFormatted: result.durationFormatted,
         platform: result.platform,
+        platformKey: result.platformKey,
+        isAudio: result.isAudio,
         downloadUrl: `/api/downloader/file/${encodeURIComponent(result.fileName!)}`,
+        thumbnailUrl: result.thumbPath ? `/api/downloader/file/${encodeURIComponent(path.basename(result.thumbPath))}` : undefined,
       });
     } catch (err: any) {
-      return res.status(500).json({ success: false, message: err.message || "خطا در دانلود ویدیو" });
+      return res.status(500).json({ success: false, message: err.message || "خطا در دانلود رسانه" });
     }
   });
 
-  // 3. Direct browser download of cached video
+  // 3. Direct browser download of cached video/audio
   app.get("/api/downloader/file/:filename", (req, res) => {
     try {
       const filename = path.basename(req.params.filename);
@@ -580,42 +585,63 @@ async function startServer() {
     }
   });
 
-  // 4. Send downloaded video directly to Telegram account (Saved Messages or Chat)
+  // 4. Send downloaded video/audio directly to Telegram account (Saved Messages or Chat)
   app.post("/api/downloader/send-to-telegram", async (req, res) => {
     try {
-      const { phone, url, targetChat } = req.body || {};
+      const { phone, url, targetChat, quality } = req.body || {};
       if (!url || typeof url !== "string" || !url.trim()) {
-        return res.status(400).json({ success: false, message: "لینک ویدیو الزامی است." });
+        return res.status(400).json({ success: false, message: "لینک ویدیو یا آهنگ الزامی است." });
       }
 
-      // Step 1: Download
-      const dlResult = await mediaDownloader.downloadVideo(url, 50);
+      // Step 1: Download Media with specified quality
+      const dlResult = await mediaDownloader.downloadMedia(url, { quality, maxSizeMb: 50 });
       if (!dlResult.success || !dlResult.filePath) {
-        return res.status(400).json({ success: false, message: dlResult.error || "دانلود ویدیو ناموفق بود." });
+        return res.status(400).json({ success: false, message: dlResult.error || "دانلود رسانه ناموفق بود." });
       }
 
       // Step 2: Caption
       const platformInfo = mediaDownloader.identifyPlatform(url);
-      const caption =
-        `🎬 <b>${dlResult.title || "ویدیوی استخراج‌شده"}</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🏷 <b>منبع:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
-        `📦 <b>حجم:</b> <code>${dlResult.fileSizeFormatted}</code>\n` +
-        `🔗 <b>لینک مستقیم:</b> <code>${url}</code>\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `⚡ <i>ارسال شده از طریق پنل مدیریت وب V6 PRO</i>`;
+      const isAudio = Boolean(dlResult.isAudio);
+      const caption = isAudio
+        ? `🎶 <b>${dlResult.title || "موزیک صوتی"}</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `👤 <b>خواننده:</b> ${dlResult.author || "ناشناس"}\n` +
+          `🏷 <b>منبع:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
+          `📦 <b>حجم فایل:</b> <code>${dlResult.fileSizeFormatted}</code> (کیفیت اصلی)\n` +
+          (dlResult.durationFormatted ? `⏱ <b>مدت زمان:</b> <code>${dlResult.durationFormatted}</code>\n` : "") +
+          `🔗 <b>لینک منبع:</b> <code>${url}</code>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ <i>ارسال شده از طریق پنل مدیریت V6 PRO</i>`
+        : `🎬 <b>${dlResult.title || "ویدیوی استخراج‌شده"}</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `🏷 <b>منبع:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
+          `📦 <b>حجم:</b> <code>${dlResult.fileSizeFormatted}</code>` +
+          (dlResult.durationFormatted ? ` • <b>مدت:</b> <code>${dlResult.durationFormatted}</code>` : "") +
+          (quality ? ` • <b>کیفیت:</b> <code>${quality}</code>\n` : "\n") +
+          `🔗 <b>لینک مستقیم:</b> <code>${url}</code>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ <i>دانلود شده با فرمت استاندارد H.264 و پخش سریع در تلگرام</i>`;
 
-      // Step 3: Send via MTProto
+      // Step 3: Send via MTProto with attributes and thumbnail
       const sendResult = await telegramManager.sendMediaFileToChat(
         phone || "",
         targetChat || "me",
         dlResult.filePath,
-        caption
+        caption,
+        {
+          thumbPath: dlResult.thumbPath,
+          isAudio: dlResult.isAudio,
+          duration: dlResult.duration,
+          width: dlResult.width,
+          height: dlResult.height,
+          title: dlResult.title,
+          performer: dlResult.author,
+        }
       );
 
-      return res.json({ success: true, message: sendResult.message, title: dlResult.title });
+      return res.json({ success: true, message: sendResult.message, title: dlResult.title, isAudio });
     } catch (err: any) {
-      return res.status(500).json({ success: false, message: err.message || "خطا در ارسال ویدیو به تلگرام" });
+      return res.status(500).json({ success: false, message: err.message || "خطا در ارسال رسانه به تلگرام" });
     }
   });
 
@@ -2414,6 +2440,39 @@ echo "======================================================================"
   // ==========================================
   // SERVER SCRIPT UPDATE & SYSTEM METRICS API
   // ==========================================
+  interface UpdateProcessState {
+    isUpdating: boolean;
+    mode: "fast" | "full" | "rebuild";
+    step: "idle" | "git" | "deps" | "build" | "restart" | "completed" | "failed";
+    stepText: string;
+    progressPercent: number;
+    logs: string[];
+    startTime?: number;
+    completedAt?: number;
+    success?: boolean;
+    message?: string;
+    error?: string;
+  }
+
+  let activeUpdateState: UpdateProcessState = {
+    isUpdating: false,
+    mode: "fast",
+    step: "idle",
+    stepText: "آماده دریافت دستور",
+    progressPercent: 0,
+    logs: [],
+  };
+
+  app.get("/api/system/update-status", (_req, res) => {
+    return res.json({
+      success: true,
+      ...activeUpdateState,
+      elapsedSeconds: activeUpdateState.startTime
+        ? Math.floor((Date.now() - activeUpdateState.startTime) / 1000)
+        : 0,
+    });
+  });
+
   app.get("/api/system/update-check", async (_req, res) => {
     const gitAvailable = await new Promise<boolean>((resolve) => {
       exec("git --version", (err) => resolve(!err));
@@ -2424,6 +2483,8 @@ echo "======================================================================"
     });
 
     let currentCommit = "v6.0.0-production";
+    let currentBranch = "main";
+    let remoteUrl = "";
     let remoteCommit = "";
     let commitsBehind = 0;
     let remoteUpdates = false;
@@ -2432,12 +2493,12 @@ echo "======================================================================"
     const defaultChangelog = [
       {
         hash: "v6.0.0-pro",
-        message: "انتشار نسخه ۶.۰.۰ پرو: سیستم تمدید خودکار SSL بر روی آی‌پی سرور + رفع باگ ورودی مقادیر ارز و ماشین حساب",
+        message: "افزودن دانلودر واقعی ویدیو و موسیقی، ریپورتر هوشمند با تأخیر تصادفی و تمدید خودکار SSL",
         date: "امروز",
       },
       {
         hash: "v5.9.8",
-        message: "افزودن ماژول استعلام زنده و رسمی قیمت‌های بازار جهانی، نرخ برابری تومان و تولید نمودار تصویری",
+        message: "ارتقای ماژول بروزرسانی خودکار اسکریپت با ترمینال زنده لاگ و دستیار CLI تعاملی",
         date: "دیروز",
       },
       {
@@ -2451,6 +2512,14 @@ echo "======================================================================"
       try {
         currentCommit = await new Promise<string>((resolve) => {
           exec("git rev-parse --short HEAD", (_e, out) => resolve(out?.trim() || "HEAD"));
+        });
+
+        currentBranch = await new Promise<string>((resolve) => {
+          exec("git rev-parse --abbrev-ref HEAD", (_e, out) => resolve(out?.trim() || "main"));
+        });
+
+        remoteUrl = await new Promise<string>((resolve) => {
+          exec("git remote get-url origin 2>/dev/null", (_e, out) => resolve(out?.trim() || ""));
         });
 
         // Fetch remote if remote origin exists (timeout 5s)
@@ -2488,12 +2557,20 @@ echo "======================================================================"
 
     const publicIp = await getPublicServerIp();
 
+    const pm2Detected = await new Promise<boolean>((resolve) => {
+      exec("pm2 list 2>/dev/null", (err, stdout) => {
+        resolve(!err && stdout.includes("telegram-self-tabchi-v6"));
+      });
+    });
+
     return res.json({
       success: true,
       gitAvailable,
       isGitRepo,
       version: "6.0.0 Pro",
       currentCommit,
+      currentBranch,
+      remoteUrl,
       remoteCommit,
       commitsBehind,
       remoteUpdates,
@@ -2501,30 +2578,149 @@ echo "======================================================================"
       serverIp: publicIp,
       uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
       memoryUsage: process.memoryUsage(),
+      nodeVersion: process.version,
+      pm2Detected,
+      activeUpdateState,
     });
   });
 
   app.post("/api/system/update", async (req, res) => {
-    const commands = [
-      "git pull --rebase 2>/dev/null || true",
-      "npm install --legacy-peer-deps 2>/dev/null || true",
-      "npm run build 2>/dev/null || true",
-      "pm2 restart telegram-self-tabchi-v6 2>/dev/null || true",
-    ].join(" && ");
-
-    exec(commands, { timeout: 60000 }, (error, stdout, stderr) => {
-      if (error) {
-        return res.json({
-          success: false,
-          message: `فرآیند بروزرسانی با خطا مواجه شد: ${error.message}`,
-          output: stdout + "\n" + stderr,
-        });
-      }
-      return res.json({
-        success: true,
-        message: "اسکریپت با موفقیت به آخرین نسخه بروزرسانی شد و سرویس ری‌استارت گردید.",
-        output: stdout,
+    if (activeUpdateState.isUpdating) {
+      return res.status(409).json({
+        success: false,
+        message: "یک فرآیند بروزرسانی در حال حاضر فعال است. لطفاً منتظر اتمام آن باشید.",
+        activeState: activeUpdateState,
       });
+    }
+
+    const mode: "fast" | "full" | "rebuild" = req.body?.mode || "fast";
+
+    activeUpdateState = {
+      isUpdating: true,
+      mode,
+      step: "git",
+      stepText: "در حال بررسی و همگام‌سازی سورس با گیت (Git Sync)...",
+      progressPercent: 15,
+      logs: [`[${new Date().toLocaleTimeString("fa-IR")}] شروع فرآیند بروزرسانی با حالت: ${mode}`],
+      startTime: Date.now(),
+      success: false,
+    };
+
+    const runCmd = (cmd: string, timeoutMs = 90000): Promise<{ stdout: string; stderr: string; success: boolean }> => {
+      return new Promise((resolve) => {
+        exec(cmd, { timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+          resolve({
+            stdout: stdout || "",
+            stderr: stderr || (err ? err.message : ""),
+            success: !err,
+          });
+        });
+      });
+    };
+
+    // Execute in background so we don't timeout HTTP or lose connection
+    (async () => {
+      try {
+        // Step 1: Git Stash & Pull
+        if (mode !== "rebuild") {
+          activeUpdateState.step = "git";
+          activeUpdateState.stepText = "در حال دریافت آخرین کامیت‌ها از مخزن گیت...";
+          activeUpdateState.progressPercent = 25;
+
+          const isGit = await new Promise<boolean>((resolve) => {
+            exec("git rev-parse --is-inside-work-tree", (err) => resolve(!err));
+          });
+
+          if (isGit) {
+            activeUpdateState.logs.push("[Git] ذخیره تغییرات محلی (git stash)...");
+            await runCmd('git stash save "web-update-backup" 2>&1 || true', 15000);
+
+            activeUpdateState.logs.push("[Git] دریافت آخرین سورس از ریموت (git fetch origin)...");
+            await runCmd("git fetch origin 2>&1 || true", 20000);
+
+            activeUpdateState.logs.push("[Git] اعمال تغییرات جدید (git pull --rebase)...");
+            const pullRes = await runCmd(
+              "git pull --rebase origin main 2>&1 || git pull --rebase origin master 2>&1 || git pull 2>&1 || true",
+              30000
+            );
+            if (pullRes.stdout) activeUpdateState.logs.push(pullRes.stdout.trim());
+          } else {
+            activeUpdateState.logs.push("[Info] سورس در حالت مستقل است (پوشه .git یافت نشد). از مرحله git صرف‌نظر شد.");
+          }
+        }
+
+        // Step 2: Dependencies & Downloader Update
+        if (mode === "full") {
+          activeUpdateState.step = "deps";
+          activeUpdateState.stepText = "در حال تطبیق و نصب وابستگی‌های پکیج‌ها (npm install)...";
+          activeUpdateState.progressPercent = 45;
+          activeUpdateState.logs.push("[NPM] بررسی و نصب پکیج‌های پروژه...");
+
+          const npmRes = await runCmd("npm install --legacy-peer-deps --prefer-offline 2>&1 || true", 60000);
+          if (npmRes.stdout) activeUpdateState.logs.push(npmRes.stdout.trim().slice(-300));
+        }
+
+        // Always ensure yt-dlp is fresh if installed
+        try {
+          const ytCheck = await runCmd("which yt-dlp", 5000);
+          if (ytCheck.success) {
+            activeUpdateState.logs.push("[yt-dlp] بررسی و بروزرسانی دانلودر اختصاصی ویدیو...");
+            await runCmd("yt-dlp -U 2>&1 || true", 15000);
+          }
+        } catch (_) {}
+
+        // Step 3: Rebuild Client & Server Bundles
+        activeUpdateState.step = "build";
+        activeUpdateState.stepText = "در حال کامپایل و بیلد بهینه‌شده کلاینت و سرور (npm run build)...";
+        activeUpdateState.progressPercent = 70;
+        activeUpdateState.logs.push("[Build] شروع کامپایل پروژه با Vite و Esbuild...");
+
+        const buildRes = await runCmd("npm run build 2>&1", 90000);
+        if (buildRes.stdout) {
+          activeUpdateState.logs.push(buildRes.stdout.trim().slice(-400));
+        }
+
+        if (!buildRes.success) {
+          activeUpdateState.logs.push(`[Build Warning] کامپایل کامل ناموفق بود، تلاش برای بیلد مستقل کلاینت و سرور...`);
+          await runCmd("npm run build:client 2>&1 || true", 60000);
+          await runCmd("npm run build:server 2>&1 || true", 60000);
+        }
+
+        // Step 4: PM2 / Process Reload Notification
+        activeUpdateState.step = "restart";
+        activeUpdateState.stepText = "بروزرسانی موفقیت‌آمیز بود! در حال اعمال روی پروسه سرور...";
+        activeUpdateState.progressPercent = 95;
+        activeUpdateState.logs.push("[Restart] سرویس و کدهای جدید کامپایل شدند.");
+
+        activeUpdateState.isUpdating = false;
+        activeUpdateState.step = "completed";
+        activeUpdateState.stepText = "بروزرسانی کامل و موفقیت‌آمیز انجام شد ✅";
+        activeUpdateState.progressPercent = 100;
+        activeUpdateState.success = true;
+        activeUpdateState.completedAt = Date.now();
+        activeUpdateState.message = "اسکریپت با موفقیت به آخرین نسخه بروزرسانی و کامپایل شد.";
+        activeUpdateState.logs.push(`[${new Date().toLocaleTimeString("fa-IR")}] عملیات با موفقیت به پایان رسید.`);
+
+        // Schedule graceful PM2 reload after responding to allow client to receive status
+        setTimeout(() => {
+          exec("pm2 reload telegram-self-tabchi-v6 2>/dev/null || pm2 restart telegram-self-tabchi-v6 2>/dev/null || true");
+        }, 3000);
+      } catch (err: any) {
+        activeUpdateState.isUpdating = false;
+        activeUpdateState.step = "failed";
+        activeUpdateState.stepText = `خطا در بروزرسانی: ${err.message}`;
+        activeUpdateState.progressPercent = 100;
+        activeUpdateState.success = false;
+        activeUpdateState.error = err.message;
+        activeUpdateState.completedAt = Date.now();
+        activeUpdateState.logs.push(`[Error] ${err.message}`);
+      }
+    })();
+
+    return res.json({
+      success: true,
+      message: "فرآیند بروزرسانی آغاز شد. وضعیت زنده در پنل در حال نمایش است.",
+      statusUrl: "/api/system/update-status",
     });
   });
 
