@@ -237,9 +237,98 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
     }
   };
 
-  // 7. Downloader & Converter
+  // 7. Downloader & Converter (Real Video Engine)
   const [downloadUrl, setDownloadUrl] = useState<string>("");
-  const [downloadResult, setDownloadResult] = useState<string | null>(null);
+  const [downloadExtracting, setDownloadExtracting] = useState<boolean>(false);
+  const [downloading, setDownloading] = useState<boolean>(false);
+  const [downloadSendingTg, setDownloadSendingTg] = useState<boolean>(false);
+  const [downloadMediaInfo, setDownloadMediaInfo] = useState<any | null>(null);
+  const [downloadReadyFile, setDownloadReadyFile] = useState<{
+    fileName: string;
+    fileSizeFormatted: string;
+    title: string;
+    platform: string;
+    downloadUrl: string;
+  } | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadTgSuccess, setDownloadTgSuccess] = useState<string | null>(null);
+
+  const handleExtractMedia = async (targetUrl?: string) => {
+    const urlToUse = (targetUrl || downloadUrl).trim();
+    if (!urlToUse) return;
+    setDownloadExtracting(true);
+    setDownloadError(null);
+    setDownloadTgSuccess(null);
+    try {
+      const res = await fetch("/api/downloader/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlToUse }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "خطا در بررسی لینک ویدیو");
+      }
+      setDownloadMediaInfo(data.info);
+    } catch (err: any) {
+      setDownloadError(err.message || "امکان استخراج اطلاعات از این لینک وجود ندارد.");
+    } finally {
+      setDownloadExtracting(false);
+    }
+  };
+
+  const handleDownloadVideo = async (targetUrl?: string) => {
+    const urlToUse = (targetUrl || downloadUrl).trim();
+    if (!urlToUse) return;
+    setDownloading(true);
+    setDownloadError(null);
+    setDownloadTgSuccess(null);
+    try {
+      const res = await fetch("/api/downloader/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlToUse }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "دانلود ویدیو با شکست مواجه شد.");
+      }
+      setDownloadReadyFile(data);
+    } catch (err: any) {
+      setDownloadError(err.message || "خطا در دانلود فایل ویدیو از سرور.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleSendToTelegram = async (targetChat = "me") => {
+    const urlToUse = downloadUrl.trim();
+    if (!urlToUse) return;
+    setDownloadSendingTg(true);
+    setDownloadError(null);
+    setDownloadTgSuccess(null);
+    try {
+      const res = await fetch("/api/downloader/send-to-telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: account?.phone || "",
+          url: urlToUse,
+          targetChat,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "ارسال ویدیو به تلگرام با شکست مواجه شد.");
+      }
+      setDownloadTgSuccess(data.message || "ویدیو با موفقیت به تلگرام شما ارسال شد ✅");
+      setTimeout(() => setDownloadTgSuccess(null), 6000);
+    } catch (err: any) {
+      setDownloadError(err.message || "خطا در ارسال ویدیو به تلگرام.");
+    } finally {
+      setDownloadSendingTg(false);
+    }
+  };
 
   // 7. Fun, Games & Tools
   const [falResult, setFalResult] = useState<{ poem: string; ghazal: string; interpretation: string } | null>(null);
@@ -2205,49 +2294,270 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
         </div>
       )}
 
-      {/* SUBTAB 6: DOWNLOADER & MEDIA */}
+      {/* SUBTAB 6: DOWNLOADER & MEDIA (REAL VIDEO DOWNLOAD ENGINE) */}
       {activeTab === "downloader" && (
-        <div className="glass-panel rounded-3xl p-5 sm:p-6 space-y-5">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="glass-panel rounded-3xl p-5 sm:p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <Download className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
+                  <span>{isRtl ? "دانلودر هوشمند و چندمنظوره رسانه و ویدیو" : "Multi-Platform Media Downloader"}</span>
+                  <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/30 font-mono">
+                    yt-dlp V6 Core
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {isRtl
+                    ? "دانلود واقعی ویدیو با بالاترین کیفیت از اینستاگرام، یوتیوب، تیک‌تاک، توییتر، آپارات و ارسال به تلگرام"
+                    : "Real video downloading from Instagram, YouTube, TikTok, Twitter/X, Aparat and Telegram transfer"}
+                </p>
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
-              <Download className="w-5 h-5 text-blue-400" />
-              <h3 className="font-bold text-sm sm:text-base text-white">
-                {isRtl ? "دانلودر هوشمند، تبدیل مدیا و استیکر" : "Downloader & Media Converter"}
-              </h3>
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-xs text-emerald-400 font-bold">موتور دانلود آماده به کار</span>
             </div>
           </div>
 
-          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
-            <label className="text-xs font-bold text-slate-300">
-              لینک ویدیوی اینستاگرام یا یوتیوب جهت دانلود:
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={downloadUrl}
-                onChange={(e) => setDownloadUrl(e.target.value)}
-                placeholder="https://www.instagram.com/reel/... or YouTube URL"
-                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (!downloadUrl.trim()) return;
-                  setDownloadResult("آماده دانلود! دستور .dl برای این آدرس در تلگرام ارسال شد 🎬");
-                  setTimeout(() => setDownloadResult(null), 4000);
-                }}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs"
+          {/* Supported Platforms Chips */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-[11px] text-slate-400 font-bold ml-1">پلتفرم‌های پشتیبانی‌شده:</span>
+            {[
+              { name: "اینستاگرام ریلز و پست", icon: "📸", color: "from-pink-500/10 to-rose-500/10 border-pink-500/30 text-pink-300" },
+              { name: "یوتیوب و شورتز", icon: "▶️", color: "from-red-500/10 to-orange-500/10 border-red-500/30 text-red-300" },
+              { name: "تیک‌تاک (بدون واترمارک)", icon: "🎵", color: "from-cyan-500/10 to-blue-500/10 border-cyan-500/30 text-cyan-300" },
+              { name: "توییتر و X", icon: "🐦", color: "from-blue-500/10 to-indigo-500/10 border-blue-500/30 text-blue-300" },
+              { name: "آپارات", icon: "📺", color: "from-purple-500/10 to-violet-500/10 border-purple-500/30 text-purple-300" },
+              { name: "پینترست", icon: "📌", color: "from-red-500/10 to-rose-500/10 border-red-500/30 text-rose-300" },
+              { name: "لینک مستقیم MP4", icon: "🎬", color: "from-emerald-500/10 to-teal-500/10 border-emerald-500/30 text-emerald-300" },
+            ].map((p, idx) => (
+              <span
+                key={idx}
+                className={`text-[11px] px-2.5 py-1 rounded-xl border bg-gradient-to-r flex items-center gap-1.5 ${p.color}`}
               >
-                دانلود مستقیم
-              </button>
+                <span>{p.icon}</span>
+                <span>{p.name}</span>
+              </span>
+            ))}
+          </div>
+
+          {/* Main Download Box */}
+          <div className="p-4 sm:p-5 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                <span>لینک ویدیوی مورد نظر را وارد کنید:</span>
+                {downloadUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDownloadUrl("");
+                      setDownloadMediaInfo(null);
+                      setDownloadReadyFile(null);
+                      setDownloadError(null);
+                    }}
+                    className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                  >
+                    پاک کردن
+                  </button>
+                )}
+              </label>
+
+              <div className="flex flex-col sm:flex-row items-stretch gap-2.5">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={downloadUrl}
+                    onChange={(e) => {
+                      setDownloadUrl(e.target.value);
+                      if (downloadError) setDownloadError(null);
+                    }}
+                    placeholder="https://www.instagram.com/reel/... یا https://youtube.com/shorts/..."
+                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                  {downloadUrl && (
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(downloadUrl, "url")}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                      title="کپی لینک"
+                    >
+                      {copiedText === "url" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!downloadUrl.trim() || downloadExtracting || downloading}
+                    onClick={() => handleExtractMedia()}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                  >
+                    {downloadExtracting ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5 text-cyan-400" />}
+                    <span>آنالیز لینک</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!downloadUrl.trim() || downloading || downloadExtracting}
+                    onClick={() => handleDownloadVideo()}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-blue-500/20 cursor-pointer"
+                  >
+                    {downloading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    <span>{downloading ? "در حال دریافت..." : "دانلود فوری 📥"}</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
-            {downloadResult && (
-              <div className="p-3 bg-blue-950/40 border border-blue-500/40 rounded-xl text-blue-300 text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                <span>{downloadResult}</span>
+            {/* Error Message */}
+            {downloadError && (
+              <div className="p-3 bg-rose-950/50 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-start gap-2.5 animate-fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{downloadError}</span>
               </div>
             )}
+
+            {/* Telegram Sent Success Message */}
+            {downloadTgSuccess && (
+              <div className="p-3 bg-emerald-950/50 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs flex items-center gap-2.5 animate-fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{downloadTgSuccess}</span>
+              </div>
+            )}
+
+            {/* Extracted Media Details Card */}
+            {(downloadMediaInfo || downloadReadyFile) && (
+              <div className="p-4 bg-slate-900/80 rounded-xl border border-blue-500/30 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-3">
+                    {downloadMediaInfo?.thumbnail ? (
+                      <img
+                        src={downloadMediaInfo.thumbnail}
+                        alt="Thumbnail"
+                        className="w-16 h-16 rounded-xl object-cover border border-slate-700 shrink-0 bg-slate-950"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                        <Film className="w-6 h-6" />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-xs sm:text-sm text-white line-clamp-1">
+                        {downloadReadyFile?.title || downloadMediaInfo?.title || "ویدیوی شناسایی‌شده"}
+                      </h4>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                        <span className="text-cyan-400 font-bold">
+                          {downloadReadyFile?.platform || downloadMediaInfo?.platform || "رسانه"}
+                        </span>
+                        {downloadMediaInfo?.durationFormatted && (
+                          <span>• مدت: {downloadMediaInfo.durationFormatted}</span>
+                        )}
+                        {(downloadReadyFile?.fileSizeFormatted || downloadMediaInfo?.fileSizeFormatted) && (
+                          <span>• حجم: {downloadReadyFile?.fileSizeFormatted || downloadMediaInfo?.fileSizeFormatted}</span>
+                        )}
+                        {downloadMediaInfo?.author && (
+                          <span>• سازنده: {downloadMediaInfo.author}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span className="text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold self-end sm:self-center">
+                    آماده دریافت
+                  </span>
+                </div>
+
+                {/* Download Actions */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {downloadReadyFile ? (
+                    <a
+                      href={downloadReadyFile.downloadUrl}
+                      download={downloadReadyFile.fileName}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>ذخیره روی دستگاه ({downloadReadyFile.fileSizeFormatted})</span>
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={downloading}
+                      onClick={() => handleDownloadVideo()}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-all"
+                    >
+                      {downloading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      <span>{downloading ? "در حال دریافت فایل..." : "دانلود فایل ویدیو 📥"}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={downloadSendingTg}
+                    onClick={() => handleSendToTelegram("me")}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-sky-600/20 cursor-pointer"
+                  >
+                    {downloadSendingTg ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>{downloadSendingTg ? "در حال ارسال به تلگرام..." : "ارسال به Saved Messages تلگرام 🚀"}</span>
+                  </button>
+
+                  {downloadMediaInfo?.directUrl && (
+                    <a
+                      href={downloadMediaInfo.directUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition-all border border-slate-700"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>مشاهده مستقیم</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Telegram In-Chat Bot Commands Guide */}
+          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
+              <Bot className="w-4 h-4" />
+              <span>نحوه دانلود مستقیم ویدیو در داخل چت‌های تلگرام (بدون نیاز به پنل):</span>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
+              <div className="p-3 bg-slate-900/70 rounded-xl border border-slate-800/80 space-y-1.5">
+                <div className="font-bold text-white flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]">۱</span>
+                  <span>دستور دانلود به همراه لینک:</span>
+                </div>
+                <code className="block bg-slate-950 p-2 rounded-lg text-cyan-300 font-mono text-[11px] dir-ltr text-left">
+                  .dl https://instagram.com/reel/...
+                </code>
+                <p className="text-[11px] text-slate-400">
+                  ربات سلف ویدیو را بلافاصله استخراج کرده و به صورت فایل تصویری با کپشن کامل در چت ارسال می‌کند.
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-900/70 rounded-xl border border-slate-800/80 space-y-1.5">
+                <div className="font-bold text-white flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px]">۲</span>
+                  <span>ریپلای روی لینک‌های فرستاده شده:</span>
+                </div>
+                <code className="block bg-slate-950 p-2 rounded-lg text-emerald-300 font-mono text-[11px] dir-ltr text-left">
+                  .dl یا .دانلود (روی ریپلای پیام)
+                </code>
+                <p className="text-[11px] text-slate-400">
+                  کافیست روی هر پیامی در گروه یا پیوی که لینک ویدیو دارد ریپلای زده و بنویسید <code>.dl</code>!
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Quick Media Tools Grid */}

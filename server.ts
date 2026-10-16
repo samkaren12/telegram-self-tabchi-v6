@@ -2,6 +2,7 @@ process.env.TZ = "Asia/Tehran";
 
 import express from "express";
 import path from "path";
+import fs from "fs";
 import os from "os";
 import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
@@ -35,6 +36,7 @@ import {
 import { backupService } from "./server/backupService.js";
 import { translateText, SUPPORTED_LANGUAGES } from "./server/translationService.js";
 import { auditLogger } from "./server/auditLogger.js";
+import { mediaDownloader } from "./server/mediaDownloader.js";
 import { exec } from "child_process";
 
 const startTime = Date.now();
@@ -518,6 +520,102 @@ async function startServer() {
       return res.json({ success: true, tracks, total: tracks.length });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  // =========================================================================
+  // SMART MEDIA & VIDEO DOWNLOADER ENDPOINTS
+  // =========================================================================
+
+  // 1. Analyze / Extract video info
+  app.post("/api/downloader/extract", async (req, res) => {
+    try {
+      const { url } = req.body || {};
+      if (!url || typeof url !== "string" || !url.trim()) {
+        return res.status(400).json({ success: false, message: "لینک ویدیو الزامی است." });
+      }
+      const info = await mediaDownloader.extractInfo(url);
+      return res.json({ success: true, info });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || "خطا در استخراج اطلاعات ویدیو" });
+    }
+  });
+
+  // 2. Download video to server and get ready for client
+  app.post("/api/downloader/download", async (req, res) => {
+    try {
+      const { url } = req.body || {};
+      if (!url || typeof url !== "string" || !url.trim()) {
+        return res.status(400).json({ success: false, message: "لینک ویدیو الزامی است." });
+      }
+      const result = await mediaDownloader.downloadVideo(url, 50);
+      if (!result.success) {
+        return res.status(400).json({ success: false, message: result.error });
+      }
+      return res.json({
+        success: true,
+        fileName: result.fileName,
+        fileSizeFormatted: result.fileSizeFormatted,
+        title: result.title,
+        platform: result.platform,
+        downloadUrl: `/api/downloader/file/${encodeURIComponent(result.fileName!)}`,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || "خطا در دانلود ویدیو" });
+    }
+  });
+
+  // 3. Direct browser download of cached video
+  app.get("/api/downloader/file/:filename", (req, res) => {
+    try {
+      const filename = path.basename(req.params.filename);
+      const filePath = path.join("/tmp/telegram_v6_downloads", filename);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).send("فایل دانلود شده یافت نشد یا منقضی گردیده است.");
+      }
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      return res.sendFile(filePath);
+    } catch (err: any) {
+      return res.status(500).send("خطا در ارسال فایل");
+    }
+  });
+
+  // 4. Send downloaded video directly to Telegram account (Saved Messages or Chat)
+  app.post("/api/downloader/send-to-telegram", async (req, res) => {
+    try {
+      const { phone, url, targetChat } = req.body || {};
+      if (!url || typeof url !== "string" || !url.trim()) {
+        return res.status(400).json({ success: false, message: "لینک ویدیو الزامی است." });
+      }
+
+      // Step 1: Download
+      const dlResult = await mediaDownloader.downloadVideo(url, 50);
+      if (!dlResult.success || !dlResult.filePath) {
+        return res.status(400).json({ success: false, message: dlResult.error || "دانلود ویدیو ناموفق بود." });
+      }
+
+      // Step 2: Caption
+      const platformInfo = mediaDownloader.identifyPlatform(url);
+      const caption =
+        `🎬 <b>${dlResult.title || "ویدیوی استخراج‌شده"}</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🏷 <b>منبع:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
+        `📦 <b>حجم:</b> <code>${dlResult.fileSizeFormatted}</code>\n` +
+        `🔗 <b>لینک مستقیم:</b> <code>${url}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚡ <i>ارسال شده از طریق پنل مدیریت وب V6 PRO</i>`;
+
+      // Step 3: Send via MTProto
+      const sendResult = await telegramManager.sendMediaFileToChat(
+        phone || "",
+        targetChat || "me",
+        dlResult.filePath,
+        caption
+      );
+
+      return res.json({ success: true, message: sendResult.message, title: dlResult.title });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message || "خطا در ارسال ویدیو به تلگرام" });
     }
   });
 

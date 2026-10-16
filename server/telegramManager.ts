@@ -33,6 +33,7 @@ import {
 } from "../src/utils/tehranTime.js";
 import { generateAiSecretaryReply } from "./aiSecretary.js";
 import { getSslConfig, getRegisteredDomainConfig } from "./sslManager.js";
+import { mediaDownloader } from "./mediaDownloader.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
@@ -2904,9 +2905,102 @@ export class TelegramManager {
       return true;
     }
 
-    if (mainCmd === "dl" || mainCmd === "دانلود") {
-      const targetUrl = arg1 && !arg1.includes("[لینک]") ? arg1 : "https://instagram.com/";
-      await respond(`📥 <b>دریافت رسانه (Downloader):</b>\n\n🔗 آدرس: <code>${targetUrl}</code>\n⏳ استخراج مدیا از شبکه اجتماعی با موفقیت در صف پردازش قرار گرفت...`);
+    // 18B. SMART VIDEO DOWNLOADER (.dl, .دانلود, .download or direct video links)
+    const isVideoDirectUrl =
+      (mainCmd.startsWith("http://") || mainCmd.startsWith("https://")) &&
+      (mainCmd.includes("instagram.com") ||
+        mainCmd.includes("youtu") ||
+        mainCmd.includes("tiktok.com") ||
+        mainCmd.includes("twitter.com") ||
+        mainCmd.includes("x.com") ||
+        mainCmd.includes("aparat.com") ||
+        mainCmd.includes("pinterest.com") ||
+        /\.(mp4|mov|webm|mkv)($|\?)/i.test(mainCmd));
+
+    if (mainCmd === "dl" || mainCmd === "دانلود" || mainCmd === "download" || isVideoDirectUrl) {
+      let targetUrl = "";
+
+      if (isVideoDirectUrl) {
+        targetUrl = mainCmd;
+      } else if (arg1 && (arg1.startsWith("http://") || arg1.startsWith("https://"))) {
+        targetUrl = arg1;
+      } else if (fullArgs) {
+        const urlMatch = fullArgs.match(/(https?:\/\/[^\s]+)/i);
+        if (urlMatch) targetUrl = urlMatch[1];
+      }
+
+      // Check replied message if no URL provided in command
+      if (!targetUrl && message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+          const repText = replied?.[0]?.message || replied?.[0]?.text || "";
+          const repUrlMatch = repText.match(/(https?:\/\/[^\s]+)/i);
+          if (repUrlMatch) targetUrl = repUrlMatch[1];
+        } catch (_) {}
+      }
+
+      if (!targetUrl) {
+        await respond(
+          `📥 <b>راهنمای دانلودر چندمنظوره ویدیوی تلگرام سلف:</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `برای دانلود واقعی و ارسال ویدیو، به یکی از روش‌های زیر اقدام کنید:\n\n` +
+          `1️⃣ <code>.dl [لینک ویدیو]</code>\n` +
+          `2️⃣ ارسال <code>.dl</code> یا <code>.دانلود</code> روی ریپلای پیامی که لینک دارد.\n` +
+          `3️⃣ ارسال مستقیم لینک ریلز/یوتیوب/تیک‌تاک در Saved Messages.\n\n` +
+          `🌐 <b>سرویس‌های قابل دانلود:</b>\n` +
+          `• اینستاگرام (Instagram Reels & Posts)\n` +
+          `• یوتیوب و شورتز (YouTube Shorts)\n` +
+          `• تیک‌تاک بدون واترمارک (TikTok)\n` +
+          `• توییتر و ایکس (Twitter / X)\n` +
+          `• آپارات (Aparat)\n` +
+          `• پینترست و ویدیوهای مستقیم (Direct MP4)\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⚡ <i>ویدیو بلافاصله توسط ربات دانلود و به عنوان فایل ویدیویی ارسال خواهد شد.</i>`
+        );
+        return true;
+      }
+
+      const platformInfo = mediaDownloader.identifyPlatform(targetUrl);
+
+      await respond(
+        `⏳ <b>در حال پردازش و استخراج ویدیو...</b>\n\n` +
+        `🌐 <b>منبع:</b> ${platformInfo.icon} ${platformInfo.name}\n` +
+        `🔗 <b>لینک:</b> <code>${targetUrl}</code>\n\n` +
+        `⚡ <i>در حال دانلود با بهترین کیفیت ممکن، لطفاً چند لحظه شکیبا باشید...</i>`
+      );
+
+      try {
+        const dlResult = await mediaDownloader.downloadVideo(targetUrl, 50);
+        if (dlResult.success && dlResult.filePath && fs.existsSync(dlResult.filePath)) {
+          const caption =
+            `🎬 <b>${dlResult.title || "ویدیوی استخراج‌شده"}</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🏷 <b>پلتفرم:</b> ${platformInfo.icon} ${dlResult.platform}\n` +
+            `📦 <b>حجم فایل:</b> <code>${dlResult.fileSizeFormatted}</code>\n` +
+            `🔗 <b>آدرس منبع:</b> <code>${targetUrl}</code>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `⚡ <i>دانلود شده توسط سلف و تبچی هوشمند V6 PRO</i>`;
+
+          await client.sendMessage(message.chatId!, {
+            file: dlResult.filePath,
+            message: caption,
+            parseMode: "html",
+            replyTo: message.replyToMsgId || message.id,
+          });
+
+          await respond(`✅ <b>ویدیو با موفقیت دانلود و ارسال شد! 📥</b>`);
+          this.addLog("success", "tools", `ویدیوی ${dlResult.platform} (${dlResult.fileSizeFormatted}) با موفقیت دانلود و ارسال شد.`, phone);
+        } else {
+          await respond(
+            `❌ <b>خطا در دانلود ویدیو:</b>\n\n` +
+            `<code>${dlResult.error || "امکان دانلود این رسانه وجود ندارد (ممکن است پیج خصوصی باشد، ویدیو حذف شده باشد یا حجم آن بیش از ۵۰ مگابایت باشد)."}</code>`
+          );
+          this.addLog("error", "tools", `خطا در دانلود ویدیوی ${targetUrl}: ${dlResult.error}`, phone);
+        }
+      } catch (err: any) {
+        await respond(`❌ <b>خطای پیش‌بینی نشده در دانلود:</b>\n<code>${err.message}</code>`);
+        this.addLog("error", "tools", `استثنا در دانلود ویدیو: ${err.message}`, phone);
+      }
       return true;
     }
 
@@ -6542,6 +6636,44 @@ export class TelegramManager {
   public async triggerChatAction(phone: string, targetChat: string, action: string) {
     this.addLog("success", "self", `فعال‌سازی اکشن ${action} برای چت ${targetChat}`, phone);
     return { success: true, action, targetChat };
+  }
+
+  public async sendMediaFileToChat(
+    phone: string,
+    targetChat: string,
+    filePath: string,
+    caption: string
+  ): Promise<{ success: boolean; message: string }> {
+    let worker = phone ? this.workers.get(phone) : undefined;
+    let targetPhone = phone;
+    if (!worker || !worker.client) {
+      // Fallback: pick the first available online worker
+      for (const [p, w] of this.workers.entries()) {
+        const acc = this.accounts.get(p);
+        if (w.client && acc?.isOnline) {
+          worker = w;
+          targetPhone = p;
+          break;
+        }
+      }
+    }
+
+    if (!worker || !worker.client) {
+      throw new Error("هیچ اکانت تلگرام فعال و آنلاینی برای ارسال فایل یافت نشد. لطفاً ابتدا به یک شماره در پنل متصل شوید.");
+    }
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error("فایل ویدیوی دانلود شده یافت نشد.");
+    }
+
+    await worker.client.sendMessage(targetChat || "me", {
+      file: filePath,
+      message: caption,
+      parseMode: "html",
+    });
+
+    this.addLog("success", "tools", `ارسال مستقیم ویدیو به ${targetChat || "Saved Messages"} انجام شد.`, targetPhone);
+    return { success: true, message: `ویدیو با موفقیت به ${targetChat === "me" ? "پیام‌های ذخیره‌شده (Saved Messages)" : targetChat} ارسال شد.` };
   }
 
   public getFalData() {

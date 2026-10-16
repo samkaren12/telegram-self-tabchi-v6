@@ -60,12 +60,22 @@ install_pkg() {
 }
 
 # Check essential utilities immediately
-for tool in curl git lsof tar gzip; do
+for tool in curl git lsof tar gzip ffmpeg; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo -e "${YELLOW}⚙ Installing required tool: $tool...${NC}"
     install_pkg "$tool" || true
   fi
 done
+
+# Install yt-dlp binary for full high-speed video downloader engine
+if ! command -v yt-dlp >/dev/null 2>&1; then
+  echo -e "${YELLOW}⚙ Installing yt-dlp high-speed video extractor...${NC}"
+  if [ "$EUID" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    sudo curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && sudo chmod a+rx /usr/local/bin/yt-dlp || true
+  else
+    curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp 2>/dev/null && chmod a+rx /usr/local/bin/yt-dlp 2>/dev/null || true
+  fi
+fi
 
 # If executed via curl | bash outside the repo, auto-clone or pull project
 if [ ! -f "package.json" ]; then
