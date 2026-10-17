@@ -22,6 +22,7 @@ import {
   StorePaymentCardItem,
   StorePaymentCryptoNetwork,
 } from "../../types";
+import { useConfirm } from "../ui/ConfirmProvider";
 
 interface PaymentMethodsManagerProps {
   payments: StorePaymentSettings;
@@ -38,6 +39,7 @@ export function PaymentMethodsManager({
   onSavePayments,
   saving = false,
 }: PaymentMethodsManagerProps) {
+  const { confirm } = useConfirm();
   // Bank card modal state
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<StorePaymentCardItem | null>(null);
@@ -113,7 +115,14 @@ export function PaymentMethodsManager({
 
   // Delete Card
   const handleDeleteCard = async (cardId: string) => {
-    if (!confirm("آیا از حذف این حساب بانکی اطمینان دارید؟")) return;
+    const ok = await confirm({
+      title: "حذف حساب بانکی",
+      message: "آیا از حذف این حساب بانکی اطمینان دارید؟",
+      confirmText: "حذف حساب",
+      cancelText: "انصراف",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await fetch(`/api/store-bot/payments/cards/${cardId}`, { method: "DELETE" });
       const updatedCards = cards.filter((c) => c.id !== cardId);
@@ -201,7 +210,14 @@ export function PaymentMethodsManager({
 
   // Delete Crypto
   const handleDeleteCrypto = async (netId: string) => {
-    if (!confirm("آیا از حذف این والت ارز دیجیتال اطمینان دارید؟")) return;
+    const ok = await confirm({
+      title: "حذف والت ارز دیجیتال",
+      message: "آیا از حذف این والت ارز دیجیتال اطمینان دارید؟",
+      confirmText: "حذف والت",
+      cancelText: "انصراف",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await fetch(`/api/store-bot/payments/crypto/${netId}`, { method: "DELETE" });
       const updatedNets = cryptoNetworks.filter((n) => n.id !== netId);

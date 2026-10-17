@@ -30,6 +30,8 @@ import {
   AccountFiltersState,
   defaultAccountFilters,
 } from "./AccountsFilterToolbar";
+import { useConfirm } from "./ui/ConfirmProvider";
+import { motion } from "motion/react";
 
 interface AccountsListProps {
   accounts: TelegramAccount[];
@@ -51,6 +53,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   onOpenHelp,
 }) => {
   const t = translations[lang];
+  const { confirm, toast } = useConfirm();
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [subscriptionTargetAccount, setSubscriptionTargetAccount] = useState<TelegramAccount | null>(null);
@@ -143,7 +146,15 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   };
 
   const handleDisconnect = async (phone: string) => {
-    if (!confirm(t.accounts.disconnectConfirm)) return;
+    const ok = await confirm({
+      title: lang === "fa" ? "قطع اتصال حساب تلگرام" : "Disconnect Telegram Account",
+      message: t.accounts.disconnectConfirm,
+      confirmText: lang === "fa" ? "قطع اتصال" : "Disconnect",
+      cancelText: lang === "fa" ? "انصراف" : "Cancel",
+      variant: "danger",
+      dir: lang === "fa" ? "rtl" : "ltr",
+    });
+    if (!ok) return;
 
     setActionLoading(phone);
     try {
@@ -151,9 +162,16 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to disconnect");
+      toast(
+        lang === "fa" ? `اتصال شماره ${phone} با موفقیت قطع شد.` : `Account ${phone} disconnected.`,
+        "success"
+      );
       onRefresh();
     } catch (err) {
-      alert("Error disconnecting account");
+      toast(
+        lang === "fa" ? "خطا در قطع اتصال اکانت" : "Error disconnecting account",
+        "error"
+      );
     } finally {
       setActionLoading(null);
     }
@@ -166,9 +184,16 @@ export const AccountsList: React.FC<AccountsListProps> = ({
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to reconnect");
+      toast(
+        lang === "fa" ? `اتصال مجدد شماره ${phone} با موفقیت انجام شد.` : `Account ${phone} reconnected.`,
+        "success"
+      );
       onRefresh();
     } catch (err) {
-      alert("Error reconnecting account");
+      toast(
+        lang === "fa" ? "خطا در اتصال مجدد اکانت" : "Error reconnecting account",
+        "error"
+      );
     } finally {
       setActionLoading(null);
     }

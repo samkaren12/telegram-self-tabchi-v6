@@ -10,7 +10,33 @@ export interface TelegramAccountFeatures {
   self_time: {
     active: boolean;
     format: string; // e.g. "HH:mm" or "HH:mm ⚡"
-    font_style: "bold" | "italic" | "monospace" | "double" | "sans" | "gothic" | "normal";
+    font_style:
+      | "bold"
+      | "italic"
+      | "bold_italic"
+      | "monospace"
+      | "double"
+      | "sans"
+      | "sans_bold"
+      | "sans_italic"
+      | "sans_bold_italic"
+      | "gothic"
+      | "gothic_bold"
+      | "script"
+      | "script_bold"
+      | "circled"
+      | "circled_dark"
+      | "squared"
+      | "squared_dark"
+      | "small_caps"
+      | "fullwidth"
+      | "superscript"
+      | "subscript"
+      | "persian"
+      | "persian_bold"
+      | "cyber_brackets"
+      | "normal"
+      | string;
     original_last_name: string | null;
     last_updated?: string;
   };
@@ -62,7 +88,34 @@ export interface TelegramAccountFeatures {
   };
   font: {
     active: boolean;
-    style: "bold" | "italic" | "bold_italic" | "monospace" | "double" | "sans" | "gothic" | "normal" | "default";
+    style:
+      | "bold"
+      | "italic"
+      | "bold_italic"
+      | "monospace"
+      | "double"
+      | "sans"
+      | "sans_bold"
+      | "sans_italic"
+      | "sans_bold_italic"
+      | "gothic"
+      | "gothic_bold"
+      | "script"
+      | "script_bold"
+      | "circled"
+      | "circled_dark"
+      | "squared"
+      | "squared_dark"
+      | "small_caps"
+      | "fullwidth"
+      | "superscript"
+      | "subscript"
+      | "persian"
+      | "persian_bold"
+      | "cyber_brackets"
+      | "normal"
+      | "default"
+      | string;
     scopes: {
       self_time: boolean;
       manual_messages: boolean;

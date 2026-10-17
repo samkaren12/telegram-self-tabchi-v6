@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { StoreCustomer, StorePlan, StoreOrder } from "../../types";
 import { CustomerTransactionsModal } from "./CustomerTransactionsModal";
+import { useConfirm } from "../ui/ConfirmProvider";
 
 interface CustomersManagerProps {
   customers: StoreCustomer[];
@@ -46,6 +47,7 @@ export function CustomersManager({
   onRefresh,
   showToast,
 }: CustomersManagerProps) {
+  const { confirm } = useConfirm();
   // Selection state
   const [selectedUserIds, setSelectedUserIds] = useState<(string | number)[]>([]);
   const [viewingTransactionsCustomer, setViewingTransactionsCustomer] = useState<StoreCustomer | null>(null);
@@ -315,7 +317,14 @@ export function CustomersManager({
 
   // Delete Customer
   const handleDeleteCustomer = async (userId: string | number, name?: string) => {
-    if (!confirm(`آیا از حذف مشتری ${name || userId} اطمینان دارید؟`)) return;
+    const ok = await confirm({
+      title: "حذف مشتری",
+      message: `آیا از حذف مشتری «${name || userId}» اطمینان دارید؟`,
+      confirmText: "حذف مشتری",
+      cancelText: "انصراف",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/store-bot/customers/${userId}`, { method: "DELETE" });
       const json = await res.json();

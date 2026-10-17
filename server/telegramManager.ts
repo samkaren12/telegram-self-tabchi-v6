@@ -217,6 +217,9 @@ interface AccountWorker {
   isBatchBroadcasting?: boolean;
   meId?: string;
   scriptMessageIds?: Set<string>;
+  ownerOnlineState?: boolean;
+  lastManualActivityAt?: number;
+  lastBotActionAt?: number;
 }
 
 // =============================================================
@@ -240,14 +243,24 @@ export function extractMathCalculation(text: string): string | null {
   if (lower.startsWith("=")) {
     return normalized.slice(1).trim() || null;
   }
+  if (lower.startsWith(".calc ") || lower.startsWith("/calc ") || lower.startsWith("!calc ")) {
+    return normalized.replace(/^[./!]calc\s+/i, "").trim() || null;
+  }
   if (lower.startsWith("calc ")) {
     return normalized.slice(5).trim() || null;
   }
-  if (normalized.startsWith("حساب")) {
-    return normalized.replace(/^حساب\s*:?\s*/, "").trim() || null;
+  if (normalized.startsWith(".حساب") || normalized.startsWith("/حساب")) {
+    return normalized.replace(/^[./]حساب\s*:?\s*/, "").trim() || null;
   }
 
-  const compact = normalized
+  // Only allow unprefixed math if it explicitly ends with "=" (e.g. "250 * 4 =")
+  // so dates like 1403/07/25 or phone numbers like 0912-345-6789 never trigger it
+  if (!normalized.endsWith("=")) {
+    return null;
+  }
+
+  const withoutEq = normalized.slice(0, -1).trim();
+  const compact = withoutEq
     .replace(/\s+/g, "")
     .replace(/[,٬]/g, "")
     .replace(/×/g, "*")
@@ -298,6 +311,7 @@ export function evaluateMath(expression: string): number {
 
 import {
   getMarketQuote,
+  isKnownMarketAsset,
   formatTelegramMarketCaption,
   getFeaturedMarketList,
   DetailedMarketQuote,
@@ -1346,12 +1360,42 @@ export class TelegramManager {
     this.saveState();
 
     const me = (await client.getMe()) as any;
+    const initialStatusClass = me?.status?.className;
+    const isInitiallyOnline = initialStatusClass === "UserStatusOnline";
+
     const worker: AccountWorker = {
       client,
       meId: String(me?.id || ""),
       scriptMessageIds: new Set<string>(),
+      ownerOnlineState: isInitiallyOnline,
+      lastManualActivityAt: 0,
+      lastBotActionAt: Date.now(),
     };
     this.workers.set(phone, worker);
+
+    // If owner is not actively online on Telegram, keep the background session from marking them online
+    if (!isInitiallyOnline) {
+      await client.invoke(new Api.account.UpdateStatus({ offline: true })).catch(() => {});
+    }
+
+    // Track real-time Telegram presence transitions (UpdateUserStatus) for the account owner
+    client.addEventHandler((update: any) => {
+      if (!update) return;
+      if (update.className === "UpdateUserStatus" && String(update.userId) === String(worker.meId)) {
+        const st = update.status?.className;
+        if (st === "UserStatusOnline") {
+          // If this online transition was caused by a background bot action within 6s while owner was offline, revert to offline
+          if (!worker.ownerOnlineState && Date.now() - (worker.lastBotActionAt || 0) < 6000) {
+            worker.client.invoke(new Api.account.UpdateStatus({ offline: true })).catch(() => {});
+            return;
+          }
+          worker.ownerOnlineState = true;
+        } else if (st === "UserStatusOffline") {
+          worker.ownerOnlineState = false;
+          worker.lastManualActivityAt = 0;
+        }
+      }
+    });
 
     // Setup Message Listeners (Incoming & Outgoing)
     this.setupMessageListeners(phone, worker);
@@ -1360,6 +1404,67 @@ export class TelegramManager {
     this.setupSelfTimeLoop(phone, worker);
 
     this.addLog("info", "system", `Background worker running for ${phone}. Self & Tabchi ready.`, phone);
+  }
+
+  /**
+   * Ensures that background bot actions (auto-reply, profile clock, etc.) do not
+   * falsely mark the owner's Telegram account as Online when the owner is away/offline.
+   */
+  private async keepBotSessionOfflineIfOwnerAway(worker: AccountWorker) {
+    worker.lastBotActionAt = Date.now();
+    if (!worker.ownerOnlineState) {
+      try {
+        await worker.client.invoke(new Api.account.UpdateStatus({ offline: true }));
+      } catch (_) {}
+    }
+  }
+
+  /**
+   * Determines whether the human owner is currently ONLINE on their phone number in Telegram.
+   * Used by Auto-Secretary so it ONLY replies when the owner is OFFLINE.
+   */
+  private async isAccountOwnerOnline(phone: string, worker: AccountWorker): Promise<boolean> {
+    try {
+      // 1. Query live Telegram presence for Self first (authoritative)
+      const users = (await worker.client.invoke(
+        new Api.users.GetUsers({ id: [new Api.InputUserSelf()] })
+      )) as any[];
+      const meUser = users?.[0];
+      const statusClass = meUser?.status?.className;
+
+      if (statusClass === "UserStatusOffline") {
+        // If user sent a manual message less than 45 seconds ago, check if wasOnline is older than that manual message
+        const wasOnlineMs = (meUser.status.wasOnline || 0) * 1000;
+        if (
+          worker.lastManualActivityAt &&
+          Date.now() - worker.lastManualActivityAt < 45 * 1000 &&
+          worker.lastManualActivityAt > wasOnlineMs + 5000
+        ) {
+          return true;
+        }
+        worker.ownerOnlineState = false;
+        return false;
+      }
+
+      if (statusClass === "UserStatusOnline") {
+        // Ignore if this online status was just triggered by a bot background action while owner was offline
+        if (!worker.ownerOnlineState && Date.now() - (worker.lastBotActionAt || 0) < 6000) {
+          await worker.client.invoke(new Api.account.UpdateStatus({ offline: true })).catch(() => {});
+          return false;
+        }
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (!meUser.status.expires || meUser.status.expires > nowSec) {
+          worker.ownerOnlineState = true;
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    if (worker.lastManualActivityAt && Date.now() - worker.lastManualActivityAt < 60 * 1000) {
+      return true;
+    }
+
+    return Boolean(worker.ownerOnlineState);
   }
 
   public stopAccountWorker(phone: string) {
@@ -1421,6 +1526,15 @@ export class TelegramManager {
       // OWNER COMMANDS (message.out === true): Executed ONLY by the account owner
       // ==============================================================
       if (message.out) {
+        // Ignore messages sent or edited by the bot script itself
+        if (worker.scriptMessageIds?.has(String(message.id))) {
+          return;
+        }
+
+        // Record that the human owner manually sent a message (they are actively online/chatting)
+        worker.lastManualActivityAt = Date.now();
+        worker.ownerOnlineState = true;
+
         // 0. SELF-BOT INTERACTIVE & CLICKABLE COMMANDS (.time, .pv, .id, .ping, .whois, .clean, .tagall, etc.)
         if (incomingText) {
           try {
@@ -1432,78 +1546,89 @@ export class TelegramManager {
         }
 
         // 1A. OWNER SMART CHAT TOOL: CALCULATOR & REAL-TIME CURRENCY MATH
+        // Only triggers when owner explicitly uses a calculator command (=, .calc, /calc, .حساب) or ends expression with "="
         if (account.features.tools?.calculator_active && incomingText) {
-          try {
-            const mathResult = await evaluateMathWithMarketRates(incomingText);
-            if (mathResult) {
-              const breakdownText =
-                mathResult.currencyBreakdown && mathResult.currencyBreakdown.length > 0
-                  ? `\n📊 <b>نرخ واقعی بازار:</b>\n${mathResult.currencyBreakdown.map((b) => `• ${b}`).join("\n")}\n`
-                  : "";
-              const replyText =
-                `🧮 <b>نتیجه محاسبه (نرخ لحظه‌ای بازار جهانی):</b>\n` +
-                `━━━━━━━━━━━━━━━━━━━━\n` +
-                `🔢 <b>عملیات:</b> <code>${mathResult.originalExpr}</code>\n` +
-                breakdownText +
-                `✅ <b>حاصل نهایی:</b> <b>${mathResult.formattedResult}</b>\n` +
-                `━━━━━━━━━━━━━━━━━━━━\n` +
-                `⚡ <i>محاسبه با قیمت زنده و رسمی بازار</i>`;
+          const normCalc = normalizeDigits(incomingText).trim();
+          const isExplicitCalcRequest =
+            normCalc.startsWith("=") ||
+            /^[./!]?(?:calc|حساب)\s+/i.test(normCalc) ||
+            (normCalc.endsWith("=") && normCalc.length > 2);
 
-              try {
-                await message.edit({
-                  text: replyText,
-                  parseMode: "html",
-                });
-              } catch (_) {
-                await client.sendMessage(message.chatId!, {
-                  message: replyText,
-                  replyTo: message.id,
-                  parseMode: "html",
-                });
-              }
-              this.addLog(
-                "info",
-                "tools",
-                `محاسبه زنده بازار برای صاحب شماره انجام شد: ${incomingText} = ${mathResult.formattedResult}`,
-                phone
-              );
-              return;
-            }
-          } catch (_) {}
-
-          const mathExpr = extractMathCalculation(incomingText);
-          if (mathExpr) {
+          if (isExplicitCalcRequest) {
             try {
-              const calcResult = evaluateMath(mathExpr);
-              // In-place edit for super slick self-bot experience, or reply
-              try {
-                await message.edit({
-                  text: `🧮 ${incomingText} = <b>${calcResult.toLocaleString("fa-IR")}</b>`,
-                  parseMode: "html",
-                });
-              } catch (_) {
-                await client.sendMessage(message.chatId!, {
-                  message: `🧮 نتیجه محاسبه:\n<code>${mathExpr}</code> = <b>${calcResult.toLocaleString("fa-IR")}</b>`,
-                  replyTo: message.id,
-                  parseMode: "html",
-                });
+              const mathResult = await evaluateMathWithMarketRates(incomingText);
+              if (mathResult) {
+                const breakdownText =
+                  mathResult.currencyBreakdown && mathResult.currencyBreakdown.length > 0
+                    ? `\n📊 <b>نرخ واقعی بازار:</b>\n${mathResult.currencyBreakdown.map((b) => `• ${b}`).join("\n")}\n`
+                    : "";
+                const replyText =
+                  `🧮 <b>نتیجه محاسبه (نرخ لحظه‌ای بازار جهانی):</b>\n` +
+                  `━━━━━━━━━━━━━━━━━━━━\n` +
+                  `🔢 <b>عملیات:</b> <code>${mathResult.originalExpr}</code>\n` +
+                  breakdownText +
+                  `✅ <b>حاصل نهایی:</b> <b>${mathResult.formattedResult}</b>\n` +
+                  `━━━━━━━━━━━━━━━━━━━━\n` +
+                  `⚡ <i>محاسبه با قیمت زنده و رسمی بازار</i>`;
+
+                try {
+                  worker.scriptMessageIds?.add(String(message.id));
+                  await message.edit({
+                    text: replyText,
+                    parseMode: "html",
+                  });
+                } catch (_) {
+                  const sent = await client.sendMessage(message.chatId!, {
+                    message: replyText,
+                    replyTo: message.id,
+                    parseMode: "html",
+                  });
+                  if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
+                }
+                this.addLog(
+                  "info",
+                  "tools",
+                  `محاسبه زنده بازار برای صاحب شماره انجام شد: ${incomingText} = ${mathResult.formattedResult}`,
+                  phone
+                );
+                return;
               }
-              this.addLog(
-                "info",
-                "tools",
-                `محاسبه ریاضی برای صاحب شماره انجام شد: ${mathExpr} = ${calcResult}`,
-                phone
-              );
-              return;
             } catch (_) {}
+
+            const mathExpr = extractMathCalculation(incomingText);
+            if (mathExpr) {
+              try {
+                const calcResult = evaluateMath(mathExpr);
+                try {
+                  worker.scriptMessageIds?.add(String(message.id));
+                  await message.edit({
+                    text: `🧮 ${incomingText} = <b>${calcResult.toLocaleString("fa-IR")}</b>`,
+                    parseMode: "html",
+                  });
+                } catch (_) {
+                  const sent = await client.sendMessage(message.chatId!, {
+                    message: `🧮 نتیجه محاسبه:\n<code>${mathExpr}</code> = <b>${calcResult.toLocaleString("fa-IR")}</b>`,
+                    replyTo: message.id,
+                    parseMode: "html",
+                  });
+                  if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
+                }
+                this.addLog(
+                  "info",
+                  "tools",
+                  `محاسبه ریاضی برای صاحب شماره انجام شد: ${mathExpr} = ${calcResult}`,
+                  phone
+                );
+                return;
+              } catch (_) {}
+            }
           }
         }
 
         // 1B. OWNER SMART CHAT TOOL: REAL WORLD MARKET, CURRENCY & GOLD QUOTE WITH CHART & PAIR CONVERTER
+        // Strictly triggers ONLY when owner explicitly asks for currency conversion or price quote
         if (account.features.tools?.market_active && incomingText) {
-          const lower = incomingText.toLowerCase().trim();
-
-          // 1B-1: Check for Currency Pair Conversion (e.g. "۲ دلار ترون تبدیل کن", "5 usd to trx", "تبدیل ۱۰ ترون به تتر")
+          // 1B-1: Check for Explicit Currency Pair Conversion (e.g. "۲ دلار ترون تبدیل کن", "5 usd to trx", "تبدیل ۱۰ ترون به تتر")
           const convQuery = parseCurrencyConversionQuery(incomingText);
           if (convQuery) {
             try {
@@ -1513,16 +1638,18 @@ export class TelegramManager {
                 convQuery.amount
               );
               try {
+                worker.scriptMessageIds?.add(String(message.id));
                 await message.edit({
                   text: convResult.formattedMessage,
                   parseMode: "html",
                 });
               } catch (_) {
-                await client.sendMessage(message.chatId!, {
+                const sent = await client.sendMessage(message.chatId!, {
                   message: convResult.formattedMessage,
                   replyTo: message.id,
                   parseMode: "html",
                 });
+                if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
               }
               this.addLog(
                 "info",
@@ -1531,121 +1658,122 @@ export class TelegramManager {
                 phone
               );
               return;
-            } catch (convErr: any) {
-              // Fall through to regular market quote or ignore
-            }
+            } catch (_) {}
           }
 
-          const normalizedIncoming = normalizeDigits(incomingText);
-          const normalizedLower = normalizedIncoming.toLowerCase().trim();
+          // 1B-2: Explicit Price Quote Request (e.g. ".price btc", "قیمت دلار", "نرخ طلا", "دلار چنده")
+          const normalizedIncoming = normalizeDigits(incomingText).trim();
+          const normalizedLower = normalizedIncoming.toLowerCase().replace(/[؟?!.]+$/, "").trim();
 
-          const isTriggerCommand =
-            normalizedLower.startsWith(".price") || normalizedLower.startsWith("/price") ||
-            normalizedLower.startsWith(".quote") || normalizedLower.startsWith(".قیمت") || normalizedLower.startsWith("قیمت") ||
-            normalizedLower.startsWith("نرخ") || normalizedLower.startsWith(".ارز") || normalizedLower.startsWith("ارز");
+          const isPrefixedPriceCmd = /^(\.price|\/price|!price|\.quote|\/quote|\.قیمت|\/قیمت|\.نرخ|\/نرخ|\.ارز|\/ارز)\b/i.test(
+            normalizedLower
+          );
+          const isWordPriceCmd = /^(قیمت|نرخ)\s+(.+)$/i.test(normalizedLower);
+          const chandehMatch = normalizedLower.match(
+            /^(?:قیمت\s+|نرخ\s+)?(\d+(?:\.\d+)?)?\s*([\p{L}\s]{2,20}?)\s+(?:چنده|چند\s+تومنه|چند\s+دلاره)$/iu
+          );
 
-          const assetMatch = isTriggerCommand
-            ? normalizedLower.replace(/^(\.price|\/price|\.quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").trim()
-            : normalizedLower.match(
-                /(usd|usdt|tether|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|تتر|تتر ترون|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
-              )?.[1];
+          if (isPrefixedPriceCmd || isWordPriceCmd || chandehMatch) {
+            let queryBody = "";
+            if (isPrefixedPriceCmd) {
+              queryBody = normalizedLower
+                .replace(/^(\.price|\/price|!price|\.quote|\/quote|\.قیمت|\/قیمت|\.نرخ|\/نرخ|\.ارز|\/ارز)\s*/i, "")
+                .trim();
+            } else if (chandehMatch) {
+              queryBody = `${chandehMatch[1] ? chandehMatch[1] + " " : ""}${chandehMatch[2].trim()}`;
+            } else if (isWordPriceCmd) {
+              queryBody = normalizedLower.replace(/^(قیمت|نرخ)\s+/i, "").trim();
+            }
 
-          if (assetMatch) {
-            const amountMatch = normalizedLower.match(/(?<![a-z])\d+(?:\.\d+)?/);
-            const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
-
-            // Check if buy price and currency was included
-            const buyMatch = normalizedLower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)\s*(تومان|ت|تومن|دلار|\$|usd|irt|irr|ریال)?/);
+            // Check if buy price and currency was included (e.g. "قیمت تون خرید 300000 تومان")
+            const buyMatch = queryBody.match(/(?:buy|خرید|purchase)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(تومان|ت|تومن|دلار|\$|usd|irt|irr|ریال)?/i);
             let buyPrice: number | undefined;
             let buyCurrency: "toman" | "usd" | "irr" = "toman";
 
-            if (buyMatch) {
-              buyPrice = parseFloat(buyMatch[1]);
-              const currToken = (buyMatch[2] || "").toLowerCase();
-              if (currToken === "$" || currToken === "usd" || currToken === "دلار") {
-                buyCurrency = "usd";
-              } else if (currToken === "irr" || currToken === "ریال") {
-                buyCurrency = "irr";
-              } else {
-                if (String(assetMatch).toLowerCase().includes("btc") && buyPrice > 10000 && !currToken) {
+            const queryWithoutBuy = buyMatch
+              ? queryBody.replace(buyMatch[0], "").trim()
+              : queryBody;
+
+            const amountMatch = queryWithoutBuy.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
+            const amount = amountMatch ? parseFloat(amountMatch[1]) : 1.0;
+            const rawAsset = (amountMatch ? amountMatch[2] : queryWithoutBuy)
+              .replace(/\b(تومان|تومن|ریال|toman|irr)\b/gi, "")
+              .trim();
+
+            // Strictly verify that rawAsset is a real, known currency/gold/crypto asset
+            // (or default to "usd" ONLY if user literally typed ".price" or ".ارز")
+            const finalAsset = !rawAsset && isPrefixedPriceCmd ? "usd" : rawAsset;
+
+            if (finalAsset && isKnownMarketAsset(finalAsset)) {
+              if (buyMatch) {
+                buyPrice = parseFloat(buyMatch[1]);
+                const currToken = (buyMatch[2] || "").toLowerCase();
+                if (currToken === "$" || currToken === "usd" || currToken === "دلار") {
+                  buyCurrency = "usd";
+                } else if (currToken === "irr" || currToken === "ریال") {
+                  buyCurrency = "irr";
+                } else if (finalAsset.toLowerCase().includes("btc") && buyPrice > 10000 && !currToken) {
                   buyCurrency = "usd";
                 } else {
                   buyCurrency = "toman";
                 }
               }
-            }
 
-            // Clean asset query
-            const rawAsset = (typeof assetMatch === "string" ? assetMatch : "")
-              .replace(/\b(buy|خرید|\d+(\.\d+)?|تومان|ت|تومن|دلار|\$|usd|irt|irr|ریال)\b/g, "")
-              .trim() || "usd";
+              try {
+                const quote = await getMarketQuote(finalAsset, amount, buyPrice, buyCurrency);
+                const quoteCaption = formatTelegramMarketCaption(quote);
 
-            try {
-              const quote = await getMarketQuote(rawAsset, amount, buyPrice, buyCurrency);
-              const quoteCaption = formatTelegramMarketCaption(quote);
-
-              // Send chart image as photo with rich caption
-              if (quote.chart_url) {
-                try {
-                  const chartBuf = await fetchChartImageBuffer(quote.chart_url);
-                  await client.sendMessage(message.chatId!, {
-                    message: quoteCaption,
-                    file: chartBuf || quote.chart_url,
-                    replyTo: message.id,
-                    parseMode: "html",
-                  });
-                  this.addLog("info", "tools", `استعلام قیمت زنده و عکس نمودار سود/زیان ارسال شد: ${quote.asset}`, phone);
-                  return;
-                } catch (photoErr) {
-                  // Fallback to text message
+                if (quote.chart_url) {
+                  try {
+                    const chartBuf = await fetchChartImageBuffer(quote.chart_url);
+                    const sent = await client.sendMessage(message.chatId!, {
+                      message: quoteCaption,
+                      file: chartBuf || quote.chart_url,
+                      replyTo: message.id,
+                      parseMode: "html",
+                    });
+                    if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
+                    this.addLog("info", "tools", `استعلام قیمت زنده و عکس نمودار سود/زیان ارسال شد: ${quote.asset}`, phone);
+                    return;
+                  } catch (_) {}
                 }
-              }
 
-              await client.sendMessage(message.chatId!, {
-                message: quoteCaption,
-                replyTo: message.id,
-                parseMode: "html",
-              });
-              this.addLog("info", "tools", `استعلام قیمت واقعی ارسال شد: ${quote.asset}`, phone);
-              return;
-            } catch (_) {}
+                const sent = await client.sendMessage(message.chatId!, {
+                  message: quoteCaption,
+                  replyTo: message.id,
+                  parseMode: "html",
+                });
+                if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
+                this.addLog("info", "tools", `استعلام قیمت واقعی ارسال شد: ${quote.asset}`, phone);
+                return;
+              } catch (_) {}
+            }
           }
         }
 
-        // 1C. OWNER SMART CHAT TOOL: REAL-TIME TRANSLATOR (.tr / .translate / ترجمه / "متن به انگلیسی")
+        // 1C. OWNER SMART CHAT TOOL: REAL-TIME TRANSLATOR (.tr / .translate / .ترجمه)
         if (incomingText) {
           const lower = incomingText.toLowerCase().trim();
           const isExplicitTrCommand =
             lower.startsWith(".tr ") ||
             lower.startsWith("/tr ") ||
             lower === ".tr" ||
+            lower === "/tr" ||
             lower.startsWith(".translate ") ||
+            lower.startsWith("/translate ") ||
             lower.startsWith(".ترجمه ") ||
-            lower.startsWith("ترجمه ");
+            lower.startsWith("/ترجمه ") ||
+            lower === ".ترجمه";
 
-          // Natural phrase support: e.g. "سلام روز بخیر به انگلیسی" or "how are you به فارسی"
-          const naturalTrMatch = incomingText.match(
-            /^(.+?)\s+(?:به|to)\s+(انگلیسی|فارسی|عربی|ترکی|آلمانی|فرانسوی|روسی|اسپانیایی|ایتالیایی|چینی|ژاپنی|کره‌ای|english|persian|arabic|turkish|german|french|russian|spanish|en|fa|ar|tr|de|fr|ru|es)$/i
-          );
+          if (isExplicitTrCommand) {
+            const cleanCmd = incomingText
+              .replace(/^(\.tr|\/tr|\.translate|\/translate|\.ترجمه|\/ترجمه)\s*/i, "")
+              .trim();
 
-          if (isExplicitTrCommand || naturalTrMatch) {
-            let targetLang = "en";
-            let textToTranslate = "";
+            const parts = cleanCmd.split(/\s+/);
+            const targetLang = resolveLanguageCode(parts[0] || "en");
+            let textToTranslate = parts.slice(1).join(" ").trim();
 
-            if (naturalTrMatch) {
-              textToTranslate = naturalTrMatch[1].trim();
-              targetLang = resolveLanguageCode(naturalTrMatch[2].trim());
-            } else {
-              const cleanCmd = incomingText
-                .replace(/^(\.tr|\/tr|\.translate|\.ترجمه|ترجمه)\s*/i, "")
-                .trim();
-
-              const parts = cleanCmd.split(/\s+/);
-              targetLang = resolveLanguageCode(parts[0] || "en");
-              textToTranslate = parts.slice(1).join(" ").trim();
-            }
-
-            // If replied to a message, translate the replied message
             if (!textToTranslate && message.replyToMsgId) {
               try {
                 const msgs = await client.getMessages(message.chatId!, { ids: [message.replyToMsgId] });
@@ -1656,34 +1784,51 @@ export class TelegramManager {
             if (textToTranslate) {
               try {
                 const trResult = await translateText(textToTranslate, targetLang);
-                // When owner typed a sentence followed by "به انگلیسی" or similar natural syntax,
-                // replace the message directly with the pure translated text, or structured card if command was used.
-                const outMsg = naturalTrMatch
-                  ? trResult.translatedText
-                  : `🌐 <b>ترجمه (${trResult.fromLang.toUpperCase()} ➔ ${trResult.toLang.toUpperCase()}):</b>\n` +
-                    `━━━━━━━━━━━━━━━━━━━━\n` +
-                    `${trResult.translatedText}\n` +
-                    `━━━━━━━━━━━━━━━━━━━━\n` +
-                    `⚡ <i>Telegram Self Multi-Language Translator</i>`;
+                const outMsg =
+                  `🌐 <b>ترجمه (${trResult.fromLang.toUpperCase()} ➔ ${trResult.toLang.toUpperCase()}):</b>\n` +
+                  `━━━━━━━━━━━━━━━━━━━━\n` +
+                  `${trResult.translatedText}\n` +
+                  `━━━━━━━━━━━━━━━━━━━━\n` +
+                  `⚡ <i>Telegram Self Multi-Language Translator</i>`;
 
                 try {
+                  worker.scriptMessageIds?.add(String(message.id));
                   await message.edit({
                     text: outMsg,
-                    parseMode: naturalTrMatch ? undefined : "html",
+                    parseMode: "html",
                   });
                 } catch (_) {
-                  await client.sendMessage(message.chatId!, {
+                  const sent = await client.sendMessage(message.chatId!, {
                     message: outMsg,
                     replyTo: message.id,
-                    parseMode: naturalTrMatch ? undefined : "html",
+                    parseMode: "html",
                   });
+                  if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
                 }
                 this.addLog("info", "self", `ترجمه متن به زبان ${targetLang} ارسال شد: "${textToTranslate}" ➔ "${trResult.translatedText}"`, phone);
                 return;
-              } catch (trErr: any) {
-                // Ignore or log error
-              }
+              } catch (_) {}
             }
+          }
+        }
+
+        // 1D. Outgoing Font Transformation for manual owner messages
+        if (
+          incomingText &&
+          account.features.font?.active &&
+          account.features.font.scopes?.manual_messages &&
+          account.features.font.style !== "default" &&
+          account.features.font.style !== "normal"
+        ) {
+          const styledText = transformFont(incomingText, account.features.font.style);
+          if (styledText !== incomingText) {
+            try {
+              worker.scriptMessageIds?.add(String(message.id));
+              await client.editMessage(message.chatId!, {
+                message: message.id,
+                text: styledText,
+              });
+            } catch (_) {}
           }
         }
 
@@ -2109,94 +2254,10 @@ export class TelegramManager {
         }
       }
 
-      // 1D. INCOMING MESSAGE SMART MARKET TOOL: CURRENCY/GOLD/CRYPTO PRICE & PROFIT/LOSS CHART
-      if (account.features.tools?.market_active && incomingText) {
-        const lower = incomingText.toLowerCase().trim();
-        const isTriggerCommand =
-          lower.startsWith(".price") || lower.startsWith("/price") ||
-          lower.startsWith(".quote") || lower.startsWith("/quote") ||
-          lower.startsWith(".قیمت") || lower.startsWith("قیمت") ||
-          lower.startsWith("نرخ") || lower.startsWith(".ارز") || lower.startsWith("ارز") ||
-          lower.endsWith("چنده") || lower.endsWith("چنده؟") || lower.endsWith("چنده!");
+      // NOTE: Incoming messages from other users (!message.out) NEVER trigger
+      // currency/market quotes, calculator, translator, or self-bot commands.
 
-        const assetMatch = isTriggerCommand
-          ? lower.replace(/^(\.price|\/price|\.quote|\/quote|\.قیمت|قیمت|نرخ|\.ارز|ارز)\s*/, "").replace(/(چنده\??|چنده!)/, "").trim()
-          : lower.match(
-              /(usd|usdt|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)/
-            )?.[1];
-
-        if (assetMatch || (isTriggerCommand && (lower.includes("دلار") || lower.includes("تتر") || lower.includes("طلا") || lower.includes("سکه") || lower.includes("ارز")))) {
-          const rawAsset = (typeof assetMatch === "string" && assetMatch.length > 0)
-            ? assetMatch
-            : lower.includes("تتر") ? "usdt" : lower.includes("طلا") ? "gold18" : lower.includes("سکه") ? "emami" : "usd";
-
-          const amountMatch = lower.match(/(?<![a-z])\d+(?:\.\d+)?/);
-          const amount = amountMatch ? parseFloat(amountMatch[0]) : 1.0;
-
-          // Check if buy price and currency was included
-          const buyMatch = lower.match(/(?:buy|خرید)\s*(\d+(?:\.\d+)?)\s*(تومان|ت|تومن|دلار|\$|usd|irt|irr|ریال)?/);
-          let buyPrice: number | undefined;
-          let buyCurrency: "toman" | "usd" | "irr" = "toman";
-
-          if (buyMatch) {
-            buyPrice = parseFloat(buyMatch[1]);
-            const currToken = (buyMatch[2] || "").toLowerCase();
-            if (currToken === "$" || currToken === "usd" || currToken === "دلار") {
-              buyCurrency = "usd";
-            } else if (currToken === "irr" || currToken === "ریال") {
-              buyCurrency = "irr";
-            } else {
-              if (String(rawAsset).toLowerCase().includes("btc") && buyPrice > 10000 && !currToken) {
-                buyCurrency = "usd";
-              } else {
-                buyCurrency = "toman";
-              }
-            }
-          }
-
-          try {
-            const quote = await getMarketQuote(rawAsset, amount, buyPrice, buyCurrency);
-            const quoteCaption = formatTelegramMarketCaption(quote);
-
-            // Fetch chart image buffer and send photo with caption
-            if (quote.chart_url) {
-              try {
-                const chartBuf = await fetchChartImageBuffer(quote.chart_url);
-                await client.sendMessage(message.chatId!, {
-                  message: quoteCaption,
-                  file: chartBuf || quote.chart_url,
-                  replyTo: message.id,
-                  parseMode: "html",
-                });
-                this.addLog(
-                  "info",
-                  "tools",
-                  `استعلام زنده قیمت و تصویر نمودار سود/زیان [${quote.asset}] برای کاربر ${message.chatId} ارسال شد 📊`,
-                  phone
-                );
-                return;
-              } catch (photoErr: any) {
-                // If photo sending failed, fallback to text message
-              }
-            }
-
-            await client.sendMessage(message.chatId!, {
-              message: quoteCaption,
-              replyTo: message.id,
-              parseMode: "html",
-            });
-            this.addLog(
-              "info",
-              "tools",
-              `استعلام زنده بازار [${quote.asset}] برای کاربر ${message.chatId} ارسال شد.`,
-              phone
-            );
-            return;
-          } catch (_) {}
-        }
-      }
-
-      // 1E. SMART FILTERS (REGEX-BASED AUTO REPLIES WITH DELAY & IGNORE LIST)
+      // 1D. SMART FILTERS (REGEX-BASED AUTO REPLIES WITH DELAY & IGNORE LIST)
       let smartFilterHandled = false;
       if (account.features.smart_filters?.active && incomingText) {
         const sf = account.features.smart_filters;
@@ -2242,10 +2303,13 @@ export class TelegramManager {
                 const delay = (rule.delay_seconds !== undefined ? rule.delay_seconds : (sf.global_delay_seconds || 1)) * 1000;
                 setTimeout(async () => {
                   try {
-                    await client.sendMessage(message.chatId!, {
+                    worker.lastBotActionAt = Date.now();
+                    const sent = await client.sendMessage(message.chatId!, {
                       message: replyMsg,
                       replyTo: message.id,
                     });
+                    if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
+                    await this.keepBotSessionOfflineIfOwnerAway(worker);
                     this.saveState();
                     if (sf.log_matches !== false) {
                       this.addLog(
@@ -2271,8 +2335,15 @@ export class TelegramManager {
         return;
       }
 
-      // 1E. AUTO-REPLY (SECRETARY)
+      // 1E. AUTO-REPLY (SECRETARY) - ONLY WORKS WHEN ACCOUNT OWNER IS OFFLINE
       if (account.features.auto_reply?.active) {
+        // Check if the owner is currently ONLINE on their Telegram number
+        const ownerOnlineNow = await this.isAccountOwnerOnline(phone, worker);
+        if (ownerOnlineNow) {
+          // Owner is online on the account — do not run Auto-Secretary
+          return;
+        }
+
         const aiEnabled = Boolean(account.features.auto_reply.ai_enabled);
         const apiKeyToUse = (account.features.auto_reply.ai_api_key || process.env.GEMINI_API_KEY || "").trim();
 
@@ -2322,16 +2393,30 @@ export class TelegramManager {
           const delay = (account.features.auto_reply.delay_seconds || 1) * 1000;
           setTimeout(async () => {
             try {
-              await client.sendMessage(message.chatId!, {
+              // Re-verify that the owner has not come online during the delay
+              const stillOnline = await this.isAccountOwnerOnline(phone, worker);
+              if (stillOnline) {
+                return;
+              }
+
+              worker.lastBotActionAt = Date.now();
+              const sentReply = await client.sendMessage(message.chatId!, {
                 message: replyText,
                 replyTo: message.id,
               });
+              if (sentReply?.id) {
+                worker.scriptMessageIds?.add(String(sentReply.id));
+              }
+
+              // Immediately restore offline status so the bot's reply doesn't mark the owner as Online
+              await this.keepBotSessionOfflineIfOwnerAway(worker);
+
               account.features.auto_reply.last_replied_at = new Date().toISOString();
               this.saveState();
               this.addLog(
                 "info",
                 "auto_reply",
-                `پاسخ منشی ${usedAi ? "🤖 (هوش مصنوعی زنده)" : "📝 (قالب پیش‌فرض)"} به کاربر ${message.chatId} ارسال شد.`,
+                `پاسخ منشی خودکار (در حالت آفلاین) ${usedAi ? "🤖 (هوش مصنوعی زنده)" : "📝 (قالب پیش‌فرض)"} به کاربر ${message.chatId} ارسال شد.`,
                 phone
               );
             } catch (err: any) {
@@ -2341,53 +2426,6 @@ export class TelegramManager {
         }
       }
     }, new NewMessage({}));
-
-    // 2. Outgoing Messages Handler (Saved Messages commands & Font transforms)
-    client.addEventHandler(async (event: any) => {
-      const account = this.accounts.get(phone);
-      if (!account || !account.isOnline) return;
-
-      const message = event.message;
-      if (!message || !message.out) return;
-
-      const text = (message.text || message.message || "").trim();
-      if (!text) return;
-
-      // Check for Saved Messages Remote Commands & Self-Bot Interactive Commands
-      if (text) {
-        try {
-          const handled = await this.handleSelfBotCommand(phone, worker, message, text);
-          if (handled) return;
-        } catch (err: any) {
-          this.addLog("warn", "system", `خطا در پردازش دستور سلف: ${err?.message}`, phone);
-        }
-      }
-
-      // Check if Outgoing Font Transformation is enabled for manual messages
-      if (
-        account.features.font?.active &&
-        account.features.font.scopes?.manual_messages &&
-        account.features.font.style !== "default" &&
-        account.features.font.style !== "normal"
-      ) {
-        // Prevent infinite loop on edited messages
-        if (worker.scriptMessageIds?.has(String(message.id))) {
-          worker.scriptMessageIds.delete(String(message.id));
-          return;
-        }
-
-        const styledText = transformFont(text, account.features.font.style);
-        if (styledText !== text) {
-          try {
-            worker.scriptMessageIds?.add(String(message.id));
-            await client.editMessage(message.chatId!, {
-              message: message.id,
-              text: styledText,
-            });
-          } catch (_) {}
-        }
-      }
-    }, new NewMessage({ outgoing: true }));
   }
 
   // -------------------------------------------------------------
@@ -2416,17 +2454,46 @@ export class TelegramManager {
 
     const client = worker.client;
 
+    // Check if this is a special unprefixed case (YouTube quality reply, Saved Messages media link, or explicit "دانلود [لینک]")
+    const chatKeyPre = String(message.chatId);
+    const pendingYtPre = this.pendingYoutubeQueries.get(chatKeyPre);
+    const isQualityReplyPre =
+      Boolean(pendingYtPre && Date.now() - pendingYtPre.timestamp < 10 * 60 * 1000) &&
+      ["1080", "720", "480", "360", "mp3", "audio"].includes(mainCmd);
+
+    const isSavedMessagesPre =
+      message.chatId === "me" ||
+      worker.meId === chatKeyPre ||
+      (message.peerId && String((message.peerId as any).userId) === String(worker.meId));
+
+    const hasMediaLinkPre = /(https?:\/\/[^\s]+)/i.test(rawText);
+    const containsSocialPlatformPre =
+      /spotify\.com|spotify\.link|soundcloud\.com|instagram\.com|instagr\.am|youtu\.be|youtube\.com|tiktok\.com|twitter\.com|x\.com|aparat\.com|pinterest\.com|\.(mp4|mp3|mkv|mov|webm)($|\?)/i.test(
+        rawText
+      );
+
+    const isUnprefixedAllowed =
+      isQualityReplyPre ||
+      (isSavedMessagesPre && hasMediaLinkPre && containsSocialPlatformPre) ||
+      ((mainCmd === "دانلود" || mainCmd === "dl") && (hasMediaLinkPre || Boolean(message.replyToMsgId)));
+
+    // Require prefix (. or / or !) for all other self-bot commands so normal chatting never triggers commands
+    if (!isPrefixed && !isUnprefixedAllowed) {
+      return false;
+    }
+
     const respond = async (replyHtml: string) => {
       try {
         worker.scriptMessageIds?.add(String(message.id));
         await message.edit({ text: replyHtml, parseMode: "html" });
       } catch (_) {
         try {
-          await client.sendMessage(message.chatId!, {
+          const sent = await client.sendMessage(message.chatId!, {
             message: replyHtml,
             replyTo: message.id,
             parseMode: "html",
           });
+          if (sent?.id) worker.scriptMessageIds?.add(String(sent.id));
         } catch (_) {}
       }
     };
@@ -2659,17 +2726,72 @@ export class TelegramManager {
       }
     }
 
-    // 9. DICE (ANIMATED DICE)
-    if (mainCmd === "dice" || mainCmd === "تاس") {
+    // 9. DICE & GAMES (ANIMATED DICE / DART / FOOTBALL / BOWLING / CASINO / BASKETBALL)
+    if (
+      mainCmd === "dice" ||
+      mainCmd === "تاس" ||
+      mainCmd === "dart" ||
+      mainCmd === "دارت" ||
+      mainCmd === "football" ||
+      mainCmd === "فوتبال" ||
+      mainCmd === "bowling" ||
+      mainCmd === "بولینگ" ||
+      mainCmd === "casino" ||
+      mainCmd === "کازینو" ||
+      mainCmd === "basketball" ||
+      mainCmd === "بسکتبال"
+    ) {
       try {
-        await client.invoke(
-          new Api.messages.SendMedia({
-            peer: message.chatId,
-            media: new Api.InputMediaDice({ emoticon: "🎲" }),
-            message: "",
-          })
-        );
         try { await message.delete({ revoke: true }); } catch (_) {}
+        const emoticonMap: Record<string, { emoji: string; maxVal: number }> = {
+          dice: { emoji: "🎲", maxVal: 6 },
+          "تاس": { emoji: "🎲", maxVal: 6 },
+          dart: { emoji: "🎯", maxVal: 6 },
+          "دارت": { emoji: "🎯", maxVal: 6 },
+          football: { emoji: "⚽", maxVal: 5 },
+          "فوتبال": { emoji: "⚽", maxVal: 5 },
+          basketball: { emoji: "🏀", maxVal: 5 },
+          "بسکتبال": { emoji: "🏀", maxVal: 5 },
+          bowling: { emoji: "🎳", maxVal: 6 },
+          "بولینگ": { emoji: "🎳", maxVal: 6 },
+          casino: { emoji: "🎰", maxVal: 64 },
+          "کازینو": { emoji: "🎰", maxVal: 64 },
+        };
+        const game = emoticonMap[mainCmd] || { emoji: "🎲", maxVal: 6 };
+        const wantWin = arg1 === "win" || arg1 === "6" || arg1 === "برد" || arg1 === "تقلب";
+        const maxAttempts = wantWin ? 10 : 1;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const randomId = BigInt(Math.floor(Math.random() * 1e15)) as any;
+          const res: any = await client.invoke(
+            new Api.messages.SendMedia({
+              peer: message.chatId,
+              media: new Api.InputMediaDice({ emoticon: game.emoji }),
+              message: "",
+              randomId,
+            })
+          );
+          if (!wantWin) break;
+          // Extract rolled value from updates
+          let rolledValue = 0;
+          let sentMsgId = 0;
+          const updates = res?.updates || [];
+          for (const u of updates) {
+            if (u.message?.media?.value) {
+              rolledValue = u.message.media.value;
+              sentMsgId = u.message.id;
+              break;
+            }
+          }
+          if (rolledValue === game.maxVal || attempt === maxAttempts - 1) {
+            break;
+          }
+          if (sentMsgId) {
+            try {
+              await client.deleteMessages(message.chatId, [sentMsgId], { revoke: true });
+            } catch (_) {}
+          }
+        }
         return true;
       } catch (_) {}
     }
@@ -2913,12 +3035,11 @@ export class TelegramManager {
       Boolean(pendingYt && Date.now() - pendingYt.timestamp < 10 * 60 * 1000) &&
       ["1080", "720", "480", "360", "mp3", "audio"].includes(mainCmd);
 
-    // Auto-detect media links even without .dl in Saved Messages or PV
-    const isSavedOrPrivate =
+    // Auto-detect media links without .dl ONLY in Saved Messages (in PV/groups user uses .dl or دانلود)
+    const isSavedMessages =
       message.chatId === "me" ||
       worker.meId === chatKey ||
-      Boolean(message.isPrivate) ||
-      (message.peerId && (message.peerId as any).userId === worker.meId);
+      (message.peerId && String((message.peerId as any).userId) === String(worker.meId));
 
     const hasMediaLink = /(https?:\/\/[^\s]+)/i.test(rawText);
     const containsSocialPlatform =
@@ -2931,7 +3052,7 @@ export class TelegramManager {
       mainCmd === "دانلود" ||
       mainCmd === "download" ||
       isQualityReply ||
-      (isSavedOrPrivate && hasMediaLink && containsSocialPlatform);
+      (isSavedMessages && hasMediaLink && containsSocialPlatform);
 
     if (shouldHandleDownloader) {
       let targetUrl = "";
@@ -3019,18 +3140,22 @@ export class TelegramManager {
             }
 
             // 2. Send 320k MP3 Audio with embedded Telegram Audio attributes
-            await client.sendMessage(message.chatId!, {
+            await client.sendFile(message.chatId!, {
               file: musicResult.filePath,
               thumb: musicResult.thumbPath && fs.existsSync(musicResult.thumbPath) ? musicResult.thumbPath : undefined,
+              forceDocument: false,
               attributes: [
                 new Api.DocumentAttributeAudio({
-                  duration: musicResult.duration || 0,
+                  duration: Math.round(Number(musicResult.duration || 0)),
                   title: musicResult.title || "آهنگ",
                   performer: musicResult.author || "اسپاتیفای",
                   voice: false,
                 }),
+                new Api.DocumentAttributeFilename({
+                  fileName: musicResult.fileName || "music.mp3",
+                }),
               ],
-              message: musicCaption,
+              caption: musicCaption,
               parseMode: "html",
               replyTo: message.replyToMsgId || message.id,
             });
@@ -3111,18 +3236,33 @@ export class TelegramManager {
               `━━━━━━━━━━━━━━━━━━━━\n` +
               `⚡ <i>دانلود شده توسط سلف و تبچی هوشمند V6 PRO</i>`;
 
-            await client.sendMessage(message.chatId!, {
+            if (dlResult.thumbPath && fs.existsSync(dlResult.thumbPath)) {
+              try {
+                await client.sendFile(message.chatId!, {
+                  file: dlResult.thumbPath,
+                  caption: `🖼 <b>کاور موزیک:</b> <i>${dlResult.title}</i>`,
+                  parseMode: "html",
+                  replyTo: message.replyToMsgId || message.id,
+                });
+              } catch (_) {}
+            }
+
+            await client.sendFile(message.chatId!, {
               file: dlResult.filePath,
               thumb: dlResult.thumbPath && fs.existsSync(dlResult.thumbPath) ? dlResult.thumbPath : undefined,
+              forceDocument: false,
               attributes: [
                 new Api.DocumentAttributeAudio({
-                  duration: dlResult.duration || 0,
+                  duration: Math.round(Number(dlResult.duration || 0)),
                   title: dlResult.title || "آهنگ",
                   performer: dlResult.author || "موزیک",
                   voice: false,
                 }),
+                new Api.DocumentAttributeFilename({
+                  fileName: dlResult.fileName || "audio.mp3",
+                }),
               ],
-              message: audioCaption,
+              caption: audioCaption,
               parseMode: "html",
               replyTo: message.replyToMsgId || message.id,
             });
@@ -3139,25 +3279,25 @@ export class TelegramManager {
               `━━━━━━━━━━━━━━━━━━━━\n` +
               `⚡ <i>دانلود شده با فرمت استاندارد H.264 (پخش فوری در تلگرام)</i>`;
 
-            const videoAttributes: any[] = [];
-            if (dlResult.width && dlResult.height) {
-              videoAttributes.push(
-                new Api.DocumentAttributeVideo({
-                  duration: dlResult.duration || 0,
-                  w: dlResult.width,
-                  h: dlResult.height,
-                  supportsStreaming: true,
-                  roundMessage: false,
-                })
-              );
-            }
+            const videoAttributes: any[] = [
+              new Api.DocumentAttributeVideo({
+                duration: Math.round(Number(dlResult.duration || 1)),
+                w: Math.round(Number(dlResult.width || 1280)),
+                h: Math.round(Number(dlResult.height || 720)),
+                supportsStreaming: true,
+                roundMessage: false,
+              }),
+              new Api.DocumentAttributeFilename({
+                fileName: dlResult.fileName || "video.mp4",
+              }),
+            ];
 
             // 1. Send Cover/Thumbnail image first if available
             if (dlResult.thumbPath && fs.existsSync(dlResult.thumbPath)) {
               try {
-                await client.sendMessage(message.chatId!, {
+                await client.sendFile(message.chatId!, {
                   file: dlResult.thumbPath,
-                  message: `🖼 <b>کاور ویدیو:</b> <i>${dlResult.title}</i>`,
+                  caption: `🖼 <b>کاور ویدیو:</b> <i>${dlResult.title}</i>`,
                   parseMode: "html",
                   replyTo: message.replyToMsgId || message.id,
                 });
@@ -3165,12 +3305,13 @@ export class TelegramManager {
             }
 
             // 2. Send video with DocumentAttributeVideo & thumb
-            await client.sendMessage(message.chatId!, {
+            await client.sendFile(message.chatId!, {
               file: dlResult.filePath,
               thumb: dlResult.thumbPath && fs.existsSync(dlResult.thumbPath) ? dlResult.thumbPath : undefined,
-              supportStreaming: true,
-              attributes: videoAttributes.length > 0 ? videoAttributes : undefined,
-              message: videoCaption,
+              supportsStreaming: true,
+              forceDocument: false,
+              attributes: videoAttributes,
+              caption: videoCaption,
               parseMode: "html",
               replyTo: message.replyToMsgId || message.id,
             });
@@ -3334,11 +3475,13 @@ export class TelegramManager {
           this.saveState();
         }
 
+        worker.lastBotActionAt = Date.now();
         await worker.client.invoke(
           new Api.account.UpdateProfile({
             lastName: styledClock,
           })
         );
+        await this.keepBotSessionOfflineIfOwnerAway(worker);
 
         lastClockStr = timeStr;
         account.features.self_time.last_updated = new Date().toISOString();
@@ -5227,9 +5370,23 @@ export class TelegramManager {
         { text: "🌙 ۱۲ ساعته (hh:mm A)", callback_data: "self_fmt_12h" },
       ],
       [
-        { text: "✨ فونت Bold", callback_data: "self_font_bold" },
-        { text: "💻 فونت Monospace", callback_data: "self_font_mono" },
-        { text: "𝟚 فونت Double", callback_data: "self_font_double" },
+        { text: "✨ Bold (𝟏𝟒:𝟒𝟓)", callback_data: "self_font_bold" },
+        { text: "⚡ Sans Bold (𝟭𝟰:𝟰𝟱)", callback_data: "self_font_sans_bold" },
+        { text: "💻 Mono (𝟷𝟺:𝟺𝟻)", callback_data: "self_font_monospace" },
+      ],
+      [
+        { text: "𝟚 Double (𝟙𝟜:𝟜𝟝)", callback_data: "self_font_double" },
+        { text: "➊ Dark Circle (➊➍:➍➎)", callback_data: "self_font_circled_dark" },
+        { text: "① Circle (①④:④⑤)", callback_data: "self_font_circled" },
+      ],
+      [
+        { text: "🇮🇷 فارسی (۱۴:۴۵)", callback_data: "self_font_persian" },
+        { text: "¹⁴ ریز بالا (¹⁴˸⁴⁵)", callback_data: "self_font_superscript" },
+        { text: "₁₄ ریز پایین (₁₄:₄₅)", callback_data: "self_font_subscript" },
+      ],
+      [
+        { text: "１４ نئونی پهن (１４：４５)", callback_data: "self_font_fullwidth" },
+        { text: "⟦1⟧ سایبری (⟦1⟧⟦4⟧:⟦4⟧⟦5⟧)", callback_data: "self_font_cyber_brackets" },
       ],
       [
         { text: "🔙 بازگشت به منوی اصلی", callback_data: "menu_main" },
@@ -5328,12 +5485,19 @@ export class TelegramManager {
 
     const inline_keyboard = [
       [
-        { text: "✨ فونت Bold", callback_data: "font_bold" },
-        { text: "🖋 فونت Italic", callback_data: "font_italic" },
+        { text: "✨ Bold (𝐁𝐨𝐥𝐝)", callback_data: "font_bold" },
+        { text: "⚡ Sans Bold (𝗕𝗼𝗹𝗱)", callback_data: "font_sans_bold" },
+        { text: "🖋 Italic (𝐼𝑡𝑎𝑙𝑖𝑐)", callback_data: "font_italic" },
       ],
       [
-        { text: "💻 فونت Monospace", callback_data: "font_mono" },
-        { text: "𝟚 فونت Double", callback_data: "font_double" },
+        { text: "💻 Mono (𝙼𝚘𝚗𝚘)", callback_data: "font_monospace" },
+        { text: "𝟚 Double (𝔻𝕠𝕦𝕓𝕝𝕖)", callback_data: "font_double" },
+        { text: "𝒮 Script (𝒮𝒸𝓇𝒾𝓅𝓉)", callback_data: "font_script_bold" },
+      ],
+      [
+        { text: "𝕲 Gothic (𝕲𝖔𝖙𝖍)", callback_data: "font_gothic_bold" },
+        { text: "🅒 Circle (🅒🅘🅡🅒🅛🅔)", callback_data: "font_circled_dark" },
+        { text: "sᴍᴀʟʟ SmallCaps", callback_data: "font_small_caps" },
       ],
       [
         { text: "❌ بازگردانی به فونت معمولی", callback_data: "font_normal" },
@@ -6863,39 +7027,110 @@ export class TelegramManager {
       throw new Error("فایل دانلود شده یافت نشد.");
     }
 
+    const cleanTitle = (options?.title || (options?.isAudio ? "audio" : "video"))
+      .replace(/[^a-zA-Z0-9\u0600-\u06FF\s-_]/g, "")
+      .trim()
+      .slice(0, 50) || "media";
+
     const attributes: any[] = [];
     if (options?.isAudio) {
       attributes.push(
         new Api.DocumentAttributeAudio({
-          duration: options?.duration || 0,
+          duration: Math.round(Number(options?.duration || 0)),
           title: options?.title || "Audio Track",
           performer: options?.performer || "Artist",
           voice: false,
+        }),
+        new Api.DocumentAttributeFilename({
+          fileName: `${cleanTitle}.mp3`,
         })
       );
-    } else if (options?.width && options?.height) {
+    } else {
       attributes.push(
         new Api.DocumentAttributeVideo({
-          duration: options?.duration || 0,
-          w: options.width,
-          h: options.height,
+          duration: Math.round(Number(options?.duration || 1)),
+          w: Math.round(Number(options?.width || 1280)),
+          h: Math.round(Number(options?.height || 720)),
           supportsStreaming: true,
           roundMessage: false,
+        }),
+        new Api.DocumentAttributeFilename({
+          fileName: `${cleanTitle}.mp4`,
         })
       );
     }
 
-    await worker.client.sendMessage(targetChat || "me", {
+    if (options?.thumbPath && fs.existsSync(options.thumbPath)) {
+      try {
+        await worker.client.sendFile(targetChat || "me", {
+          file: options.thumbPath,
+          caption: `🖼 <b>کاور رسمی:</b> <i>${options?.title || "Media"}</i>`,
+          parseMode: "html",
+        });
+      } catch (_) {}
+    }
+
+    await worker.client.sendFile(targetChat || "me", {
       file: filePath,
       thumb: options?.thumbPath && fs.existsSync(options.thumbPath) ? options.thumbPath : undefined,
-      supportStreaming: !options?.isAudio,
-      attributes: attributes.length > 0 ? attributes : undefined,
-      message: caption,
+      supportsStreaming: !options?.isAudio,
+      forceDocument: false,
+      attributes,
+      caption,
       parseMode: "html",
     });
 
     this.addLog("success", "tools", `ارسال مستقیم رسانه به ${targetChat || "Saved Messages"} انجام شد.`, targetPhone);
     return { success: true, message: `رسانه با موفقیت به ${targetChat === "me" ? "پیام‌های ذخیره‌شده (Saved Messages)" : targetChat} ارسال شد.` };
+  }
+
+  public async sendDiceCheat(phone: string | undefined, type: string, targetChat: string = "me") {
+    let targetPhone = phone;
+    if (!targetPhone || !this.workers.has(targetPhone)) {
+      targetPhone = Array.from(this.workers.keys())[0];
+    }
+    if (!targetPhone) {
+      throw new Error("هیچ اکانت فعالی برای ارسال تاس متصل نیست.");
+    }
+    const worker = this.workers.get(targetPhone);
+    if (!worker || !worker.client || !worker.client.connected) {
+      throw new Error(`اکانت ${targetPhone} متصل نیست.`);
+    }
+
+    const emoticonMap: Record<string, { emoji: string; label: string }> = {
+      dice: { emoji: "🎲", label: "تاس 🎲" },
+      dart: { emoji: "🎯", label: "دارت 🎯" },
+      football: { emoji: "⚽", label: "فوتبال ⚽" },
+      bowling: { emoji: "🎳", label: "بولینگ 🎳" },
+      casino: { emoji: "🎰", label: "کازینو 🎰" },
+      basketball: { emoji: "🏀", label: "بسکتبال 🏀" },
+    };
+    const game = emoticonMap[type] || emoticonMap.dice;
+    const randomId = BigInt(Math.floor(Math.random() * 1e15)) as any;
+
+    const res: any = await worker.client.invoke(
+      new Api.messages.SendMedia({
+        peer: targetChat || "me",
+        media: new Api.InputMediaDice({ emoticon: game.emoji }),
+        message: "",
+        randomId,
+      })
+    );
+
+    let rolledValue: number | null = null;
+    for (const u of res?.updates || []) {
+      if (u.message?.media?.value !== undefined) {
+        rolledValue = u.message.media.value;
+        break;
+      }
+    }
+
+    this.addLog("success", "self", `ارسال ${game.label} به ${targetChat || "Saved Messages"} انجام شد (امتیاز: ${rolledValue ?? "ارسال شد"}).`, targetPhone);
+    return {
+      success: true,
+      rolledValue,
+      message: `${game.label} با موفقیت به پیام‌های ذخیره‌شده ارسال شد${rolledValue ? ` (نتیجه: ${rolledValue})` : ""}!`,
+    };
   }
 
   public getFalData() {

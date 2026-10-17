@@ -42,7 +42,11 @@ import {
   TelegramAccountFeatures,
   MarketQuote,
 } from "../types";
-import { transformFont } from "../utils/fontStyler";
+import {
+  transformFont,
+  SELF_TIME_FONT_OPTIONS,
+  GENERAL_FONT_OPTIONS,
+} from "../utils/fontStyler";
 import { formatTehranTime } from "../utils/tehranTime";
 import { MarketEngineCard } from "./MarketEngineCard";
 import { SmartFiltersManager } from "./SmartFiltersManager";
@@ -1032,31 +1036,57 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-2">
-                {t.self.timeStyle}
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: "Bold (𝟏𝟒:𝟒𝟓)", id: "bold" },
-                  { label: "Mono (𝟷𝟺:𝟺𝟻)", id: "monospace" },
-                  { label: "Italic (14:45)", id: "italic" },
-                  { label: "Double (𝟙𝟜:𝟜𝟝)", id: "double" },
-                  { label: "Sans (𝟣𝟦:𝟦𝟧)", id: "sans" },
-                  { label: "Gothic (𝔊𝔬𝔱𝔥)", id: "gothic" },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setTimeStyle(item.id as any)}
-                    className={`py-2 px-2 rounded-xl border text-[11px] font-mono transition-all truncate ${
-                      timeStyle === item.id
-                        ? "bg-cyan-500/15 border-cyan-500 text-cyan-300 font-bold"
-                        : "bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700"
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-slate-200">
+                  {t.self.timeStyle}
+                </label>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                  {SELF_TIME_FONT_OPTIONS.length} فونت متنوع ساعت
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                {SELF_TIME_FONT_OPTIONS.map((item) => {
+                  const isSelected = timeStyle === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setTimeStyle(item.id as any)}
+                      className={`p-2.5 rounded-xl border text-right transition-all flex flex-col justify-between gap-1 cursor-pointer ${
+                        isSelected
+                          ? "bg-gradient-to-br from-cyan-500/20 to-violet-500/15 border-cyan-400 text-white shadow-lg shadow-cyan-500/15"
+                          : "bg-slate-950/90 border-slate-800/90 text-slate-300 hover:border-cyan-500/40 hover:bg-slate-900"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 w-full">
+                        <span className="text-[10px] font-semibold text-slate-400 truncate">
+                          {item.name}
+                        </span>
+                        {item.badge && (
+                          <span
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                              isSelected
+                                ? "bg-cyan-400 text-slate-950"
+                                : "bg-slate-800 text-cyan-300 border border-cyan-500/20"
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`text-sm font-mono tracking-wider text-center py-1 rounded-lg ${
+                          isSelected
+                            ? "bg-slate-950/70 text-cyan-300 font-bold"
+                            : "bg-slate-900/60 text-slate-100"
+                        }`}
+                        dir="ltr"
+                      >
+                        {transformFont("14:45", item.id)}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1429,6 +1459,15 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
               />
               <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
             </label>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-3 text-xs text-emerald-300">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            <span>
+              {lang === "fa"
+                ? "تشخیص هوشمند وضعیت حضور: منشی خودکار فقط زمانی که روی شماره خود آفلاین باشید پاسخ می‌دهد و به محض آنلاین شدن یا چت کردن شما، متوقف می‌شود."
+                : "Smart Presence Detection: Auto-Secretary only replies when you are offline on your account and pauses automatically when you are online or chatting."}
+            </span>
           </div>
 
           <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-4">
@@ -2116,34 +2155,43 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
           </div>
 
           {/* Style Selector */}
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-slate-300">
-              {lang === "fa" ? "انتخاب استایل فونت:" : "Select Font Style:"}
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { id: "bold", label: "Bold (𝐁𝐨𝐥𝐝)" },
-                { id: "italic", label: "Italic (𝐼𝑡𝑎𝑙𝑖𝑐)" },
-                { id: "bold_italic", label: "Bold-Italic (𝑩𝒐𝒍𝒅)" },
-                { id: "monospace", label: "Mono (𝙼𝚘𝚗𝚘)" },
-                { id: "double", label: "Double (𝔻𝕠𝕦𝕓𝕝𝕖)" },
-                { id: "sans", label: "Sans (𝖲𝖺𝗇𝗌)" },
-                { id: "gothic", label: "Gothic (𝔊𝔬𝔱𝔥𝔦𝔠)" },
-                { id: "normal", label: "Normal (ساده)" },
-              ].map((style) => (
-                <button
-                  key={style.id}
-                  type="button"
-                  onClick={() => setFontStyle(style.id as any)}
-                  className={`px-3 py-2 rounded-xl text-xs font-mono transition-all border ${
-                    fontStyle === style.id
-                      ? "bg-purple-500/20 border-purple-500 text-purple-300 font-bold"
-                      : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {style.label}
-                </button>
-              ))}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-200">
+                {lang === "fa" ? "انتخاب استایل فونت (۲۵ فونت متنوع):" : "Select Font Style (25 Styles):"}
+              </label>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                {GENERAL_FONT_OPTIONS.length} Styles
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+              {GENERAL_FONT_OPTIONS.map((style) => {
+                const isSelected = fontStyle === style.id;
+                return (
+                  <button
+                    key={style.id}
+                    type="button"
+                    onClick={() => setFontStyle(style.id as any)}
+                    className={`p-2.5 rounded-xl text-xs transition-all border flex flex-col justify-between gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? "bg-gradient-to-br from-purple-500/25 to-indigo-500/15 border-purple-400 text-white font-bold shadow-lg shadow-purple-500/15"
+                        : "bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-purple-500/40"
+                    }`}
+                  >
+                    <span className="text-[10px] text-slate-400 truncate w-full text-right">
+                      {style.label}
+                    </span>
+                    <span
+                      className={`text-xs font-mono py-1 px-1.5 rounded-lg text-center truncate w-full ${
+                        isSelected ? "bg-slate-950/80 text-purple-200" : "bg-slate-900/70 text-slate-200"
+                      }`}
+                      dir="ltr"
+                    >
+                      {style.sample}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

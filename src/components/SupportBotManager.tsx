@@ -29,12 +29,14 @@ import {
   SupportTicket,
   SupportFaqItem,
 } from "../types";
+import { useConfirm } from "./ui/ConfirmProvider";
 
 interface SupportBotManagerProps {
   lang: Language;
 }
 
 export const SupportBotManager: React.FC<SupportBotManagerProps> = ({ lang }) => {
+  const { confirm } = useConfirm();
   const [data, setData] = useState<SupportBotData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"tickets" | "settings" | "faqs">("tickets");
@@ -166,7 +168,14 @@ export const SupportBotManager: React.FC<SupportBotManagerProps> = ({ lang }) =>
   };
 
   const handleDeleteTicket = async (ticketId: string) => {
-    if (!confirm("آیا از حذف این تیکت اطمینان دارید؟")) return;
+    const ok = await confirm({
+      title: "حذف تیکت پشتیبانی",
+      message: "آیا از حذف دائمی این تیکت و تاریخچه پیام‌های آن اطمینان دارید؟",
+      confirmText: "حذف تیکت",
+      cancelText: "انصراف",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/support-bot/tickets/${ticketId}`, { method: "DELETE" });
       const json = await res.json();
@@ -207,7 +216,14 @@ export const SupportBotManager: React.FC<SupportBotManagerProps> = ({ lang }) =>
   };
 
   const handleDeleteFaq = async (id: string) => {
-    if (!confirm("آیا از حذف این سوال متداول اطمینان دارید؟")) return;
+    const ok = await confirm({
+      title: "حذف سوال متداول",
+      message: "آیا از حذف این سوال متداول اطمینان دارید؟",
+      confirmText: "حذف سوال",
+      cancelText: "انصراف",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await fetch(`/api/support-bot/faqs/${id}`, { method: "DELETE" });
       showToast("success", "سوال حذف شد.");

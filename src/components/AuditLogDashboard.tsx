@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { AuditLogEntry, AuditLogSummary, TelegramAccount } from "../types";
+import { useConfirm } from "./ui/ConfirmProvider";
 
 interface AuditLogDashboardProps {
   lang: Language;
@@ -44,6 +45,7 @@ export const AuditLogDashboard: React.FC<AuditLogDashboardProps> = ({
   onOpenHelp,
 }) => {
   const isRtl = lang === "fa";
+  const { confirm } = useConfirm();
 
   // Data & Pagination
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -121,9 +123,17 @@ export const AuditLogDashboard: React.FC<AuditLogDashboardProps> = ({
 
   // Handle Clear Logs
   const handleClearLogs = async () => {
-    if (!confirm(isRtl ? "آیا از پاکسازی تمامی لاگ‌های بازرسی اطمینان دارید؟" : "Are you sure you want to clear all audit logs?")) {
-      return;
-    }
+    const ok = await confirm({
+      title: isRtl ? "پاکسازی لاگ‌های بازرسی" : "Clear Audit Logs",
+      message: isRtl
+        ? "آیا از پاکسازی تمامی لاگ‌های بازرسی و تاریخچه رخدادها اطمینان دارید؟"
+        : "Are you sure you want to clear all audit logs?",
+      confirmText: isRtl ? "پاکسازی همه" : "Clear All",
+      cancelText: isRtl ? "انصراف" : "Cancel",
+      variant: "danger",
+      dir: isRtl ? "rtl" : "ltr",
+    });
+    if (!ok) return;
     try {
       const res = await fetch("/api/audit-logs/clear", { method: "POST" });
       const json = await res.json();

@@ -1013,6 +1013,26 @@ export function computeMarketPnL(
 // MAIN GET MARKET QUOTE FUNCTION
 // -------------------------------------------------------------
 
+export function isKnownMarketAsset(rawQuery: string): boolean {
+  if (!rawQuery) return false;
+  const cleanQuery = rawQuery
+    .trim()
+    .toLowerCase()
+    .replace(/^\$|\.|\/|قیمت|نرخ/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleanQuery || cleanQuery.length > 30) return false;
+
+  const matchedKey = ALIASES[cleanQuery] || ALIASES[cleanQuery.replace(/\s+/g, "")] || cleanQuery;
+  if (KNOWN_ASSETS[matchedKey]) return true;
+  if (cachedArzdigitalMap.has(cleanQuery) || cachedArzdigitalMap.has(matchedKey)) return true;
+
+  if (/^[a-z]{3}$/i.test(cleanQuery) && cachedFiatRates[cleanQuery.toUpperCase()]) {
+    return true;
+  }
+  return false;
+}
+
 export async function getMarketQuote(
   rawAsset: string,
   amount: number = 1.0,
@@ -1025,10 +1045,11 @@ export async function getMarketQuote(
     .trim()
     .toLowerCase()
     .replace(/^\$|\.|\/|قیمت|نرخ/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 
   // Find asset key from alias or direct match
-  const matchedKey = ALIASES[cleanQuery] || cleanQuery;
+  const matchedKey = ALIASES[cleanQuery] || ALIASES[cleanQuery.replace(/\s+/g, "")] || cleanQuery;
   const known = KNOWN_ASSETS[matchedKey];
 
   let symbol = matchedKey.toUpperCase();
@@ -1182,7 +1203,7 @@ export async function getMarketQuote(
   } else {
     // Dynamic Fallback: Check if it's a world ISO fiat currency code (EUR, GBP, JPY, CAD...)
     const upper = cleanQuery.toUpperCase();
-    if (cachedFiatRates[upper]) {
+    if (/^[A-Z]{3}$/.test(upper) && cachedFiatRates[upper]) {
       const rate = cachedFiatRates[upper];
       unitUsd = 1 / rate;
       symbol = upper;
@@ -1191,11 +1212,7 @@ export async function getMarketQuote(
       category = "fiat";
       change24h = 0.1;
     } else {
-      // Unknown item, treat as 1 USD
-      symbol = upper;
-      name_fa = upper;
-      name_en = upper;
-      unitUsd = 1.0;
+      throw new Error(`ارز یا واحد پول «${rawAsset}» یافت نشد.`);
     }
   }
 
@@ -1617,18 +1634,19 @@ export async function evaluateMathWithMarketRates(
   if (!normalized) return null;
 
   const hasMathOp = /[+\-*/×÷^]/.test(normalized);
-  const currencyMatch = normalized.match(
-    /(دلار|یورو|درهم|پوند|لیر|طلا|سکه|بیت ?کوین|تتر|اتریوم|dollar|usd|eur|aed|gbp|try|usdt|btc|eth|gold)/i
-  );
-
-  if (!hasMathOp && !currencyMatch) {
+  if (!hasMathOp) {
     return null;
   }
+
+  const currencyMatch = normalized.match(
+    /(?<![\p{L}\p{N}])(دلار|یورو|درهم|پوند|لیر|طلا|سکه|بیت ?کوین|تتر|اتریوم|dollar|usd|eur|aed|gbp|try|usdt|btc|eth|gold)(?![\p{L}\p{N}])/iu
+  );
 
   await refreshMarketRates();
 
   let resolved = normalized
-    .replace(/^(=|calc\s*|حساب\s*:?\s*|قیمت\s*:?\s*|نرخ\s*:?\s*|ارزش\s*:?\s*|\.price\s*|\/price\s*)/i, "")
+    .replace(/^(=|\.calc\s*|\/calc\s*|!calc\s*|calc\s+|\.حساب\s*|حساب\s*:?\s*)/i, "")
+    .replace(/=\s*$/, "")
     .replace(/×/g, "*")
     .replace(/÷/g, "/")
     .replace(/−/g, "-")
@@ -1637,35 +1655,37 @@ export async function evaluateMathWithMarketRates(
   const breakdowns: string[] = [];
 
   const currencyReplacements: Array<{ regex: RegExp; key: string; nameFa: string }> = [
-    { regex: /(?:دلار آمریکا|دلار|dollar|usd)/gi, key: "usd", nameFa: "دلار" },
-    { regex: /(?:تتر|usdt)/gi, key: "usdt", nameFa: "تتر" },
-    { regex: /(?:یورو|euro|eur)/gi, key: "eur", nameFa: "یورو" },
-    { regex: /(?:درهم امارات|درهم|dirham|aed)/gi, key: "aed", nameFa: "درهم" },
-    { regex: /(?:پوند انگلیس|پوند|pound|gbp)/gi, key: "gbp", nameFa: "پوند" },
-    { regex: /(?:لیر ترکیه|لیر|lira|try)/gi, key: "try", nameFa: "لیر" },
-    { regex: /(?:سکه امامی|سکه|emami)/gi, key: "emami", nameFa: "سکه امامی" },
-    { regex: /(?:گرم طلا|طلا ۱۸|طلا|gold18|gold)/gi, key: "gold18", nameFa: "گرم طلا ۱۸" },
-    { regex: /(?:بیت ?کوین|بیتکوین|btc|bitcoin)/gi, key: "btc", nameFa: "بیت‌کوین" },
-    { regex: /(?:اتریوم|eth|ethereum)/gi, key: "eth", nameFa: "اتریوم" },
-    { regex: /(?:تون کوین|تون|ton)/gi, key: "ton", nameFa: "تون" },
-    { regex: /(?:سولانا|sol|solana)/gi, key: "sol", nameFa: "سولانا" },
-    { regex: /(?:ترون|trx|tron)/gi, key: "trx", nameFa: "ترون" },
+    { regex: /(?<![\p{L}\p{N}])(?:دلار آمریکا|دلار|dollar|usd)(?![\p{L}\p{N}])/giu, key: "usd", nameFa: "دلار" },
+    { regex: /(?<![\p{L}\p{N}])(?:تتر|usdt)(?![\p{L}\p{N}])/giu, key: "usdt", nameFa: "تتر" },
+    { regex: /(?<![\p{L}\p{N}])(?:یورو|euro|eur)(?![\p{L}\p{N}])/giu, key: "eur", nameFa: "یورو" },
+    { regex: /(?<![\p{L}\p{N}])(?:درهم امارات|درهم|dirham|aed)(?![\p{L}\p{N}])/giu, key: "aed", nameFa: "درهم" },
+    { regex: /(?<![\p{L}\p{N}])(?:پوند انگلیس|پوند|pound|gbp)(?![\p{L}\p{N}])/giu, key: "gbp", nameFa: "پوند" },
+    { regex: /(?<![\p{L}\p{N}])(?:لیر ترکیه|لیر|lira|try)(?![\p{L}\p{N}])/giu, key: "try", nameFa: "لیر" },
+    { regex: /(?<![\p{L}\p{N}])(?:سکه امامی|سکه|emami)(?![\p{L}\p{N}])/giu, key: "emami", nameFa: "سکه امامی" },
+    { regex: /(?<![\p{L}\p{N}])(?:گرم طلا|طلا ۱۸|طلا|gold18|gold)(?![\p{L}\p{N}])/giu, key: "gold18", nameFa: "گرم طلا ۱۸" },
+    { regex: /(?<![\p{L}\p{N}])(?:بیت ?کوین|بیتکوین|btc|bitcoin)(?![\p{L}\p{N}])/giu, key: "btc", nameFa: "بیت‌کوین" },
+    { regex: /(?<![\p{L}\p{N}])(?:اتریوم|eth|ethereum)(?![\p{L}\p{N}])/giu, key: "eth", nameFa: "اتریوم" },
+    { regex: /(?<![\p{L}\p{N}])(?:تون کوین|تون|ton)(?![\p{L}\p{N}])/giu, key: "ton", nameFa: "تون" },
+    { regex: /(?<![\p{L}\p{N}])(?:سولانا|sol|solana)(?![\p{L}\p{N}])/giu, key: "sol", nameFa: "سولانا" },
+    { regex: /(?<![\p{L}\p{N}])(?:ترون|trx|tron)(?![\p{L}\p{N}])/giu, key: "trx", nameFa: "ترون" },
   ];
 
   let hasCurrency = false;
-  for (const cr of currencyReplacements) {
-    if (cr.regex.test(resolved)) {
-      hasCurrency = true;
-      try {
-        const quote = await getMarketQuote(cr.key);
-        const rate = quote.unit_toman;
-        breakdowns.push(`۱ ${cr.nameFa} = ${rate.toLocaleString("fa-IR")} تومان`);
-        resolved = resolved.replace(
-          new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${cr.regex.source}`, "gi"),
-          `$1 * ${rate}`
-        );
-        resolved = resolved.replace(cr.regex, ` ${rate} `);
-      } catch (_) {}
+  if (currencyMatch) {
+    for (const cr of currencyReplacements) {
+      if (cr.regex.test(resolved)) {
+        hasCurrency = true;
+        try {
+          const quote = await getMarketQuote(cr.key);
+          const rate = quote.unit_toman;
+          breakdowns.push(`۱ ${cr.nameFa} = ${rate.toLocaleString("fa-IR")} تومان`);
+          resolved = resolved.replace(
+            new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${cr.regex.source}`, "giu"),
+            `$1 * ${rate}`
+          );
+          resolved = resolved.replace(cr.regex, ` ${rate} `);
+        } catch (_) {}
+      }
     }
   }
 
@@ -1720,13 +1740,20 @@ export interface CurrencyConversionResult {
   formattedMessage: string;
 }
 
+function isValidConversionUnit(unit: string): boolean {
+  const clean = unit.trim().toLowerCase();
+  if (!clean) return false;
+  if (/^(تومان|تومن|ریال|toman|irr|rial)$/i.test(clean)) return true;
+  return isKnownMarketAsset(clean);
+}
+
 /**
- * Parse conversion phrases like:
- * "۲ دلار ترون تبدیل کن"
- * "تبدیل ۲ دلار به ترون"
- * "2 usd to trx"
- * "۵۰۰ تتر به تومان"
- * "۱۰ ترون به دلار"
+ * Strictly parses explicit currency conversion phrases ONLY:
+ * - "تبدیل ۲ دلار به ترون"
+ * - "2 usd to trx"
+ * - "۵۰۰ تتر به تومان"
+ * - "۲ دلار ترون تبدیل کن"
+ * Never triggers on normal conversational sentences.
  */
 export function parseCurrencyConversionQuery(text: string): {
   amount: number;
@@ -1734,55 +1761,51 @@ export function parseCurrencyConversionQuery(text: string): {
   toAsset: string;
 } | null {
   if (!text) return null;
-  const normalized = normalizeDigits(text).trim();
-  const lower = normalized.toLowerCase();
+  const normalized = normalizeDigits(text)
+    .trim()
+    .replace(/^[./!]\s*/, "")
+    .replace(/[؟?!.]+$/, "")
+    .trim();
 
-  // Must have convert keyword or "به" or "to"
-  const hasConvertKeyword =
-    lower.includes("تبدیل") ||
-    lower.includes("convert") ||
-    lower.includes(" to ") ||
-    lower.includes("به") ||
-    lower.includes("چند تا") ||
-    lower.includes("چند");
+  if (!normalized || normalized.split(/\s+/).length > 8) return null;
 
-  if (!hasConvertKeyword) return null;
-
-  // Extract amount
-  const amountMatch = normalized.match(/(?<![a-zA-Z])(\d+(?:\.\d+)?)/);
-  const amount = amountMatch ? parseFloat(amountMatch[1]) : 1.0;
-
-  // Known currency tokens pattern
-  const assetPattern =
-    "(usd|usdt|tether|dollar|eur|euro|gbp|aed|dirham|try|lira|cad|aud|chf|cny|jpy|sar|qar|kwd|iqd|rub|inr|afn|pkr|azn|amd|gel|دلار|دالر|تتر|تتر ترون|یورو|درهم|پوند|لیر|دینار|یوان|ین|روبل|افغانی|روپیه|تومان|تومن|ریال|طلا|سکه|امامی|بهار آزادی|نیم سکه|ربع سکه|گرمی|مثقال|مظنه|انس|نقره|gold|coin|xau|xag|btc|بیت ?کوین|eth|اتریوم|trx|ترون|sol|سولانا|ton|تون|دوج|doge|bnb|بایننس|xrp|ریپل|ada|کاردانو|shib|شیبا|pepe|پپ|not|نات|hmstr|همستر)";
-
-  // Pattern 1: [amount] [from] [to] تبدیل کن / [amount] [from] به [to]
-  // e.g. "۲ دلار ترون تبدیل کن" or "۲ دلار به ترون" or "۵۰۰ تتر به تومان"
-  const regex1 = new RegExp(
-    `(?:تبدیل\\s+)?(?:${amountMatch ? amountMatch[1] : "\\d+"})?\\s*${assetPattern}\\s+(?:به\\s+|to\\s+)?${assetPattern}`,
-    "i"
+  // Pattern 1: "[تبدیل] [عدد] [ارز مبدأ] به/to [ارز مقصد] [چنده/تبدیل کن]"
+  const p1 = normalized.match(
+    /^(?:تبدیل\s+|convert\s+)?(\d+(?:\.\d+)?)?\s*([\p{L}\s]{1,20}?)\s+(?:به|to|in)\s+([\p{L}\s]{1,20}?)(?:\s+چنده|\s+چقدر\s+میشه|\s+تبدیل\s+کن)?$/iu
   );
-  const m1 = normalized.match(regex1);
-  if (m1 && m1[1] && m1[2] && m1[1].toLowerCase() !== m1[2].toLowerCase()) {
-    return {
-      amount,
-      fromAsset: m1[1].trim(),
-      toAsset: m1[2].trim(),
-    };
+  if (p1) {
+    const hasLeadingKeyword = /^(?:تبدیل|convert)\b/i.test(normalized);
+    const hasAmount = Boolean(p1[1]);
+    // Require either an explicit number ("100 دلار به تومان") or leading "تبدیل"/"convert" keyword
+    if (hasLeadingKeyword || hasAmount) {
+      const amount = p1[1] ? parseFloat(p1[1]) : 1.0;
+      const fromAsset = p1[2].trim();
+      const toAsset = p1[3].trim();
+      if (
+        fromAsset.toLowerCase() !== toAsset.toLowerCase() &&
+        isValidConversionUnit(fromAsset) &&
+        isValidConversionUnit(toAsset)
+      ) {
+        return { amount, fromAsset, toAsset };
+      }
+    }
   }
 
-  // Pattern 2: تبدیل [from] به [to]
-  const regex2 = new RegExp(
-    `(?:تبدیل\\s+)?${assetPattern}\\s+(?:به\\s+|to\\s+)${assetPattern}`,
-    "i"
+  // Pattern 2: "[عدد] [ارز مبدأ] [ارز مقصد] تبدیل کن" (e.g. "۲ دلار ترون تبدیل کن")
+  const p2 = normalized.match(
+    /^(\d+(?:\.\d+)?)\s+([\p{L}]{1,15})\s+([\p{L}]{1,15})\s+تبدیل\s+کن$/iu
   );
-  const m2 = normalized.match(regex2);
-  if (m2 && m2[1] && m2[2] && m2[1].toLowerCase() !== m2[2].toLowerCase()) {
-    return {
-      amount,
-      fromAsset: m2[1].trim(),
-      toAsset: m2[2].trim(),
-    };
+  if (p2) {
+    const amount = parseFloat(p2[1]) || 1.0;
+    const fromAsset = p2[2].trim();
+    const toAsset = p2[3].trim();
+    if (
+      fromAsset.toLowerCase() !== toAsset.toLowerCase() &&
+      isValidConversionUnit(fromAsset) &&
+      isValidConversionUnit(toAsset)
+    ) {
+      return { amount, fromAsset, toAsset };
+    }
   }
 
   return null;

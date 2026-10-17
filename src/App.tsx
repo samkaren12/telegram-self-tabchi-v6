@@ -45,6 +45,8 @@ import { VisualHelpModal, HelpSectionId } from "./components/VisualHelpModal";
 import { DonateModal } from "./components/DonateModal";
 import { MatrixRain } from "./components/MatrixRain";
 import { useSoundNotification } from "./hooks/useSoundNotification";
+import { ConfirmProvider } from "./components/ui/ConfirmProvider";
+import { motion, AnimatePresence } from "motion/react";
 
 const getInitialPortal = (): "admin" | "client" => {
   if (typeof window === "undefined") return "client";
@@ -308,14 +310,15 @@ export default function App() {
   const currentSectionTitle = activeTabMeta?.label;
 
   return (
+    <ConfirmProvider>
     <div
-      className="min-h-screen bg-[#060814] text-slate-100 flex flex-row font-sans selection:bg-violet-500/30 selection:text-violet-200 relative overflow-x-hidden cyber-matrix-grid"
+      className="min-h-screen bg-[#050712] text-slate-100 flex flex-row font-sans selection:bg-violet-500/30 selection:text-violet-200 relative overflow-x-hidden cyber-matrix-grid"
       dir={lang === "fa" ? "rtl" : "ltr"}
     >
-      {/* Ambient Gradient Glows (Violet, Cyan, Indigo) */}
-      <div className="fixed top-[-10%] right-[-5%] w-[580px] h-[580px] bg-violet-600/10 rounded-full blur-[160px] pointer-events-none z-0"></div>
-      <div className="fixed bottom-[-10%] left-[-5%] w-[580px] h-[580px] bg-cyan-500/10 rounded-full blur-[160px] pointer-events-none z-0"></div>
-      <div className="fixed top-[40%] left-[20%] w-[480px] h-[480px] bg-indigo-600/8 rounded-full blur-[180px] pointer-events-none z-0"></div>
+      {/* Ambient Animated Gradient Glows (Violet, Cyan, Indigo) */}
+      <div className="fixed top-[-10%] right-[-5%] w-[580px] h-[580px] bg-violet-600/12 rounded-full blur-[160px] pointer-events-none z-0 animate-pulse-glow"></div>
+      <div className="fixed bottom-[-10%] left-[-5%] w-[580px] h-[580px] bg-cyan-500/12 rounded-full blur-[160px] pointer-events-none z-0 animate-pulse-glow"></div>
+      <div className="fixed top-[40%] left-[20%] w-[480px] h-[480px] bg-indigo-600/10 rounded-full blur-[180px] pointer-events-none z-0"></div>
 
       {/* Subtle Matrix Rain Texture Layer */}
       <MatrixRain opacity={0.06} speed={28} fontSize={14} />
@@ -422,17 +425,24 @@ export default function App() {
 
           {/* Active Account Quick Status Banner */}
           {selectedAccount && (
-            <div className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl animate-shimmer"
+            >
               <div className="flex items-center gap-3.5">
                 <div className="relative group">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-md group-hover:scale-105 transition-transform">
-                    <div className="w-full h-full bg-[#0a0e20] rounded-[10px] flex items-center justify-center text-white font-bold text-base">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-lg shadow-violet-600/25 group-hover:scale-105 transition-transform">
+                    <div className="w-full h-full bg-[#0a0e20] rounded-[14px] flex items-center justify-center text-white font-black text-base">
                       {selectedAccount.firstName ? selectedAccount.firstName[0].toUpperCase() : "U"}
                     </div>
                   </div>
                   <span
-                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#060814] ${
-                      selectedAccount.isOnline ? "bg-emerald-400" : "bg-slate-500"
+                    className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#060814] ${
+                      selectedAccount.isOnline
+                        ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
+                        : "bg-slate-500"
                     }`}
                   />
                 </div>
@@ -518,12 +528,12 @@ export default function App() {
 
                 {selectedAccount.features?.tabchi?.status === "broadcasting" && (
                   <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/35 flex items-center gap-1.5">
-                    <Radio className="w-3.5 h-3.5 text-violet-400" />
+                    <Radio className="w-3.5 h-3.5 text-violet-400 animate-pulse" />
                     <span>{lang === "fa" ? "تبچی درحال ارسال" : "Tabchi Active"}</span>
                   </span>
                 )}
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Quick Tab Bar on Tablet / Mobile */}
@@ -553,8 +563,15 @@ export default function App() {
             })}
           </div>
 
-          {/* Active Tab View */}
-          <div className="animate-in fade-in duration-200">
+          {/* Active Tab View with Smooth Framer Motion Transitions */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            >
             {activeTab === "dashboard" && !isCustomer && (
               <DashboardAnalyticsModule lang={lang} onOpenHelp={() => handleOpenHelp("analytics")} />
             )}
@@ -629,7 +646,8 @@ export default function App() {
                 onOpenHelp={(sec) => handleOpenHelp(sec || "system")}
               />
             )}
-          </div>
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         {/* Clean Modern SaaS Footer */}
@@ -741,5 +759,6 @@ export default function App() {
         lang={lang}
       />
     </div>
+    </ConfirmProvider>
   );
 }

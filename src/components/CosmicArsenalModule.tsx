@@ -633,16 +633,31 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
   };
 
   // Cheat Dice
-  const handleSendDiceCheat = (type: string) => {
+  const handleSendDiceCheat = async (type: string) => {
     const labels: Record<string, string> = {
-      dice: "🎲 تاس عدد ۶ (برد تضمینی)",
-      dart: "🎯 دارت ۵۰ امتیازی (مرکز سیبل)",
-      football: "⚽ پنالتی گل شد!",
-      bowling: "🎳 استرایک کامل (۱۰ پین)",
-      casino: "🎰 جک‌پات کازینو (۷۷۷)",
+      dice: "🎲 در حال شلیک تاس به تلگرام...",
+      dart: "🎯 در حال پرتاب دارت به تلگرام...",
+      football: "⚽ در حال شوت پنالتی به تلگرام...",
+      bowling: "🎳 در حال پرتاب توپ بولینگ به تلگرام...",
+      casino: "🎰 در حال چرخش اسلات کازینو در تلگرام...",
     };
-    setDiceFeedback(labels[type] || "شلیک شد!");
-    setTimeout(() => setDiceFeedback(null), 3000);
+    setDiceFeedback(labels[type] || "در حال ارسال...");
+    try {
+      const res = await fetch("/api/cosmic/dice-cheat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: account?.phone, type, targetChat: "me" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDiceFeedback(data.message);
+      } else {
+        setDiceFeedback(data.message || "خطا در ارسال به تلگرام");
+      }
+    } catch (_) {
+      setDiceFeedback("خطا در ارتباط با سرور");
+    }
+    setTimeout(() => setDiceFeedback(null), 4000);
   };
 
   // Profile Stalker Fetcher

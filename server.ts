@@ -523,6 +523,17 @@ async function startServer() {
     }
   });
 
+  // Cosmic Dice Cheat sender
+  app.post("/api/cosmic/dice-cheat", async (req, res) => {
+    try {
+      const { phone, type, targetChat } = req.body || {};
+      const result = await telegramManager.sendDiceCheat(phone, type || "dice", targetChat || "me");
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message || "خطا در ارسال تاس" });
+    }
+  });
+
   // =========================================================================
   // SMART MEDIA & VIDEO DOWNLOADER ENDPOINTS
   // =========================================================================
@@ -552,6 +563,7 @@ async function startServer() {
       if (!result.success) {
         return res.status(400).json({ success: false, message: result.error });
       }
+      const diskFile = result.diskFileName || (result.filePath ? path.basename(result.filePath) : result.fileName!);
       return res.json({
         success: true,
         fileName: result.fileName,
@@ -562,8 +574,10 @@ async function startServer() {
         platform: result.platform,
         platformKey: result.platformKey,
         isAudio: result.isAudio,
-        downloadUrl: `/api/downloader/file/${encodeURIComponent(result.fileName!)}`,
-        thumbnailUrl: result.thumbPath ? `/api/downloader/file/${encodeURIComponent(path.basename(result.thumbPath))}` : undefined,
+        downloadUrl: `/api/downloader/file/${encodeURIComponent(diskFile)}?name=${encodeURIComponent(result.fileName || diskFile)}`,
+        thumbnailUrl: result.thumbPath
+          ? `/api/downloader/file/${encodeURIComponent(path.basename(result.thumbPath))}`
+          : result.thumbnailUrl,
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message || "خطا در دانلود رسانه" });
@@ -578,7 +592,25 @@ async function startServer() {
       if (!fs.existsSync(filePath)) {
         return res.status(404).send("فایل دانلود شده یافت نشد یا منقضی گردیده است.");
       }
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      const ext = path.extname(filename).toLowerCase();
+      const customName =
+        typeof req.query.name === "string" && req.query.name.trim() ? req.query.name.trim() : filename;
+
+      if (ext === ".mp3") {
+        res.setHeader("Content-Type", "audio/mpeg");
+      } else if (ext === ".mp4") {
+        res.setHeader("Content-Type", "video/mp4");
+      } else if (ext === ".jpg" || ext === ".jpeg") {
+        res.setHeader("Content-Type", "image/jpeg");
+      }
+
+      if (ext !== ".jpg" && ext !== ".jpeg") {
+        const asciiSafe = customName.replace(/[^\x20-\x7E]/g, "_").replace(/"/g, "") || filename;
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${asciiSafe}"; filename*=UTF-8''${encodeURIComponent(customName)}`
+        );
+      }
       return res.sendFile(filePath);
     } catch (err: any) {
       return res.status(500).send("خطا در ارسال فایل");

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Language } from "../utils/i18n";
 import { TelegramAccount, SmartFiltersConfig, SmartFilterRule } from "../types";
+import { useConfirm } from "./ui/ConfirmProvider";
 
 interface SmartFiltersManagerProps {
   account: TelegramAccount;
@@ -87,6 +88,7 @@ export const SmartFiltersManager: React.FC<SmartFiltersManagerProps> = ({
     rules: [],
   };
 
+  const { confirm, toast } = useConfirm();
   const [active, setActive] = useState<boolean>(Boolean(currentConfig.active));
   const [globalDelay, setGlobalDelay] = useState<number>(currentConfig.global_delay_seconds ?? 1);
   const [caseInsensitive, setCaseInsensitive] = useState<boolean>(currentConfig.case_insensitive !== false);
@@ -199,15 +201,15 @@ export const SmartFiltersManager: React.FC<SmartFiltersManagerProps> = ({
   // Save rule from modal
   const handleSaveRuleForm = () => {
     if (!ruleName.trim()) {
-      alert("لطفاً نام قانون را وارد کنید.");
+      toast("لطفاً نام قانون را وارد کنید.", "warning");
       return;
     }
     if (!rulePattern.trim()) {
-      alert("لطفاً الگوی رِجکس (Regex Pattern) را وارد کنید.");
+      toast("لطفاً الگوی رِجکس (Regex Pattern) را وارد کنید.", "warning");
       return;
     }
     if (!ruleReplyText.trim()) {
-      alert("متن پاسخ خودکار نمی‌تواند خالی باشد.");
+      toast("متن پاسخ خودکار نمی‌تواند خالی باشد.", "warning");
       return;
     }
 
@@ -215,7 +217,7 @@ export const SmartFiltersManager: React.FC<SmartFiltersManagerProps> = ({
     try {
       new RegExp(rulePattern.trim(), ruleFlags || "i");
     } catch (e: any) {
-      alert(`خطای نگارشی در رِجکس: ${e.message}`);
+      toast(`خطای نگارشی در رِجکس: ${e.message}`, "error");
       return;
     }
 
@@ -257,9 +259,17 @@ export const SmartFiltersManager: React.FC<SmartFiltersManagerProps> = ({
   };
 
   // Delete rule
-  const handleDeleteRule = (id: string) => {
-    if (!confirm("آیا از حذف این فیلتر هوشمند اطمینان دارید؟")) return;
+  const handleDeleteRule = async (id: string) => {
+    const ok = await confirm({
+      title: "حذف فیلتر هوشمند",
+      message: "آیا از حذف این قانون فیلتر هوشمند اطمینان دارید؟",
+      confirmText: "حذف قانون",
+      cancelText: "انصراف",
+      variant: "danger",
+    });
+    if (!ok) return;
     setRules(rules.filter((r) => r.id !== id));
+    toast("قانون فیلتر هوشمند حذف شد.", "success");
   };
 
   // Toggle rule status

@@ -55,6 +55,7 @@ import { Language } from "../utils/i18n";
 import { PaymentMethodsManager } from "./store/PaymentMethodsManager";
 import { BatchPricingModal } from "./store/BatchPricingModal";
 import { CustomersManager } from "./store/CustomersManager";
+import { useConfirm } from "./ui/ConfirmProvider";
 
 interface StoreBotModuleProps {
   lang: Language;
@@ -62,6 +63,7 @@ interface StoreBotModuleProps {
 }
 
 export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
+  const { confirm } = useConfirm();
   const [data, setData] = useState<StoreData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<
@@ -645,7 +647,14 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
 
   // Delete Plan
   const handleDeletePlan = async (planId: string) => {
-    if (!confirm("آیا از حذف این پلن فروشگاهی اطمینان دارید؟")) return;
+    const ok = await confirm({
+      title: "حذف پلن فروشگاهی",
+      message: "آیا از حذف این پلن فروشگاهی اطمینان دارید؟",
+      confirmText: "حذف پلن",
+      cancelText: "انصراف",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/store-bot/plans/${planId}`, { method: "DELETE" });
       const json = await res.json();

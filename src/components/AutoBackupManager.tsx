@@ -23,6 +23,7 @@ import {
   FileCheck,
 } from "lucide-react";
 import { Language } from "../utils/i18n";
+import { useConfirm } from "./ui/ConfirmProvider";
 
 interface AutoBackupConfig {
   enabled: boolean;
@@ -53,6 +54,7 @@ interface AutoBackupManagerProps {
 }
 
 export const AutoBackupManager: React.FC<AutoBackupManagerProps> = ({ lang }) => {
+  const { confirm, toast } = useConfirm();
   const [config, setConfig] = useState<AutoBackupConfig>({
     enabled: true,
     schedule: "daily",
@@ -191,16 +193,29 @@ export const AutoBackupManager: React.FC<AutoBackupManagerProps> = ({ lang }) =>
   };
 
   const handleDeleteBackup = async (filename: string) => {
-    if (!confirm(lang === "fa" ? `آیا از حذف فایل بکاپ ${filename} مطمئن هستید؟` : `Delete backup ${filename}?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: lang === "fa" ? "حذف فایل پشتیبان" : "Delete Backup File",
+      message:
+        lang === "fa"
+          ? `آیا از حذف دائمی فایل بکاپ «${filename}» اطمینان دارید؟`
+          : `Are you sure you want to permanently delete backup "${filename}"?`,
+      confirmText: lang === "fa" ? "حذف بکاپ" : "Delete",
+      cancelText: lang === "fa" ? "انصراف" : "Cancel",
+      variant: "danger",
+      dir: lang === "fa" ? "rtl" : "ltr",
+    });
+    if (!ok) return;
+
     try {
       const res = await fetch(`/api/backup/${encodeURIComponent(filename)}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         setBackups(backups.filter((b) => b.filename !== filename));
+        toast(lang === "fa" ? "فایل بکاپ با موفقیت حذف شد." : "Backup file deleted.", "success");
       }
-    } catch (_) {}
+    } catch (_) {
+      toast(lang === "fa" ? "خطا در حذف فایل بکاپ" : "Error deleting backup", "error");
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -217,7 +232,7 @@ export const AutoBackupManager: React.FC<AutoBackupManagerProps> = ({ lang }) =>
 
   const handleExecuteRestore = async () => {
     if (!selectedFileContent) {
-      alert("لطفاً ابتدا فایل بکاپ (.json) را انتخاب کنید.");
+      toast("لطفاً ابتدا فایل بکاپ (.json) را انتخاب کنید.", "warning");
       return;
     }
 
@@ -241,6 +256,7 @@ export const AutoBackupManager: React.FC<AutoBackupManagerProps> = ({ lang }) =>
         type: "success",
         message: data.message,
       });
+      toast(data.message || "بازیابی بکاپ با موفقیت انجام شد.", "success");
       setIsRestoreOpen(false);
       setSelectedFileContent(null);
       setSelectedFileName(null);
@@ -250,7 +266,7 @@ export const AutoBackupManager: React.FC<AutoBackupManagerProps> = ({ lang }) =>
         window.location.reload();
       }, 1500);
     } catch (err: any) {
-      alert(err.message || "خطا در بازیابی بکاپ");
+      toast(err.message || "خطا در بازیابی بکاپ", "error");
     } finally {
       setRestoring(false);
     }
