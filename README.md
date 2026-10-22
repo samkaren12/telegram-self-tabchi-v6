@@ -68,34 +68,36 @@
 sudo selfandtabchi
 ```
 
-بلافاصله یک منوی گرافیکی و رنگی به زبان فارسی در ترمینال شما باز می‌شود:
+بلافاصله یک منوی گرافیکی و رنگی به زبان انگلیسی استاندارد (سازگار با تمامی ترمینال‌های SSH) باز می‌شود:
 
 ```text
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║   ⚡ TELEGRAM SELF & TABCHI v6 - SERVER MANAGEMENT ASSISTANT               ║
-║   سیستم یکپارچه مدیریت سرور، بروزرسانی، دامنه و گواهی امنیتی SSL           ║
+║   ⚡ TELEGRAM SELF & TABCHI v6 - SERVER MANAGEMENT ASSISTANT          ║
+║   Unified Server Management, Auto-Updater, Domain & SSL Security Suite ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║ 🌐 آی‌پی عمومی سرور:   194.135.24.89                                     ║
-║ 📊 وضعیت سرویس:       آنلاین و در حال اجرا (PM2)                           ║
-║ 🔒 وضعیت SSL:         فعال (panel.mydomain.com - 365 روز اعتبار)          ║
-║ 📁 مسیر پروژه:        /root/telegram-self-tabchi-v6                       ║
-║ 🔗 لینک وب پنل:       http://194.135.24.89:3000 یا https://...:3443       ║
+║ 🌐 Server Public IP:   194.135.24.89                                      ║
+║ 📊 Service Status:     Online & Running (PM2)                             ║
+║ 🔒 SSL Status:         Active (panel.mydomain.com - 365 days valid)       ║
+║ 📁 Project Path:       /root/telegram-self-tabchi-v6                      ║
+║ 🔗 Web Panel URL:      http://194.135.24.89:3000 or https://...:3443      ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 
-لطفاً یکی از گزینه‌های زیر را با وارد کردن شماره انتخاب نمایید:
+Please select one of the options below by entering its number:
 
-  [1] 🚀 شروع / راه‌اندازی مجدد سرویس (Start / Restart)
-  [2] 🛑 توقف سرویس تلگرام (Stop Service)
-  [3] 🔄 بروزرسانی اسکریپت به آخرین نسخه (Update Script)
-  [4] 🌐 تنظیم و تغییر دامنه سرور (Set / Change Domain)
-  [5] 🔒 دریافت و نصب گواهی SSL روی دامنه یا آی‌پی (Issue SSL Certificate)
-  [6] 🛡️ فعال‌سازی سرویس تمدید خودکار SSL (Auto-Renewal Daemon)
-  [7] 📜 مشاهده لاگ‌های زنده سیستم (View Live Logs)
-  [8] 🔑 تغییر رمز ورود مالک و احراز هویت (Change Admin Password)
-  [9] 🗑️ حذف کامل اسکریپت و پاکسازی سرور (Uninstall Script)
-  [0] 🚪 خروج (Exit)
+  [1]  🚀 Start Service              (Launch Telegram & Web Daemon)
+  [2]  🛑 Stop Service               (Stop All Running Processes)
+  [3]  🔄 Restart Service            (Reload Server & Free Ports)
+  [4]  📊 Check Status               (View Live Service & PM2 Health)
+  [5]  📜 View Live Logs             (Stream Real-Time Server Logs)
+  [6]  🌐 Set / Change Domain        (Configure Custom Server Domain)
+  [7]  🔒 Issue SSL Certificate      (Install SSL for Domain or IP)
+  [8]  🛡️ SSL Auto-Renewal Daemon    (Enable 24/7 Auto-Renew Service)
+  [9]  🔑 Change Admin Password      (Update Web Panel Owner Password)
+  [10] ⚡ Update Script              (Pull Latest Version & Rebuild)
+  [11] 🗑️ Uninstall Script           (Remove Project & Clean Server)
+  [0]  🚪 Exit                       (Quit Management Assistant)
 
-👉 شماره مورد نظر را وارد کرده و Enter بزنید: 
+👉 Enter option number and press Enter: 
 ```
 
 ### منوی عددی دستیار لینوکس

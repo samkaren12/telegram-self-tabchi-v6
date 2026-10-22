@@ -476,23 +476,25 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
                 </p>
               </div>
 
-              <div className="bg-black/80 border-2 border-emerald-500/40 rounded-2xl p-4 font-mono text-xs space-y-2 text-slate-300 shadow-[0_0_30px_rgba(16,185,129,0.15)]" dir="ltr">
+              <div className="bg-black/80 border-2 border-emerald-500/40 rounded-2xl p-4 font-mono text-xs space-y-1.5 text-slate-300 shadow-[0_0_30px_rgba(16,185,129,0.15)]" dir="ltr">
                 <div className="text-emerald-400 font-bold">$ sudo selfandtabchi</div>
-                <div className="text-cyan-400">---------------------------------------------------------</div>
-                <div className="text-slate-100 font-bold">[1] Start / Restart  ➔ راه اندازی مجدد و آزادسازی پورت</div>
-                <div className="text-slate-100 font-bold">[2] Stop Service     ➔ توقف موقت پروسه ها</div>
-                <div className="text-emerald-300 font-bold">[3] Update Script    ➔ آپدیت و بیلد خودکار به آخرین نسخه</div>
-                <div className="text-cyan-300 font-bold">[4] Set Domain       ➔ تنظیم و چنج کردن دامنه سرور</div>
-                <div className="text-emerald-300 font-bold">[5] Issue SSL        ➔ گرفتن گواهی SSL رایگان روی IP یا دامنه</div>
-                <div className="text-blue-300 font-bold">[6] Auto-Renew       ➔ فعال سازی دیمن تمدید خودکار گواهی</div>
-                <div className="text-yellow-300 font-bold">[7] Live Logs        ➔ مشاهده لاگ های زنده اکانت ها</div>
-                <div className="text-purple-300 font-bold">[8] Change Password  ➔ تغییر رمز عبور مالک</div>
-                <div className="text-rose-400 font-bold">[9] Uninstall        ➔ حذف کامل و بدون ردپا از سرور</div>
-                <div className="text-slate-400 font-bold">[0] Exit             ➔ خروج</div>
+                <div className="text-cyan-400">---------------------------------------------------------------------</div>
+                <div className="text-emerald-300 font-bold">[1]  🚀 Start Service            (Launch Telegram & Web Daemon)</div>
+                <div className="text-amber-300 font-bold">[2]  🛑 Stop Service             (Stop All Running Processes)</div>
+                <div className="text-cyan-300 font-bold">[3]  🔄 Restart Service          (Reload Server & Free Ports)</div>
+                <div className="text-blue-300 font-bold">[4]  📊 Check Status             (View Live Service & PM2 Health)</div>
+                <div className="text-yellow-300 font-bold">[5]  📜 View Live Logs           (Stream Real-Time Server Logs)</div>
+                <div className="text-purple-300 font-bold">[6]  🌐 Set / Change Domain      (Configure Custom Server Domain)</div>
+                <div className="text-emerald-300 font-bold">[7]  🔒 Issue SSL Certificate    (Install SSL for Domain or IP)</div>
+                <div className="text-blue-300 font-bold">[8]  🛡️ SSL Auto-Renewal Daemon  (Enable 24/7 Auto-Renew Service)</div>
+                <div className="text-cyan-300 font-bold">[9]  🔑 Change Admin Password    (Update Web Panel Owner Password)</div>
+                <div className="text-fuchsia-300 font-bold">[10] ⚡ Update Script            (Pull Latest Version & Rebuild)</div>
+                <div className="text-rose-400 font-bold">[11] 🗑️ Uninstall Script         (Remove Project & Clean Server)</div>
+                <div className="text-slate-400 font-bold">[0]  🚪 Exit                     (Quit Management Assistant)</div>
               </div>
 
               <p className="text-xs text-slate-400 leading-relaxed">
-                💡 این دستور به صورت فایل باینری سیستم در <code className="text-emerald-400 font-mono">/usr/local/bin/selfandtabchi</code> نصب شده و از هر پوشه‌ای در لینوکس قابل اجراست.
+                💡 این دستور به صورت فایل باینری سیستم در <code className="text-emerald-400 font-mono">/usr/local/bin/selfandtabchi</code> نصب شده و منوی آن کاملاً به زبان انگلیسی استاندارد طراحی شده تا در تمام ترمینال‌های لینوکس و SSH بدون به‌هم‌ریختگی فونت نمایش داده شود.
               </p>
             </div>
           )}

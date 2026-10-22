@@ -7,7 +7,7 @@
 set -e
 
 if [ "$EUID" -ne 0 ]; then
-  echo -e "\033[1;31m[!] خطا: لطفاً این اسکریپت را با دسترسی روت یا sudo اجرا نمایید:\033[0m"
+  echo -e "\033[1;31m[!] Error: Please run this script with root or sudo privileges:\033[0m"
   echo "    sudo bash scripts/register-cli.sh"
   exit 1
 fi
@@ -57,14 +57,14 @@ else
   cp -f /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi 2>/dev/null || true
 fi
 
-chmod 755 /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi 2>/dev/null || true
+chmod 755 /usr/local/bin/selfandtabchi /usr/bin/selfandtabchi /bin/selfandtabchi 2>/dev/null || true
 hash -r 2>/dev/null || true
 
 echo -e "\033[1;32m═══════════════════════════════════════════════════════════════════════════\033[0m"
-echo -e "\033[1;32m✓ دستور سیستمی sudo selfandtabchi با موفقیت در سرور شما نصب و فعال شد!\033[0m"
-echo -e "\033[1;36mمسیر پروژه:\033[0m \033[1;37m$PROJECT_DIR\033[0m"
+echo -e "\033[1;32m✓ Global CLI command 'sudo selfandtabchi' has been installed and activated!\033[0m"
+echo -e "\033[1;36mProject Path:\033[0m \033[1;37m$PROJECT_DIR\033[0m"
 echo -e "\033[1;32m═══════════════════════════════════════════════════════════════════════════\033[0m"
 echo ""
-echo -e "\033[1;33mهم‌اکنون کافیست در ترمینال دستور زیر را تایپ کنید:\033[0m"
+echo -e "\033[1;33mYou can now run the following command anytime in your terminal:\033[0m"
 echo -e "   \033[1;32msudo selfandtabchi\033[0m"
 echo ""

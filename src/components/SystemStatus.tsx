@@ -837,7 +837,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
       </div>
 
       {/* DEDICATED TERMINAL ASSISTANT CLI CARD (sudo selfandtabchi) */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/20 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-5">
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/20 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-5" dir="ltr">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-md">
@@ -846,16 +846,14 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-100 text-base">
-                  {lang === "fa" ? "دستیار خط فرمان ترمینال (Terminal CLI)" : "Terminal Assistant CLI"}
+                  Terminal Assistant CLI
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
                   sudo selfandtabchi
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                {lang === "fa"
-                  ? "کنترل سریع سرور از طریق SSH بدون نیاز به مرورگر (آپدیت، حذف، دامنه، SSL و ریستارت)"
-                  : "Quick server control directly via SSH (Update, Uninstall, Domain, SSL & Restart)"}
+                Quick server management directly via SSH (Start, Stop, Restart, Status, Logs, Domain, SSL, Update & Uninstall)
               </p>
             </div>
           </div>
@@ -870,84 +868,72 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
                 setCopiedCmd(true);
                 setTimeout(() => setCopiedCmd(false), 2000);
               }}
-              className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-emerald-300 transition-colors"
-              title={lang === "fa" ? "کپی دستور" : "Copy command"}
+              className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-emerald-300 transition-colors cursor-pointer"
+              title="Copy command"
             >
-              {copiedCmd ? <Check className="w-4 h-4 text-emerald-400" /> : <Save className="w-4 h-4" />}
+              {copiedCmd ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
             <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
-              <span className="w-5 h-5 rounded-md bg-emerald-500/20 flex items-center justify-center text-[11px] font-mono">3</span>
-              <span>{lang === "fa" ? "بروزرسانی خودکار" : "Update Script"}</span>
+              <span className="px-1.5 h-5 rounded-md bg-emerald-500/20 flex items-center justify-center text-[11px] font-mono">1 - 3</span>
+              <span>Start / Stop / Restart Service</span>
             </div>
             <p className="text-[11px] text-slate-400">
-              {lang === "fa"
-                ? "دریافت آخرین پکیج‌ها، بیلد مجدد و اعمال تغییرات جدید با یک عدد"
-                : "Pull latest updates, rebuild assets and reload daemon automatically"}
-            </p>
-          </div>
-
-          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
-            <div className="flex items-center gap-2 text-cyan-400 font-bold text-xs">
-              <span className="w-5 h-5 rounded-md bg-cyan-500/20 flex items-center justify-center text-[11px] font-mono">4</span>
-              <span>{lang === "fa" ? "تنظیم و چنج دامنه" : "Set & Change Domain"}</span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              {lang === "fa"
-                ? "اتصال دامنه دلخواه به آی‌پی سرور یا تغییر ساب‌دامین به سادگی"
-                : "Link custom domains or subdomains to server IP seamlessly"}
-            </p>
-          </div>
-
-          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
-            <div className="flex items-center gap-2 text-purple-400 font-bold text-xs">
-              <span className="w-5 h-5 rounded-md bg-purple-500/20 flex items-center justify-center text-[11px] font-mono">5</span>
-              <span>{lang === "fa" ? "صدور SSL برای IP یا دامنه" : "Issue SSL (IP/Domain)"}</span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              {lang === "fa"
-                ? "گرفتن گواهی امنیتی Let's Encrypt یا OpenSSL SAN برای آی‌پی سرور"
-                : "Instant SSL certificates with automatic renewal for domains and IPs"}
-            </p>
-          </div>
-
-          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
-            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
-              <span className="w-5 h-5 rounded-md bg-amber-500/20 flex items-center justify-center text-[11px] font-mono">1</span>
-              <span>{lang === "fa" ? "شروع و ریستارت سرویس" : "Start & Restart"}</span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              {lang === "fa"
-                ? "راه‌اندازی فوری پروسه و آزادسازی پورت‌ها در صورت اختلال سرور"
-                : "Restart background processes and flush ports instantly"}
+              Launch, stop, or reload the PM2 background daemon and flush ports 3000/3443 instantly.
             </p>
           </div>
 
           <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
             <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
-              <span className="w-5 h-5 rounded-md bg-blue-500/20 flex items-center justify-center text-[11px] font-mono">7</span>
-              <span>{lang === "fa" ? "مشاهده لاگ‌های زنده" : "Live PM2 Logs"}</span>
+              <span className="px-1.5 h-5 rounded-md bg-blue-500/20 flex items-center justify-center text-[11px] font-mono">4 - 5</span>
+              <span>Check Status & Live Logs</span>
             </div>
             <p className="text-[11px] text-slate-400">
-              {lang === "fa"
-                ? "مشاهده زنده فعالیت اکانت‌های سلف، تبچی و سفارش‌های ربات"
-                : "Watch real-time live logs of Telegram engine and requests"}
+              Inspect real-time PM2 process status, SSL validity, and stream live Telegram activity logs.
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-cyan-400 font-bold text-xs">
+              <span className="w-5 h-5 rounded-md bg-cyan-500/20 flex items-center justify-center text-[11px] font-mono">6</span>
+              <span>Set / Change Domain</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Link custom domains or subdomains to your server IP and sync with Telegram bots seamlessly.
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-purple-400 font-bold text-xs">
+              <span className="px-1.5 h-5 rounded-md bg-purple-500/20 flex items-center justify-center text-[11px] font-mono">7 - 8</span>
+              <span>Issue SSL & Auto-Renew</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Issue Let's Encrypt or OpenSSL SAN certificates for Domains/IPs with 24/7 auto-renewal.
+            </p>
+          </div>
+
+          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-1.5">
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+              <span className="px-1.5 h-5 rounded-md bg-amber-500/20 flex items-center justify-center text-[11px] font-mono">9 - 10</span>
+              <span>Admin Password & Update Script</span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Reset web panel owner password or pull the latest Git commits, rebuild assets, and reload.
             </p>
           </div>
 
           <div className="bg-slate-950/80 border border-red-500/20 rounded-xl p-3.5 space-y-1.5">
             <div className="flex items-center gap-2 text-red-400 font-bold text-xs">
-              <span className="w-5 h-5 rounded-md bg-red-500/20 flex items-center justify-center text-[11px] font-mono">9</span>
-              <span>{lang === "fa" ? "حذف کامل اسکریپت" : "Full Uninstall"}</span>
+              <span className="w-6 h-5 rounded-md bg-red-500/20 flex items-center justify-center text-[11px] font-mono">11</span>
+              <span>Uninstall Script</span>
             </div>
             <p className="text-[11px] text-slate-400">
-              {lang === "fa"
-                ? "توقف همه سرویس‌ها، پاکسازی کامل فایل‌ها و حذف بدون ردپا از سرور"
-                : "Safely kill processes, purge databases and wipe application cleanly"}
+              Safely stop all processes, release ports, purge databases, and wipe the application cleanly.
             </p>
           </div>
         </div>
@@ -955,9 +941,7 @@ export const SystemStatus: React.FC<SystemStatusProps> = ({
         <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-950/50 p-2.5 rounded-lg border border-slate-800">
           <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>
-            {lang === "fa"
-              ? "نکته: دستور sudo selfandtabchi در هنگام نصب اسکریپت به صورت سراسری در لینوکس ثبت شده و در هر مسیری قابل اجراست."
-              : "Tip: sudo selfandtabchi is installed as a global binary and can be called from any directory in your Linux terminal."}
+            Tip: <code className="text-emerald-400 font-mono">sudo selfandtabchi</code> is registered as a global system binary in <code className="text-slate-300 font-mono">/usr/local/bin/selfandtabchi</code> and can be executed from any directory in your Linux terminal.
           </span>
         </div>
       </div>

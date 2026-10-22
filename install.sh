@@ -118,7 +118,7 @@ register_cli() {
 register_cli
 
 if [ "$1" = "register" ] || [ "$1" = "--register" ] || [ "$1" = "cli" ]; then
-  echo -e "${GREEN}✓ دستور sudo selfandtabchi با موفقیت ثبت شد.${NC}"
+  echo -e "${GREEN}✓ Command 'sudo selfandtabchi' has been registered successfully.${NC}"
   exit 0
 fi
 
@@ -271,9 +271,9 @@ echo -e " ${BOLD}🔑 Startup Security Key:${NC}    ${YELLOW}selfsamkaren12${NC}
 echo -e " ${BOLD}🤖 Telegram Saved Messages:${NC} ${MAGENTA}/self, /tabchi, /help${NC}"
 echo ""
 echo -e "${BOLD}🚀 NEW: Terminal Assistant Command:${NC}"
-echo -e " هر زمان در ترمینال سرور دستور زیر را بزنید منوی مدیریتی فارسی باز می‌شود:"
+echo -e " Run the following command anytime in your server terminal to open the CLI management menu:"
 echo -e "   👉 ${GREEN}${BOLD}sudo selfandtabchi${NC}"
-echo -e " با این دستور می‌توانید اسکریپت را ${YELLOW}بروزرسانی، حذف، تنظیم دامنه، دریافت SSL و تغییر IP${NC} کنید."
+echo -e " Use it to ${YELLOW}Start/Stop/Restart Service, Update, Uninstall, Set Domain, Issue SSL & View Logs${NC}."
 echo ""
 echo -e "${BOLD}📌 Important (24/7 Background Persistence):${NC}"
 echo -e " ✔ The application runs independently as a ${GREEN}PM2 background daemon${NC}."
