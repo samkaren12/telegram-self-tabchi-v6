@@ -152,40 +152,47 @@ export default function App() {
         fetch("/api/status", { headers }),
       ]);
 
-      if (accRes.ok) {
+      const isJsonResponse = (res: Response) =>
+        res.ok && (res.headers.get("content-type") || "").includes("application/json");
+
+      if (isJsonResponse(accRes)) {
         const accData = await accRes.json();
-        const accs: TelegramAccount[] = accData.accounts || [];
+        if (accData && Array.isArray(accData.accounts)) {
+          const accs: TelegramAccount[] = accData.accounts;
 
-        // Check if any tabchi broadcast or pm broadcast finished
-        accs.forEach((acc) => {
-          const isBroadcastingNow =
-            acc.features?.tabchi?.status === "broadcasting" ||
-            acc.features?.broadcast?.status === "broadcasting";
-          const wasBroadcasting = prevBroadcastingMapRef.current.get(acc.phone) ?? false;
+          // Check if any tabchi broadcast or pm broadcast finished
+          accs.forEach((acc) => {
+            const isBroadcastingNow =
+              acc.features?.tabchi?.status === "broadcasting" ||
+              acc.features?.broadcast?.status === "broadcasting";
+            const wasBroadcasting = prevBroadcastingMapRef.current.get(acc.phone) ?? false;
 
-          if (wasBroadcasting && !isBroadcastingNow) {
-            playSound("broadcast_completed");
+            if (wasBroadcasting && !isBroadcastingNow) {
+              playSound("broadcast_completed");
+            }
+            prevBroadcastingMapRef.current.set(acc.phone, isBroadcastingNow);
+          });
+
+          setAccounts(accs);
+          if (accs.length > 0 && (!selectedPhone || !accs.find((a) => a.phone === selectedPhone))) {
+            setSelectedPhone(accs[0].phone);
           }
-          prevBroadcastingMapRef.current.set(acc.phone, isBroadcastingNow);
-        });
-
-        setAccounts(accs);
-        if (accs.length > 0 && (!selectedPhone || !accs.find((a) => a.phone === selectedPhone))) {
-          setSelectedPhone(accs[0].phone);
         }
       }
 
-      if (statusRes.ok) {
+      if (isJsonResponse(statusRes)) {
         const healthData = await statusRes.json();
-        setSystemHealth(healthData);
+        if (healthData && typeof healthData.status === "string") {
+          setSystemHealth(healthData);
+        }
       }
 
       // Check store pending orders for owner
       if (authSession?.role !== "customer") {
         fetch("/api/store-bot/data")
-          .then((res) => res.json())
+          .then((res) => (isJsonResponse(res) ? res.json() : null))
           .then((storeJson) => {
-            if (storeJson.success && storeJson.data?.orders) {
+            if (storeJson && storeJson.success && storeJson.data?.orders) {
               const orders = storeJson.data.orders;
               const pending = orders.filter((o: any) => o.status === "pending").length;
               setStorePendingCount(pending);
@@ -212,8 +219,8 @@ export default function App() {
           })
           .catch(() => {});
       }
-    } catch (err) {
-      console.error("Error polling server:", err);
+    } catch {
+      // Transient polling error (e.g., server restarting); silently retry on next interval
     } finally {
       setLoading(false);
     }

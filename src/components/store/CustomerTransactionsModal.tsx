@@ -85,7 +85,7 @@ export function CustomerTransactionsModal({
           if (Array.isArray(data.extensions)) setLiveExtensions(data.extensions);
         }
       })
-      .catch((err) => console.error("Error fetching transactions:", err))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [isOpen, customer.userId]);
 

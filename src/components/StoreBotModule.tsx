@@ -324,8 +324,8 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
           }
         }
       }
-    } catch (err) {
-      console.error("Error fetching store data:", err);
+    } catch {
+      // Transient error fetching store data; will retry on next poll
     } finally {
       setLoading(false);
     }

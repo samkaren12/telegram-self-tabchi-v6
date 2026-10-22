@@ -88,8 +88,7 @@ export const SupportBotManager: React.FC<SupportBotManagerProps> = ({ lang }) =>
           setSelectedTicketId(json.data.tickets[0].id);
         }
       }
-    } catch (err: any) {
-      console.error("Error fetching support bot data:", err);
+    } catch {
       showToast("error", "خطا در دریافت اطلاعات ربات پشتیبانی");
     } finally {
       setLoading(false);

@@ -2847,6 +2847,26 @@ echo "======================================================================"
   });
 
   // ==========================================
+  // API 404 & ERROR HANDLER (PREVENT HTML FALLBACK FOR /api/*)
+  // ==========================================
+  app.use("/api", (req, res) => {
+    res.status(404).json({
+      success: false,
+      error: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+    });
+  });
+
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith("/api")) {
+      return res.status(err?.status || 500).json({
+        success: false,
+        error: err?.message || "Internal server error",
+      });
+    }
+    next(err);
+  });
+
+  // ==========================================
   // VITE MIDDLEWARE SETUP
   // ==========================================
   if (process.env.NODE_ENV !== "production") {
