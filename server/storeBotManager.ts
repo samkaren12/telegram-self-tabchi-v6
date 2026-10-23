@@ -17,6 +17,7 @@ import {
   StoreKeyboardMode,
   StoreButtonTheme,
 } from "../src/types.js";
+import { telegramManager } from "./telegramManager.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_DATA_FILE = path.join(DATA_DIR, "store_bot.json");
@@ -261,9 +262,10 @@ export function defaultStoreData(): StoreData {
       switchKeyboard: "🔄 تغییر به کیبورد معمولی (پایین)",
     },
     welcomeText:
-      "👋 درود به فروشگاه بزرگ اکانت‌های سلف هوشمند و تبچی خوش آمدید!\n\n🚀 در این ربات می‌توانید انواع اشتراک‌های سلف زمان‌دار و تبچی تبلیغاتی را با تحویل آنی و پشتیبانی ۲۴ ساعته خریداری نمایید.",
+      "👋 درود به فروشگاه بزرگ اکانت‌های سلف هوشمند و تبچی خوش آمدید!\n\n🚀 در این ربات می‌توانید انواع اشتراک‌های سلف زمان‌دار و تبچی تبلیغاتی را با تحویل آنی، اتصال خودکار شماره داخل ربات و پشتیبانی ۲۴ ساعته خریداری نمایید.",
     rulesText:
-      "تمامی اشتراک‌ها به صورت آنی پس از تأیید پرداخت تحویل داده شده و دسترسی وب پنل به شما اختصاص خواهد یافت.",
+      "تمامی اشتراک‌ها به صورت آنی پس از تأیید پرداخت تحویل داده شده و شماره شما به صورت خودکار درون همین ربات متصل و فعال خواهد شد.",
+    autoConnectAfterApproval: true,
     stats: {
       totalUsers: 0,
       totalOrders: 0,
@@ -378,13 +380,52 @@ export class StoreBotManager {
   private userSessions: Map<
     number | string,
     {
-      state: "idle" | "awaiting_receipt" | "awaiting_coupon";
+      state:
+        | "idle"
+        | "awaiting_receipt"
+        | "awaiting_coupon"
+        | "awaiting_self_phone"
+        | "awaiting_self_code"
+        | "awaiting_self_2fa";
       pendingPlanId?: string;
       pendingPaymentMethod?: "card" | "crypto";
       selectedCryptoNetwork?: string;
       appliedDiscountPercent?: number;
+      activeOrderId?: string;
+      onboardingPhone?: string;
+      loginSessionId?: string;
+      enteredCode?: string;
+      passwordHint?: string;
     }
   > = new Map();
+
+  private toEnglishDigits(str: string): string {
+    const fa = "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩";
+    const en = "01234567890123456789";
+    return (str || "").replace(/[۰-۹٠-٩]/g, (ch) => {
+      const idx = fa.indexOf(ch);
+      return idx >= 0 ? en[idx] : ch;
+    });
+  }
+
+  private normalizePhoneInput(raw: string): string {
+    let cleaned = this.toEnglishDigits(raw)
+      .replace(/[\s\-\(\)\.]/g, "")
+      .trim();
+    if (!cleaned) return "";
+    if (cleaned.startsWith("00")) {
+      cleaned = "+" + cleaned.slice(2);
+    } else if (cleaned.startsWith("09") && cleaned.length === 11) {
+      cleaned = "+98" + cleaned.slice(1);
+    } else if (cleaned.startsWith("9") && cleaned.length === 10) {
+      cleaned = "+98" + cleaned;
+    } else if (cleaned.startsWith("989") && cleaned.length === 12) {
+      cleaned = "+" + cleaned;
+    } else if (!cleaned.startsWith("+") && /^\d{8,15}$/.test(cleaned)) {
+      cleaned = "+" + cleaned;
+    }
+    return cleaned;
+  }
 
   constructor() {
     this.data = this.loadData();
@@ -934,14 +975,72 @@ export class StoreBotManager {
 
     const session = this.userSessions.get(chatId) || { state: "idle" };
 
+    // Allow global cancel / menu reset at any time
+    if (text === "/start" || text === "منو" || text === "menu" || text === "❌ انصراف و بازگشت به منو") {
+      this.userSessions.delete(chatId);
+      await this.sendMainMenu(chatId);
+      return;
+    }
+
+    // =========================================================================
+    // AUTOMATED SELF / TABCHI ONBOARDING STATE MACHINE (PHONE -> CODE -> 2FA)
+    // =========================================================================
+
+    // STEP 1: Customer sends Phone Number (or shares Telegram Contact)
+    if (session.state === "awaiting_self_phone" || (msg.contact && session.activeOrderId)) {
+      const rawPhone = msg.contact?.phone_number || text;
+      if (!rawPhone || rawPhone.includes("انصراف")) {
+        this.userSessions.delete(chatId);
+        await this.sendMainMenu(chatId);
+        return;
+      }
+      await this.handleOnboardingPhoneInput(chatId, rawPhone, session.activeOrderId);
+      return;
+    }
+
+    // STEP 2: Customer sends Verification Code via chat text (e.g., "1 2 3 4 5" or "12345")
+    if (session.state === "awaiting_self_code") {
+      if (text.includes("تغییر شماره") || text === "/phone") {
+        await this.startOrderOnboarding(chatId, session.activeOrderId || "");
+        return;
+      }
+      const digitsOnly = this.toEnglishDigits(text).replace(/\D/g, "");
+      if (digitsOnly.length >= 4 && digitsOnly.length <= 6) {
+        await this.verifyOnboardingCode(chatId, session.activeOrderId || "", digitsOnly);
+      } else {
+        await this.sendMessage(
+          chatId,
+          `⚠️ *فرمت کد تایید نامعتبر است!*\n\nلطفاً کد ۵ رقمی ارسال‌شده از طرف تلگرام را از طریق *کیبورد شیشه‌ای بالا* وارد کنید، و یا ارقام آن را با فاصله بفرستید (مثال: \`1 2 3 4 5\`).`,
+          { parse_mode: "Markdown" }
+        );
+      }
+      return;
+    }
+
+    // STEP 3: Customer sends 2FA Cloud Password
+    if (session.state === "awaiting_self_2fa") {
+      if (!text) {
+        await this.sendMessage(chatId, "🔐 لطفاً رمز عبور تایید دو مرحله‌ای (2FA) حساب تلگرام خود را به صورت متن ارسال نمایید:");
+        return;
+      }
+      // Delete the user's password message immediately from chat history for privacy & security
+      if (msg.message_id) {
+        this.callBotApi("deleteMessage", { chat_id: chatId, message_id: msg.message_id }).catch(() => {});
+      }
+      await this.verifyOnboarding2FA(chatId, session.activeOrderId || "", text);
+      return;
+    }
+
     // Check if user is in middle of submitting receipt/txid
     if (session.state === "awaiting_receipt" && session.pendingPlanId) {
       let receiptProof = text;
       let receiptType: "text" | "image" | "txid" = "text";
+      let receiptPhotoFileId: string | undefined;
 
       if (msg.photo && msg.photo.length > 0) {
         // user sent photo
         const bestPhoto = msg.photo[msg.photo.length - 1];
+        receiptPhotoFileId = bestPhoto.file_id;
         receiptProof = `[Photo: ${bestPhoto.file_id}] ${msg.caption || ""}`.trim();
         receiptType = "image";
       } else if (text.length > 20 && !text.includes(" ")) {
@@ -978,8 +1077,10 @@ export class StoreBotManager {
             cryptoNetwork: session.selectedCryptoNetwork,
             receiptProof: receiptProof || "رسید ثبت شد",
             receiptType,
+            receiptPhotoFileId,
           },
           status: "pending",
+          onboardingStatus: "idle",
           createdAt: new Date().toISOString(),
         };
 
@@ -997,25 +1098,68 @@ export class StoreBotManager {
         this.userSessions.delete(chatId);
 
         // Notify customer
-        const replyText = `✅ *فیش واریزی با موفقیت دریافت شد!*\n\n` +
+        const replyText =
+          `✅ *فیش واریزی شما با موفقیت ثبت گردید!*\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
           `🧾 *شناسه سفارش:* \`${orderId}\`\n` +
           `📦 *طرح انتخابی:* ${plan.title}\n` +
           `💳 *روش پرداخت:* ${newOrder.paymentMethod === "card" ? "کارت به کارت شتاب" : "پرداخت ارزی کریپتو"}\n` +
-          `💰 *مبلغ فاکتور:* ${finalToman.toLocaleString("fa-IR")} تومان (${finalUsdt} USDT)\n\n` +
-          `⏳ سفارش شما در صف بررسی مدیریت پنل قرار گرفت. به محض بررسی و تأیید، دسترسی اشتراک و وب پنل به صورت خودکار برای شما در همین ربات ارسال خواهد شد.`;
+          `💰 *مبلغ فاکتور:* ${finalToman.toLocaleString("fa-IR")} تومان (${finalUsdt} USDT)\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `⏳ *مرحله بعدی:* سفارش شما برای مدیریت ارسال شد. به محض تأیید فیش، ربات به صورت خودکار از شما *شماره موبایل اکانت* و *کد تلگرام* را دریافت کرده و سلف/تبچی شما را در کمتر از ۳۰ ثانیه روی سرور فعال می‌کند!`;
 
         await this.sendMessage(chatId, replyText, { parse_mode: "Markdown" });
 
-        // Notify Admin if telegram ID configured
+        // Notify Admin if telegram ID configured (with 1-click Approve & Auto-Connect inline buttons!)
         if (this.data.settings.ownerTelegramId) {
-          const adminNotice = `🔔 *سفارش جدید در فروشگاه ثبت شد!*\n\n` +
-            `🧾 شماره سفارش: \`${orderId}\`\n` +
-            `👤 خریدار: ${user.first_name} (@${user.username || "ندارد"})\n` +
-            `📦 پکیج: ${plan.title}\n` +
-            `💰 مبلغ: ${finalToman.toLocaleString("fa-IR")} تومان\n` +
-            `📎 رسید: ${receiptProof}\n\n` +
-            `جهت تأیید یا رد سفارش به وب پنل بخش *ربات فروشگاه* مراجعه کنید.`;
-          await this.sendMessage(this.data.settings.ownerTelegramId, adminNotice, { parse_mode: "Markdown" }).catch(() => {});
+          const adminNotice =
+            `🔔 *سفارش جدید در ربات فروشگاه ثبت شد!*\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🧾 *شماره سفارش:* \`${orderId}\`\n` +
+            `👤 *خریدار:* ${user.first_name || "کاربر"} (@${user.username || "ندارد"} | \`${user.id}\`)\n` +
+            `📦 *پکیج:* ${plan.title}\n` +
+            `💰 *مبلغ:* ${finalToman.toLocaleString("fa-IR")} تومان (${finalUsdt} USDT)\n` +
+            `💳 *روش:* ${newOrder.paymentMethod === "card" ? "کارت به کارت" : `کریپتو (${session.selectedCryptoNetwork || "USDT"})`}\n` +
+            `📎 *مشخصات رسید:* \`${receiptProof}\`\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `💡 با زدن دکمه *«✅ تأیید فیش و شروع اتصال خودکار»* در زیر، ربات بلافاصله از مشتری شماره تلفن، کد تایید و رمز دو مرحله‌ای را گرفته و اکانت را اتوماتیک وصل می‌کند:`;
+
+          const adminInlineMarkup = {
+            inline_keyboard: [
+              [
+                {
+                  text: "✅ تأیید فیش و شروع اتصال خودکار اکانت",
+                  callback_data: `admin_approve_ord_${orderId}`,
+                },
+              ],
+              [
+                {
+                  text: "❌ رد فیش واریزی",
+                  callback_data: `admin_reject_ord_${orderId}`,
+                },
+              ],
+            ],
+          };
+
+          if (receiptPhotoFileId) {
+            await this.callBotApi("sendPhoto", {
+              chat_id: this.data.settings.ownerTelegramId,
+              photo: receiptPhotoFileId,
+              caption: adminNotice,
+              parse_mode: "Markdown",
+              reply_markup: adminInlineMarkup,
+            }).catch(async () => {
+              await this.sendMessage(this.data.settings.ownerTelegramId, adminNotice, {
+                parse_mode: "Markdown",
+                reply_markup: adminInlineMarkup,
+              }).catch(() => {});
+            });
+          } else {
+            await this.sendMessage(this.data.settings.ownerTelegramId, adminNotice, {
+              parse_mode: "Markdown",
+              reply_markup: adminInlineMarkup,
+            }).catch(() => {});
+          }
         }
 
         return;
@@ -1044,13 +1188,6 @@ export class StoreBotManager {
         await this.sendMessage(chatId, `❌ کد تخفیف وارد شده نامعتبر، منقضی شده یا سقف استفاده آن تکمیل است.`);
         session.state = "idle";
       }
-      return;
-    }
-
-    // Commands & Button Clicks
-    if (text === "/start" || text === "منو" || text === "menu") {
-      this.userSessions.delete(chatId);
-      await this.sendMainMenu(chatId);
       return;
     }
 
@@ -1225,6 +1362,91 @@ export class StoreBotManager {
       const networkId = parts[0];
       const planId = parts.slice(1).join("_");
       await this.initiateCryptoPayment(chatId, planId, networkId);
+    } else if (data.startsWith("admin_approve_ord_")) {
+      const orderId = data.replace("admin_approve_ord_", "");
+      try {
+        const ord = await this.approveOrder(orderId);
+        await this.sendMessage(
+          chatId,
+          `✅ *سفارش #${ord.id} با موفقیت تأیید شد!*\n\nربات هم‌اکنون به صورت خودکار پیام دریافت شماره موبایل و کد فعال‌سازی سلف/تبچی را برای خریدار (${ord.userFirstName || ord.userId}) ارسال کرد.`,
+          { parse_mode: "Markdown" }
+        );
+      } catch (err: any) {
+        await this.sendMessage(chatId, `❌ خطا در تأیید سفارش: ${err.message}`);
+      }
+    } else if (data.startsWith("admin_reject_ord_")) {
+      const orderId = data.replace("admin_reject_ord_", "");
+      try {
+        const ord = await this.rejectOrder(orderId, "فیش واریزی ارسال شده مورد تأیید مدیریت قرار نگرفت.");
+        await this.sendMessage(chatId, `❌ سفارش #${ord.id} رد شد و اطلاع‌رسانی به کاربر انجام گردید.`);
+      } catch (err: any) {
+        await this.sendMessage(chatId, `❌ خطا در رد سفارش: ${err.message}`);
+      }
+    } else if (data.startsWith("start_onboard_")) {
+      const orderId = data.replace("start_onboard_", "");
+      await this.startOrderOnboarding(chatId, orderId);
+    } else if (data.startsWith("cancel_onboard_")) {
+      this.userSessions.delete(chatId);
+      await this.sendMessage(
+        chatId,
+        "⏸️ فرآیند اتصال خودکار فعلاً متوقف شد. هر زمان مایل بودید می‌توانید از بخش «📦 پیگیری سفارشات من» روی دکمه *«🚀 فعال‌سازی و اتصال اکانت»* کلیک کنید.",
+        { parse_mode: "Markdown", reply_markup: { remove_keyboard: true } }
+      );
+      await this.sendMainMenu(chatId);
+    } else if (data.startsWith("onboard_digit_")) {
+      // format: onboard_digit_<orderId>_<digit>
+      const rest = data.replace("onboard_digit_", "");
+      const lastUnderscore = rest.lastIndexOf("_");
+      const orderId = rest.slice(0, lastUnderscore);
+      const digit = rest.slice(lastUnderscore + 1);
+      const session = this.userSessions.get(chatId);
+      if (!session || session.state !== "awaiting_self_code") {
+        await this.startOrderOnboarding(chatId, orderId);
+        return;
+      }
+      const currentCode = (session.enteredCode || "") + digit;
+      session.enteredCode = currentCode.slice(0, 6);
+      this.userSessions.set(chatId, session);
+
+      if (session.enteredCode.length === 5) {
+        // Automatically submit when 5 digits are entered!
+        await this.editKeypadMessage(chatId, cb.message.message_id, orderId, session.onboardingPhone || "", session.enteredCode, true);
+        await this.verifyOnboardingCode(chatId, orderId, session.enteredCode);
+      } else {
+        await this.editKeypadMessage(chatId, cb.message.message_id, orderId, session.onboardingPhone || "", session.enteredCode, false);
+      }
+    } else if (data.startsWith("onboard_bksp_")) {
+      const orderId = data.replace("onboard_bksp_", "");
+      const session = this.userSessions.get(chatId);
+      if (session && session.state === "awaiting_self_code") {
+        session.enteredCode = (session.enteredCode || "").slice(0, -1);
+        this.userSessions.set(chatId, session);
+        await this.editKeypadMessage(chatId, cb.message.message_id, orderId, session.onboardingPhone || "", session.enteredCode, false);
+      }
+    } else if (data.startsWith("onboard_clear_")) {
+      const orderId = data.replace("onboard_clear_", "");
+      const session = this.userSessions.get(chatId);
+      if (session && session.state === "awaiting_self_code") {
+        session.enteredCode = "";
+        this.userSessions.set(chatId, session);
+        await this.editKeypadMessage(chatId, cb.message.message_id, orderId, session.onboardingPhone || "", "", false);
+      }
+    } else if (data.startsWith("onboard_submit_")) {
+      const orderId = data.replace("onboard_submit_", "");
+      const session = this.userSessions.get(chatId);
+      if (!session || !session.enteredCode || session.enteredCode.length < 4) {
+        await this.sendMessage(chatId, "⚠️ لطفاً ابتدا تمام ارقام کد ۵ رقمی تلگرام را وارد نمایید.");
+        return;
+      }
+      await this.verifyOnboardingCode(chatId, orderId, session.enteredCode);
+    } else if (data.startsWith("onboard_resend_")) {
+      const orderId = data.replace("onboard_resend_", "");
+      const session = this.userSessions.get(chatId);
+      if (session?.onboardingPhone) {
+        await this.handleOnboardingPhoneInput(chatId, session.onboardingPhone, orderId);
+      } else {
+        await this.startOrderOnboarding(chatId, orderId);
+      }
     }
   }
 
@@ -1600,11 +1822,12 @@ export class StoreBotManager {
         receiptType: "txid",
       },
       status: "approved",
+      onboardingStatus: "awaiting_phone",
       createdAt: new Date().toISOString(),
       approvedAt: new Date().toISOString(),
       generatedCredentials: {
         licenseCode,
-        portalUrl: "https://ais-dev-7f3kwsysmk5oau2mcbqqev-503749566645.europe-west2.run.app",
+        portalUrl: telegramManager.getEffectiveAppUrl(),
         notes: `پرداخت با ${starsCount} ستاره تلگرام انجام شد. استارز کسر و به صندوق اضافه گردید.`,
       },
     };
@@ -1620,6 +1843,7 @@ export class StoreBotManager {
     if (customer) {
       customer.ordersCount = (customer.ordersCount || 0) + 1;
       customer.activePlan = plan.title;
+      customer.onboardingStatus = "awaiting_phone";
       const addDays = plan.isUnlimited ? 3650 : (plan.durationDays || 30);
       customer.expiresAt = new Date(Date.now() + addDays * 86400000).toISOString();
     }
@@ -1636,17 +1860,22 @@ export class StoreBotManager {
       `⏱️ *اعتبار اشتراک:* ${plan.isUnlimited ? "مادام‌العمر" : `${plan.durationDays} روز`}\n` +
       `🔑 *کد لایسنس شما:*\n\`${licenseCode}\`\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `✨ استارز به صندوق مدیریت واریز شد و اکانت شما با موفقیت شارژ گردید. از خرید شما سپاسگزاریم!`;
+      `🚀 *اکنون نوبت اتصال خودکار اکانت شماست!* در پیام بعدی شماره تلفن خود را وارد کنید تا ربات به صورت اتوماتیک سلف/تبچی شما را متصل کند:`;
 
     await this.sendMessage(chatId, successMsg, {
       parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
+          [{ text: "🚀 شروع اتصال خودکار اکانت (تنظیم شماره)", callback_data: `start_onboard_${orderId}` }],
           [{ text: "📦 مشاهده سفارشات من", callback_data: "menu_orders" }],
-          [{ text: "🏠 بازگشت به منوی اصلی", callback_data: "main_menu" }],
         ],
       },
     });
+
+    // Automatically start phone onboarding flow
+    if (this.data.settings.autoConnectAfterApproval !== false) {
+      await this.startOrderOnboarding(chatId, orderId).catch(() => {});
+    }
 
     // Notify owner
     if (this.data.settings.ownerTelegramId) {
@@ -1656,7 +1885,8 @@ export class StoreBotManager {
         `⭐ مقدار استارز واریزی به ما: *${starsCount} Stars*\n` +
         `📦 پکیج: ${plan.title}\n` +
         `🧾 شماره فاکتور: \`${orderId}\`\n` +
-        `🔑 لایسنس صادر شده: \`${licenseCode}\``;
+        `🔑 لایسنس صادر شده: \`${licenseCode}\`\n` +
+        `📲 ربات به صورت خودکار وارد مرحله دریافت شماره و کد تلگرام از مشتری شد.`;
       await this.sendMessage(this.data.settings.ownerTelegramId, adminNotice, { parse_mode: "Markdown" }).catch(() => {});
     }
   }
@@ -1672,30 +1902,57 @@ export class StoreBotManager {
       return;
     }
 
-    let text = `📦 *لیست سفارشات و تاریخچه خریدهای شما:*\n\n`;
+    let text = `📦 *لیست سفارشات و وضعیت اتصال اکانت شما:*\n\n`;
+    const inlineButtons: any[][] = [];
 
     for (const ord of orders.slice(0, 5)) {
       const statusIcon =
-        ord.status === "approved" ? "✅ تأیید شده" : ord.status === "rejected" ? "❌ رد شده" : "⏳ در حال بررسی";
-      text += `🧾 *شماره سفارش:* \`${ord.id}\`\n` +
-        `📦 طرح: ${ord.planTitle}\n` +
+        ord.status === "approved" ? "✅ تأیید شده" : ord.status === "rejected" ? "❌ رد شده" : "⏳ در حال بررسی فیش";
+      const onboardLabel =
+        ord.onboardingStatus === "connected"
+          ? `🟢 متصل به شماره \`${ord.connectedPhone || ord.generatedCredentials?.accountPhone || ""}\``
+          : ord.status === "approved"
+          ? "🟡 آماده اتصال خودکار شماره تلگرام"
+          : "⚪ منتظر تأیید فیش";
+
+      text +=
+        `🧾 *شماره سفارش:* \`${ord.id}\`\n` +
+        `📦 طرح: *${ord.planTitle}*\n` +
         `💰 مبلغ: ${ord.finalPriceToman.toLocaleString("fa-IR")} تومان\n` +
-        `🏷️ وضعیت: ${statusIcon}\n` +
+        `🏷️ وضعیت پرداخت: ${statusIcon}\n` +
+        `📡 وضعیت اتصال سلف/تبچی: ${onboardLabel}\n` +
         `📅 تاریخ: ${new Date(ord.createdAt).toLocaleDateString("fa-IR")}\n`;
 
       if (ord.generatedCredentials?.licenseCode) {
         text += `🔑 *کد لایسنس:* \`${ord.generatedCredentials.licenseCode}\`\n`;
       }
+      if (ord.generatedCredentials?.password) {
+        text += `🔐 *رمز وب پنل:* \`${ord.generatedCredentials.password}\`\n`;
+      }
       if (ord.rejectionReason) {
         text += `⚠️ علت رد: ${ord.rejectionReason}\n`;
       }
       text += `──────────────\n`;
+
+      if (ord.status === "approved") {
+        inlineButtons.push([
+          {
+            text:
+              ord.onboardingStatus === "connected"
+                ? `🔄 تغییر شماره / اتصال مجدد (${ord.id})`
+                : `🚀 فعال‌سازی و اتصال خودکار شماره (${ord.id})`,
+            callback_data: `start_onboard_${ord.id}`,
+          },
+        ]);
+      }
     }
+
+    inlineButtons.push([{ text: "🏠 منوی اصلی", callback_data: "main_menu" }]);
 
     await this.sendMessage(chatId, text, {
       parse_mode: "Markdown",
       reply_markup: {
-        inline_keyboard: [[{ text: "🏠 منوی اصلی", callback_data: "main_menu" }]],
+        inline_keyboard: inlineButtons,
       },
     });
   }
@@ -1705,23 +1962,41 @@ export class StoreBotManager {
     const approvedOrders = this.data.orders.filter(
       (o) => String(o.userId) === String(user.id) && o.status === "approved"
     );
+    const latestApproved = approvedOrders[0];
 
     const text =
-      `👤 *حساب کاربری شما*\n\n` +
+      `👤 *حساب کاربری و وضعیت اشتراک شما*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       `🆔 شناسه کاربری تلگرام: \`${user.id}\`\n` +
       `🏷️ نام: ${user.first_name || ""} ${user.last_name || ""}\n` +
       `🔗 نام کاربری: @${user.username || "ندارد"}\n` +
       `📊 تعداد کل سفارشات: ${customer?.ordersCount || approvedOrders.length}\n` +
-      `✅ خریدهای موفق: ${approvedOrders.length}\n\n` +
-      `🌐 جهت ورود به وب پنل اختصاصی مشتریان می‌توانید از رمز اختصاصی ارسال شده پس از خرید استفاده کنید.`;
+      `✅ خریدهای تأیید شده: ${approvedOrders.length}\n` +
+      (customer?.activePlan ? `📦 پکیج فعال: *${customer.activePlan}*\n` : "") +
+      (customer?.connectedPhone ? `📱 شماره متصل‌شده به سلف/تبچی: \`${customer.connectedPhone}\`\n` : "") +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🌐 *لینک وب پنل مشتریان:*\n${telegramManager.getEffectiveAppUrl()}\n\n` +
+      `💡 در صورت داشتن سفارش تأیید شده، می‌توانید مستقیماً در همین ربات شماره خود را وارد کرده و سلف/تبچی را اتوماتیک فعال کنید.`;
+
+    const kb: any[][] = [];
+    if (latestApproved) {
+      kb.push([
+        {
+          text:
+            latestApproved.onboardingStatus === "connected"
+              ? `🔄 اتصال مجدد / تغییر شماره (${latestApproved.id})`
+              : `🚀 اتصال خودکار شماره برای سفارش ${latestApproved.id}`,
+          callback_data: `start_onboard_${latestApproved.id}`,
+        },
+      ]);
+    }
+    kb.push([{ text: "📦 سفارشات من", callback_data: "menu_orders" }]);
+    kb.push([{ text: "🏠 منوی اصلی", callback_data: "main_menu" }]);
 
     await this.sendMessage(chatId, text, {
       parse_mode: "Markdown",
       reply_markup: {
-        inline_keyboard: [
-          [{ text: "📦 سفارشات من", callback_data: "menu_orders" }],
-          [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
-        ],
+        inline_keyboard: kb,
       },
     });
   }
@@ -1750,13 +2025,15 @@ export class StoreBotManager {
 
   public async sendGuide(chatId: number | string) {
     const text =
-      `📖 *راهنمای استفاده و اتصال به وب پنل*\n\n` +
-      `۱️⃣ *خرید اشتراک:* یکی از پکیج‌های سلف یا تبچی را انتخاب کرده و مبلغ آن را واریز نمایید.\n` +
-      `۲️⃣ *ارسال فیش:* تصویر فیش یا کد رهگیری را در ربات بفرستید.\n` +
-      `۳️⃣ *تأیید مدیریت:* پس از بررسی فیش، لایسنس و مشخصات ورود به پنل مشتری برای شما ارسال می‌شود.\n` +
-      `۴️⃣ *اتصال اکانت:* وارد پنل وب شده و شماره تلگرام خود را با کد تایید یا سشن لاگین متصل کنید.\n` +
-      `۵️⃣ *ساعت و تبچی:* ساعت زنده روی نام شما فعال شده و تبچی طبق زمان‌بندی پیام‌های شما را ارسال خواهد کرد.\n\n` +
-      `💡 هر سوالی داشتید بخش پشتیبانی ۲۴ ساعته پاسخگوی شماست.`;
+      `📖 *راهنمای خرید و اتصال تمام‌خودکار سلف و تبچی*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `۱️⃣ *انتخاب پکیج و پرداخت:* یکی از پکیج‌های سلف، تبچی یا ترکیبی را انتخاب کرده و فیش واریزی خود را بفرستید.\n` +
+      `۲️⃣ *تأیید فیش:* به محض تأیید فیش توسط مدیریت، ربات پیام فعال‌سازی خودکار را برای شما ارسال می‌کند.\n` +
+      `۳️⃣ *ارسال شماره موبایل:* شماره‌ای که می‌خواهید سلف یا تبچی روی آن فعال شود را برای ربات بفرستید (مثال: \`09123456789\`).\n` +
+      `۴️⃣ *ورود کد با کیبورد شیشه‌ای:* کد ۵ رقمی ارسال شده از طرف تلگرام را روی دکمه‌های شیشه‌ای ربات وارد کنید (تا کد شما توسط تلگرام نسوزد!).\n` +
+      `۵️⃣ *رمز دو مرحله‌ای (در صورت داشتن):* اگر اکانت شما رمز دو مرحله‌ای دارد، آن را بفرستید تا ربات به صورت اتوماتیک به اکانت وصل شده و ساعت پروفایل، منشی هوشمند و تبچی شما را روشن کند!\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💡 همچنین پس از اتصال، نام کاربری و رمز عبور *وب پنل اختصاصی* نیز به شما تحویل داده می‌شود.`;
 
     await this.sendMessage(chatId, text, {
       parse_mode: "Markdown",
@@ -1764,6 +2041,432 @@ export class StoreBotManager {
         inline_keyboard: [[{ text: "🏠 منوی اصلی", callback_data: "main_menu" }]],
       },
     });
+  }
+
+  // =============================================================
+  // AUTOMATED MTPROTO ACCOUNT ONBOARDING METHODS
+  // =============================================================
+
+  private getCodeKeypadMarkup(orderId: string, currentCode: string) {
+    const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    const rows: any[][] = [];
+    for (let i = 0; i < 9; i += 3) {
+      rows.push([
+        { text: `${digits[i]}️⃣`, callback_data: `onboard_digit_${orderId}_${digits[i]}` },
+        { text: `${digits[i + 1]}️⃣`, callback_data: `onboard_digit_${orderId}_${digits[i + 1]}` },
+        { text: `${digits[i + 2]}️⃣`, callback_data: `onboard_digit_${orderId}_${digits[i + 2]}` },
+      ]);
+    }
+    rows.push([
+      { text: "⌫ اصلاح", callback_data: `onboard_bksp_${orderId}` },
+      { text: "0️⃣", callback_data: `onboard_digit_${orderId}_0` },
+      { text: "🗑️ پاکسازی", callback_data: `onboard_clear_${orderId}` },
+    ]);
+    rows.push([
+      {
+        text: `✅ تایید و اتصال (${currentCode.length}/5)`,
+        callback_data: `onboard_submit_${orderId}`,
+      },
+    ]);
+    rows.push([
+      { text: "🔄 ارسال مجدد کد", callback_data: `onboard_resend_${orderId}` },
+      { text: "✏️ تغییر شماره", callback_data: `start_onboard_${orderId}` },
+    ]);
+    rows.push([{ text: "❌ انصراف موقت", callback_data: `cancel_onboard_${orderId}` }]);
+    return { inline_keyboard: rows };
+  }
+
+  private formatKeypadMessageText(orderId: string, phone: string, currentCode: string, isVerifying = false): string {
+    const slots = [0, 1, 2, 3, 4].map((idx) => (currentCode[idx] ? `*${currentCode[idx]}*` : "▫️")).join("  ");
+    return (
+      `📲 *کد تایید تلگرام به شماره* \`${phone}\` *ارسال شد!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔢 *کد وارد شده:*   ${slots}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      (isVerifying
+        ? `⏳ *در حال بررسی کد و اتصال به اکانت تلگرام شما... لطفاً چند لحظه صبر کنید...*`
+        : `⚠️ *نکته امنیتی بسیار مهم:*\n` +
+          `جهت جلوگیری از باطل شدن کد توسط تلگرام، لطفاً کد ۵ رقمی را با *دکمه‌های شیشه‌ای زیر* وارد نمایید (به محض زدن رقم پنجم، به صورت خودکار بررسی می‌شود).\n\n` +
+          `💡 _همچنین می‌توانید ارقام کد را با فاصله در چت تایپ کنید (مثال:_ \`1 2 3 4 5\`_)_`)
+    );
+  }
+
+  private async editKeypadMessage(
+    chatId: number | string,
+    messageId: number,
+    orderId: string,
+    phone: string,
+    currentCode: string,
+    isVerifying: boolean
+  ) {
+    const text = this.formatKeypadMessageText(orderId, phone, currentCode, isVerifying);
+    await this.callBotApi("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "Markdown",
+      reply_markup: isVerifying ? undefined : this.getCodeKeypadMarkup(orderId, currentCode),
+    }).catch(() => {});
+  }
+
+  public async startOrderOnboarding(chatId: number | string, orderId: string) {
+    const order =
+      this.data.orders.find((o) => o.id === orderId) ||
+      this.data.orders.find((o) => String(o.userId) === String(chatId) && o.status === "approved");
+
+    if (!order) {
+      await this.sendMessage(chatId, "⚠️ سفارش تأیید شده‌ای برای فعال‌سازی یافت نشد.");
+      return;
+    }
+
+    order.onboardingStatus = "awaiting_phone";
+    order.onboardingError = undefined;
+    const customer = this.data.customers.find((c) => String(c.userId) === String(order.userId));
+    if (customer) {
+      customer.onboardingStatus = "awaiting_phone";
+    }
+    this.saveData();
+
+    this.userSessions.set(chatId, {
+      state: "awaiting_self_phone",
+      activeOrderId: order.id,
+    });
+
+    const serviceTypeLabel =
+      order.category === "self"
+        ? "💎 ربات سلف هوشمند"
+        : order.category === "tabchi"
+        ? "🚀 ربات تبچی تبلیغاتی"
+        : "⚡ پکیج فول سلف + تبچی";
+
+    const promptMsg =
+      `🚀 *مرحله ۱ از ۳: دریافت شماره موبایل جهت فعال‌سازی خودکار*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🧾 *سفارش:* \`${order.id}\` (${order.planTitle})\n` +
+      `🎯 *سرویس:* ${serviceTypeLabel}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📱 *لطفاً شماره تلفنی که می‌خواهید سلف/تبچی روی آن فعال شود را ارسال نمایید:*\n\n` +
+      `✅ می‌توانید شماره را به صورت متنی تایپ کنید (مثال: \`09123456789\` یا \`+989123456789\`).\n` +
+      `✅ یا اگر می‌خواهید روی *همین اکانت فعلی* فعال شود، روی دکمه *«📲 اشتراک‌گذاری سریع شماره من»* در پایین صفحه بزنید:`;
+
+    await this.sendMessage(chatId, promptMsg, {
+      parse_mode: "Markdown",
+      reply_markup: {
+        keyboard: [
+          [{ text: "📲 اشتراک‌گذاری سریع شماره من", request_contact: true }],
+          [{ text: "❌ انصراف و بازگشت به منو" }],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    });
+  }
+
+  private async handleOnboardingPhoneInput(chatId: number | string, rawPhone: string, orderId?: string) {
+    const cleanPhone = this.normalizePhoneInput(rawPhone);
+    if (!cleanPhone || !/^\+\d{8,15}$/.test(cleanPhone)) {
+      await this.sendMessage(
+        chatId,
+        `❌ *شماره وارد شده معتبر نیست!*\n\nلطفاً شماره موبایل را به صورت صحیح ارسال کنید (مثال: \`09123456789\` یا \`+989123456789\`).`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    const order =
+      this.data.orders.find((o) => o.id === orderId) ||
+      this.data.orders.find((o) => String(o.userId) === String(chatId) && o.status === "approved");
+    const effectiveOrderId = order?.id || orderId || "ORD";
+
+    await this.sendMessage(
+      chatId,
+      `⏳ *در حال اتصال به سرور اصلی تلگرام و ارسال کد تایید به شماره* \`${cleanPhone}\` *...*\nلطفاً چند ثانیه صبر کنید.`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: { remove_keyboard: true },
+      }
+    );
+
+    try {
+      const res = await telegramManager.sendCode(cleanPhone);
+      if (!res.success || !res.sessionId) {
+        throw new Error(res.message || "ارسال کد از سرور تلگرام ناموفق بود.");
+      }
+
+      this.userSessions.set(chatId, {
+        state: "awaiting_self_code",
+        activeOrderId: effectiveOrderId,
+        onboardingPhone: cleanPhone,
+        loginSessionId: res.sessionId,
+        enteredCode: "",
+      });
+
+      if (order) {
+        order.onboardingStatus = "awaiting_code";
+        order.connectedPhone = cleanPhone;
+        order.onboardingError = undefined;
+      }
+      const customer = this.data.customers.find((c) => String(c.userId) === String(chatId));
+      if (customer) {
+        customer.onboardingStatus = "awaiting_code";
+        customer.connectedPhone = cleanPhone;
+      }
+      this.saveData();
+
+      const keypadText = this.formatKeypadMessageText(effectiveOrderId, cleanPhone, "", false);
+      await this.sendMessage(chatId, keypadText, {
+        parse_mode: "Markdown",
+        reply_markup: this.getCodeKeypadMarkup(effectiveOrderId, ""),
+      });
+    } catch (err: any) {
+      if (order) {
+        order.onboardingError = err.message;
+        this.saveData();
+      }
+      await this.sendMessage(
+        chatId,
+        `❌ *خطا در ارسال کد تایید به شماره* \`${cleanPhone}\`:\n${err.message || "خطای ارتباط با تلگرام"}\n\nلطفاً مجدداً شماره صحیح را ارسال نمایید یا روی دکمه زیر کلیک کنید:`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔄 تلاش مجدد و تغییر شماره", callback_data: `start_onboard_${effectiveOrderId}` }],
+              [{ text: "🏠 بازگشت به منوی اصلی", callback_data: "main_menu" }],
+            ],
+          },
+        }
+      );
+    }
+  }
+
+  private async verifyOnboardingCode(chatId: number | string, orderId: string, code: string) {
+    const session = this.userSessions.get(chatId);
+    const order =
+      this.data.orders.find((o) => o.id === orderId) ||
+      this.data.orders.find((o) => String(o.userId) === String(chatId) && o.status === "approved");
+
+    if (!session || !session.loginSessionId || !session.onboardingPhone) {
+      await this.startOrderOnboarding(chatId, order?.id || orderId);
+      return;
+    }
+
+    try {
+      const res = await telegramManager.signIn(session.loginSessionId, code);
+
+      if ("requires2FA" in res && res.requires2FA) {
+        // Account has Two-Step Verification enabled! Transition to Step 3 (awaiting_self_2fa)
+        session.state = "awaiting_self_2fa";
+        session.passwordHint = res.hint || "";
+        this.userSessions.set(chatId, session);
+
+        if (order) {
+          order.onboardingStatus = "awaiting_2fa";
+          order.onboardingError = undefined;
+        }
+        const customer = this.data.customers.find((c) => String(c.userId) === String(chatId));
+        if (customer) {
+          customer.onboardingStatus = "awaiting_2fa";
+        }
+        this.saveData();
+
+        const twoFaPrompt =
+          `🔐 *مرحله ۳ از ۳: تایید رمز دو مرحله‌ای (Two-Step Verification)*\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `✅ کد ورود تلگرام صحیح بود! اما روی شماره \`${session.onboardingPhone}\` *رمز عبور تایید دو مرحله‌ای (2FA)* فعال است.\n\n` +
+          (res.hint ? `💡 *راهنمای رمز شما (Hint):* \`${res.hint}\`\n\n` : "") +
+          `🔑 *لطفاً رمز دو مرحله‌ای اکانت خود را در پاسخ ارسال نمایید:*\n` +
+          `_(پیام رمز شما به محض دریافت، جهت حفظ امنیت به صورت خودکار از چت پاک خواهد شد)_`;
+
+        await this.sendMessage(chatId, twoFaPrompt, {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "✏️ تغییر شماره موبایل", callback_data: `start_onboard_${order?.id || orderId}` }],
+              [{ text: "❌ انصراف موقت", callback_data: `cancel_onboard_${order?.id || orderId}` }],
+            ],
+          },
+        });
+        return;
+      }
+
+      if (res.success) {
+        await this.finalizeOrderAccountConnection(chatId, order?.id || orderId, session.onboardingPhone);
+      }
+    } catch (err: any) {
+      // Reset enteredCode so user can re-enter on the keypad
+      session.enteredCode = "";
+      this.userSessions.set(chatId, session);
+      if (order) {
+        order.onboardingError = err.message;
+        this.saveData();
+      }
+
+      await this.sendMessage(
+        chatId,
+        `❌ *خطا در تایید کد تلگرام:*\n${err.message}\n\nلطفاً کد را مجدداً با دکمه‌های شیشه‌ای زیر وارد کنید و یا دکمه *«🔄 ارسال مجدد کد»* را بزنید:`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: this.getCodeKeypadMarkup(order?.id || orderId, ""),
+        }
+      );
+    }
+  }
+
+  private async verifyOnboarding2FA(chatId: number | string, orderId: string, passwordText: string) {
+    const session = this.userSessions.get(chatId);
+    const order =
+      this.data.orders.find((o) => o.id === orderId) ||
+      this.data.orders.find((o) => String(o.userId) === String(chatId) && o.status === "approved");
+
+    if (!session || !session.loginSessionId || !session.onboardingPhone) {
+      await this.startOrderOnboarding(chatId, order?.id || orderId);
+      return;
+    }
+
+    await this.sendMessage(
+      chatId,
+      `🔐 *در حال بررسی رمز دو مرحله‌ای و راه‌اندازی اتوماتیک سلف و تبچی روی شماره* \`${session.onboardingPhone}\` *...*`,
+      { parse_mode: "Markdown" }
+    );
+
+    try {
+      const res = await telegramManager.verify2FA(session.loginSessionId, passwordText);
+      if (res.success) {
+        await this.finalizeOrderAccountConnection(chatId, order?.id || orderId, session.onboardingPhone);
+      }
+    } catch (err: any) {
+      if (order) {
+        order.onboardingError = err.message;
+        this.saveData();
+      }
+      await this.sendMessage(
+        chatId,
+        `❌ *رمز دو مرحله‌ای نادرست است یا خطایی رخ داد:*\n${err.message}\n\n` +
+          (session.passwordHint ? `💡 *راهنمای رمز (Hint):* \`${session.passwordHint}\`\n\n` : "") +
+          `لطفاً مجدداً رمز عبور دو مرحله‌ای صحیح خود را ارسال نمایید:`,
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🔄 شروع مجدد و دریافت کد جدید", callback_data: `start_onboard_${order?.id || orderId}` }],
+              [{ text: "❌ انصراف موقت", callback_data: `cancel_onboard_${order?.id || orderId}` }],
+            ],
+          },
+        }
+      );
+    }
+  }
+
+  private async finalizeOrderAccountConnection(chatId: number | string, orderId: string, phone: string) {
+    const order =
+      this.data.orders.find((o) => o.id === orderId) ||
+      this.data.orders.find((o) => String(o.userId) === String(chatId) && o.status === "approved");
+
+    const category = order?.category || "combo";
+    const durationDays = order ? order.durationDays : 30;
+    const isUnlimited = order ? order.isUnlimited : false;
+    const planTitle = order?.planTitle || "اشتراک ویژه سلف و تبچی";
+    const effectiveOrderId = order?.id || orderId || "VIP";
+
+    // Provision features, subscription expiry & self-time on TelegramManager
+    const provisioned = await telegramManager.provisionStoreAccount(phone, {
+      category,
+      durationDays,
+      isUnlimited,
+      orderId: effectiveOrderId,
+      planTitle,
+      customPassword: order?.generatedCredentials?.password,
+    });
+
+    const nowIso = new Date().toISOString();
+    if (order) {
+      order.onboardingStatus = "connected";
+      order.connectedPhone = phone;
+      order.connectedAt = nowIso;
+      order.onboardingError = undefined;
+      order.generatedCredentials = {
+        licenseCode: order.generatedCredentials?.licenseCode || `VIP-${category.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`,
+        accountPhone: phone,
+        password: provisioned.password,
+        portalUrl: provisioned.portalUrl,
+        notes: "متصل و فعال‌شده به صورت خودکار توسط ربات فروشگاه",
+      };
+    }
+
+    const customer = this.data.customers.find((c) => String(c.userId) === String(chatId));
+    if (customer) {
+      customer.connectedPhone = phone;
+      customer.onboardingStatus = "connected";
+    }
+
+    this.userSessions.delete(chatId);
+    this.saveData();
+
+    const expLabel =
+      isUnlimited || durationDays === 0
+        ? "♾️ مادام‌العمر (دائمی)"
+        : provisioned.subscription.expires_at
+        ? new Date(provisioned.subscription.expires_at).toLocaleDateString("fa-IR")
+        : `${durationDays} روز`;
+
+    const successText =
+      `🎉 *تبریک! اکانت شما با موفقیت به سرور متصل و فعال شد!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📱 *شماره متصل‌شده:* \`${phone}\`\n` +
+      `📦 *پکیج فعال‌شده:* ${planTitle}\n` +
+      `⏱️ *اعتبار اشتراک تا:* \`${expLabel}\`\n` +
+      `🟢 *وضعیت سرویس:* آنلاین و فعال (۲۴ ساعته)\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔐 *مشخصات ورود شما به وب پنل اختصاصی مشتری:*\n` +
+      `🌐 *آدرس پنل وب:* ${provisioned.portalUrl}\n` +
+      `👤 *نام کاربری (شماره):* \`${provisioned.username}\`\n` +
+      `🔑 *رمز عبور وب پنل:* \`${provisioned.password}\`\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚡ *دستورات سریع درون تلگرام (در هر چتی بفرستید):*\n` +
+      `• \`.پنل\` یا \`.راهنما\` — باز کردن منوی مدیریت سلف\n` +
+      `• \`.ساعت روشن\` — فعال‌سازی ساعت زنده پروفایل\n` +
+      `• \`.منشی روشن\` — فعال‌سازی منشی هوشمند پیوی\n` +
+      `• \`/login\` — دریافت مجدد رمز ورود به وب پنل`;
+
+    await this.sendMessage(chatId, successText, {
+      parse_mode: "Markdown",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📦 مشاهده سفارشات و اشتراک من", callback_data: "menu_orders" }],
+          [{ text: "🏠 بازگشت به منوی اصلی فروشگاه", callback_data: "main_menu" }],
+        ],
+      },
+    });
+
+    // Notify Admin on Telegram that the customer's account is now connected and live!
+    if (this.data.settings.ownerTelegramId) {
+      const adminAlert =
+        `🚀 *اتصال خودکار اکانت مشتری با موفقیت انجام شد!*\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🧾 *شماره سفارش:* \`${effectiveOrderId}\`\n` +
+        `👤 *مشتری:* ${order?.userFirstName || "کاربر"} (@${order?.userUsername || "ندارد"})\n` +
+        `📱 *شماره متصل‌شده:* \`${phone}\`\n` +
+        `📦 *پکیج:* ${planTitle}\n` +
+        `⏱️ *اعتبار:* \`${expLabel}\`\n` +
+        `🔐 *رمز وب پنل مشتری:* \`${provisioned.password}\`\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `✅ سلف و تبچی این شماره هم‌اکنون در لیست اکانت‌های وب پنل شما آنلاین و فعال است.`;
+
+      await this.sendMessage(this.data.settings.ownerTelegramId, adminAlert, { parse_mode: "Markdown" }).catch(() => {});
+    }
+  }
+
+  public async triggerOrderOnboarding(orderId: string): Promise<StoreOrder> {
+    const order = this.data.orders.find((o) => o.id === orderId);
+    if (!order) throw new Error("سفارش مورد نظر یافت نشد.");
+    if (order.status !== "approved") {
+      throw new Error("ابتدا باید سفارش را تأیید کنید تا امکان ارسال درخواست شماره فعال شود.");
+    }
+    if (!this.data.settings.botToken) {
+      throw new Error("توکن ربات فروشگاه تنظیم نشده است.");
+    }
+    await this.startOrderOnboarding(order.userId, order.id);
+    return order;
   }
 
   // =============================================================
@@ -1779,6 +2482,11 @@ export class StoreBotManager {
 
     order.status = "approved";
     order.approvedAt = new Date().toISOString();
+    order.onboardingStatus = credentials?.accountPhone ? "connected" : "awaiting_phone";
+    if (credentials?.accountPhone) {
+      order.connectedPhone = credentials.accountPhone;
+      order.connectedAt = new Date().toISOString();
+    }
 
     const license =
       credentials?.licenseCode ||
@@ -1788,6 +2496,7 @@ export class StoreBotManager {
       licenseCode: license,
       accountPhone: credentials?.accountPhone,
       password: credentials?.password,
+      portalUrl: telegramManager.getEffectiveAppUrl(),
       notes: credentials?.notes || "فعال‌سازی موفق توسط مدیریت",
     };
 
@@ -1798,6 +2507,10 @@ export class StoreBotManager {
       const prevExpiry = customer.expiresAt;
       customer.ordersCount = (customer.ordersCount || 0) + 1;
       customer.activePlan = order.planTitle;
+      customer.onboardingStatus = order.onboardingStatus;
+      if (credentials?.accountPhone) {
+        customer.connectedPhone = credentials.accountPhone;
+      }
       if (order.isUnlimited || order.durationDays === 0) {
         customer.expiresAt = null;
       } else {
@@ -1823,18 +2536,31 @@ export class StoreBotManager {
 
     this.saveData();
 
-    // Send confirmation message to customer on Telegram
+    // Send confirmation message to customer on Telegram & automatically start phone/code/2FA onboarding!
     if (this.data.settings.botToken && order.userId) {
       const msg =
-        `🎉 *تبریک! سفارش شما با موفقیت تأیید و فعال شد.*\n\n` +
+        `🎉 *تبریک! فیش پرداختی شما توسط مدیریت تأیید شد!*\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
         `🧾 *شماره سفارش:* \`${order.id}\`\n` +
         `📦 *پکیج خریداری شده:* ${order.planTitle}\n` +
-        `🔑 *کد لایسنس اختصاصی:* \`${license}\`\n\n` +
-        (credentials?.accountPhone ? `📱 شماره اکانت: \`${credentials.accountPhone}\`\n` : "") +
-        (credentials?.password ? `🔐 رمز ورود به وب پنل: \`${credentials.password}\`\n` : "") +
-        `\n🌟 هم‌اکنون می‌توانید از امکانات اشتراک خود نهایت استفاده را ببرید.\nبا تشکر از اعتماد شما!`;
+        `🔑 *کد لایسنس اختصاصی:* \`${license}\`\n` +
+        (credentials?.accountPhone ? `📱 *شماره اکانت:* \`${credentials.accountPhone}\`\n` : "") +
+        (credentials?.password ? `🔐 *رمز ورود به وب پنل:* \`${credentials.password}\`\n` : "") +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🚀 *فرآیند اتصال خودکار سلف و تبچی آغاز شد!* لطفاً در پیام بعدی شماره تلفن خود را ارسال کنید تا ربات کد تلگرام و رمز دو مرحله‌ای را دریافت کرده و اکانت شما را به صورت اتوماتیک متصل کند:`;
 
-      await this.sendMessage(order.userId, msg, { parse_mode: "Markdown" }).catch(() => {});
+      await this.sendMessage(order.userId, msg, {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🚀 شروع اتصال خودکار اکانت به شماره من", callback_data: `start_onboard_${order.id}` }],
+          ],
+        },
+      }).catch(() => {});
+
+      if (!credentials?.accountPhone && this.data.settings.autoConnectAfterApproval !== false) {
+        await this.startOrderOnboarding(order.userId, order.id).catch(() => {});
+      }
     }
 
     return order;

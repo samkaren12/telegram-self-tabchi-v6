@@ -1206,7 +1206,25 @@ async function startServer() {
     try {
       const { credentials } = req.body;
       const order = await storeBotManager.approveOrder(req.params.id, credentials);
-      return res.json({ success: true, order, message: "سفارش با موفقیت تأیید شد و اعلان آنی به مشتری ارسال گردید." });
+      return res.json({
+        success: true,
+        order,
+        message: "سفارش تأیید شد و ربات به صورت خودکار وارد مرحله دریافت شماره و کد تلگرام از مشتری گردید.",
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Orders: Re-trigger / Send Automated Phone & Code Onboarding Prompt to Customer
+  app.post("/api/store-bot/orders/:id/trigger-onboarding", async (req, res) => {
+    try {
+      const order = await storeBotManager.triggerOrderOnboarding(req.params.id);
+      return res.json({
+        success: true,
+        order,
+        message: "درخواست وارد کردن شماره و اتصال خودکار سلف/تبچی مجدداً در تلگرام برای مشتری ارسال شد.",
+      });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }

@@ -28,6 +28,8 @@ import {
   Zap,
   DollarSign,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Layers,
   ArrowRight,
   ToggleLeft,
@@ -69,6 +71,12 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   const [activeSubTab, setActiveSubTab] = useState<
     "overview" | "customers" | "orders" | "plans" | "payments" | "bot_config" | "simulator" | "coupons" | "broadcast"
   >("overview");
+  const [isSubTabsWrapped, setIsSubTabsWrapped] = useState<boolean>(false);
+  const [activePipelineStep, setActivePipelineStep] = useState<number>(0);
+  const subTabsScrollRef = useRef<HTMLDivElement | null>(null);
+  const isDraggingTabsRef = useRef<boolean>(false);
+  const dragStartXRef = useRef<number>(0);
+  const dragScrollLeftRef = useRef<number>(0);
 
   // Form states
   const [botToken, setBotToken] = useState("");
@@ -80,6 +88,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   const [keyboardColumns, setKeyboardColumns] = useState<1 | 2 | 3>(2);
   const [replyKeyboardColumns, setReplyKeyboardColumns] = useState<1 | 2 | 3>(2);
   const [allowCustomerKeyboardSwitch, setAllowCustomerKeyboardSwitch] = useState<boolean>(true);
+  const [autoConnectAfterApproval, setAutoConnectAfterApproval] = useState<boolean>(true);
   const [simEffectiveMode, setSimEffectiveMode] = useState<StoreKeyboardMode>("inline");
   const [buttonTheme, setButtonTheme] = useState<StoreButtonTheme>("cyber_neon");
   const [buttonLabels, setButtonLabels] = useState<any>({});
@@ -91,7 +100,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Order modals
+  // Order modals & onboarding trigger
   const [approvingOrder, setApprovingOrder] = useState<StoreOrder | null>(null);
   const [rejectingOrder, setRejectingOrder] = useState<StoreOrder | null>(null);
   const [approvalLicense, setApprovalLicense] = useState("");
@@ -99,6 +108,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   const [approvalPassword, setApprovalPassword] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [processingOrder, setProcessingOrder] = useState(false);
+  const [triggeringOnboardId, setTriggeringOnboardId] = useState<string | null>(null);
   const [orderFilter, setOrderFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
 
   // Plan modal
@@ -140,9 +150,24 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
   // Simulator state
-  const [simStep, setSimStep] = useState<"menu" | "category" | "plan_details" | "card_pay" | "crypto_pay" | "receipt_sent">("menu");
+  const [simStep, setSimStep] = useState<
+    | "menu"
+    | "category"
+    | "plan_details"
+    | "card_pay"
+    | "crypto_pay"
+    | "receipt_sent"
+    | "onboard_phone"
+    | "onboard_code"
+    | "onboard_2fa"
+    | "onboard_connected"
+  >("menu");
   const [simSelectedPlan, setSimSelectedPlan] = useState<StorePlan | null>(null);
   const [simCategory, setSimCategory] = useState<"self" | "tabchi" | "combo">("self");
+  const [simPhone, setSimPhone] = useState("+989123456789");
+  const [simCode, setSimCode] = useState("");
+  const [sim2FA, setSim2FA] = useState("");
+  const [simNeeds2FA, setSimNeeds2FA] = useState(true);
 
   // Store Admin Credentials & Web Panel Security Gate
   const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
@@ -319,6 +344,11 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                 ? Boolean(json.data.settings.allowCustomerKeyboardSwitch)
                 : true
             );
+            setAutoConnectAfterApproval(
+              json.data.settings.autoConnectAfterApproval !== undefined
+                ? Boolean(json.data.settings.autoConnectAfterApproval)
+                : true
+            );
             setButtonTheme(json.data.settings.buttonTheme || "cyber_neon");
             setButtonLabels(json.data.settings.buttonLabels || {});
           }
@@ -431,6 +461,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
           keyboardColumns,
           replyKeyboardColumns,
           allowCustomerKeyboardSwitch,
+          autoConnectAfterApproval,
           buttonTheme,
           buttonLabels,
         }),
@@ -562,7 +593,12 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
       });
       const json = await res.json();
       if (json.success) {
-        showToast("success", "سفارش با موفقیت تأیید و اعلان تلگرام برای کاربر ارسال شد.");
+        showToast(
+          "success",
+          autoConnectAfterApproval
+            ? "سفارش تأیید شد! ربات اکنون شماره تلگرام، کد تأیید و رمز دومرحله‌ای مشتری را دریافت و خودکار متصل می‌کند 🚀"
+            : "سفارش با موفقیت تأیید و اعلان تلگرام برای کاربر ارسال شد."
+        );
         setApprovingOrder(null);
         setApprovalLicense("");
         setApprovalAccountPhone("");
@@ -575,6 +611,60 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
       showToast("error", err.message);
     } finally {
       setProcessingOrder(false);
+    }
+  };
+
+  // 1-Click Quick Approve & Auto-Trigger Onboarding
+  const handleQuickApproveOrder = async (ord: StoreOrder) => {
+    setProcessingOrder(true);
+    try {
+      const res = await fetch(`/api/store-bot/orders/${ord.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          credentials: {
+            licenseCode: `VIP-${ord.category.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`,
+          },
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast(
+          "success",
+          `سفارش #${ord.id} تأیید شد و درخواست ارسال شماره سلف/تبچی در پی‌وی تلگرام برای خریدار ارسال گردید!`
+        );
+        fetchStoreData();
+      } else {
+        showToast("error", json.message || "خطا در تأیید سفارش");
+      }
+    } catch (err: any) {
+      showToast("error", err.message || "خطای ارتباط با سرور");
+    } finally {
+      setProcessingOrder(false);
+    }
+  };
+
+  // Trigger or Re-send Onboarding Prompt to Customer in Telegram
+  const handleTriggerOnboarding = async (orderId: string) => {
+    setTriggeringOnboardId(orderId);
+    try {
+      const res = await fetch(`/api/store-bot/orders/${orderId}/trigger-onboarding`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast(
+          "success",
+          json.message || "مرحله دریافت شماره تلفن و اتصال خودکار مجدداً در تلگرام برای مشتری ارسال شد."
+        );
+        fetchStoreData();
+      } else {
+        showToast("error", json.message || "خطا در ارسال مجدد فرآیند اتصال");
+      }
+    } catch (err: any) {
+      showToast("error", err.message || "خطای ارتباط با سرور");
+    } finally {
+      setTriggeringOnboardId(null);
     }
   };
 
@@ -998,9 +1088,9 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
         </div>
       </div>
 
-      {/* Sub-Tab Navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none border-b border-slate-800">
-        {[
+      {/* Sub-Tab Navigation (Interactive Flip / Scroll / Wrap Bar) */}
+      {(() => {
+        const subTabsList = [
           { id: "overview", label: "📊 داشبورد و آمار", icon: TrendingUp },
           {
             id: "customers",
@@ -1020,35 +1110,143 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
           { id: "simulator", label: "📱 پیش‌نمایش زنده ربات تلگرام", icon: Smartphone },
           { id: "coupons", label: "🎁 کدهای تخفیف", icon: Tag, count: coupons.length },
           { id: "broadcast", label: "📢 ارسال پیام همگانی", icon: Send },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeSubTab === tab.id;
-          return (
+        ] as const;
+
+        const currentIdx = subTabsList.findIndex((t) => t.id === activeSubTab);
+
+        const scrollAndFlipSubTab = (dir: "prev" | "next") => {
+          const nextIdx =
+            dir === "next"
+              ? (currentIdx + 1) % subTabsList.length
+              : (currentIdx - 1 + subTabsList.length) % subTabsList.length;
+          const targetId = subTabsList[nextIdx].id;
+          setActiveSubTab(targetId);
+
+          requestAnimationFrame(() => {
+            const container = subTabsScrollRef.current;
+            if (!container) return;
+            const btn = container.querySelector(`[data-subtab="${targetId}"]`) as HTMLElement | null;
+            if (btn) {
+              btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }
+          });
+        };
+
+        return (
+          <div className="bg-slate-900/75 border border-slate-800/90 rounded-2xl p-2 flex items-center gap-2 shadow-lg">
+            {/* Prev Flip Button (Right in RTL) */}
             <button
-              key={tab.id}
-              onClick={() => setActiveSubTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${
-                isActive
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              type="button"
+              onClick={() => scrollAndFlipSubTab("prev")}
+              className="p-2.5 rounded-xl bg-slate-950 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all shrink-0 active:scale-95 cursor-pointer"
+              title="ورق زدن به بخش قبلی"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Scrollable / Draggable / Wrappable Tabs Container */}
+            <div
+              ref={subTabsScrollRef}
+              onWheel={(e) => {
+                if (!isSubTabsWrapped && subTabsScrollRef.current && Math.abs(e.deltaY) > 0) {
+                  subTabsScrollRef.current.scrollLeft -= e.deltaY;
+                }
+              }}
+              onMouseDown={(e) => {
+                if (!subTabsScrollRef.current) return;
+                isDraggingTabsRef.current = true;
+                dragStartXRef.current = e.pageX - subTabsScrollRef.current.offsetLeft;
+                dragScrollLeftRef.current = subTabsScrollRef.current.scrollLeft;
+              }}
+              onMouseLeave={() => {
+                isDraggingTabsRef.current = false;
+              }}
+              onMouseUp={() => {
+                isDraggingTabsRef.current = false;
+              }}
+              onMouseMove={(e) => {
+                if (!isDraggingTabsRef.current || !subTabsScrollRef.current) return;
+                e.preventDefault();
+                const x = e.pageX - subTabsScrollRef.current.offsetLeft;
+                const walk = (x - dragStartXRef.current) * 1.5;
+                subTabsScrollRef.current.scrollLeft = dragScrollLeftRef.current - walk;
+              }}
+              className={`flex-1 flex items-center gap-2 ${
+                isSubTabsWrapped
+                  ? "flex-wrap"
+                  : "overflow-x-auto scroll-smooth cursor-grab active:cursor-grabbing pb-1"
               }`}
             >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-              {typeof tab.badge === "number" && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500 text-white font-bold animate-pulse">
-                  {tab.badge}
-                </span>
-              )}
-              {typeof tab.count === "number" && !tab.badge && (
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-400">
-                  {tab.count}
-                </span>
-              )}
+              {subTabsList.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeSubTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    data-subtab={tab.id}
+                    type="button"
+                    onClick={(e) => {
+                      setActiveSubTab(tab.id as any);
+                      e.currentTarget.scrollIntoView({
+                        behavior: "smooth",
+                        block: "nearest",
+                        inline: "center",
+                      });
+                    }}
+                    className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-md shadow-cyan-500/10"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 border border-transparent"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{tab.label}</span>
+                    {"badge" in tab && typeof tab.badge === "number" && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500 text-white font-bold animate-pulse">
+                        {tab.badge}
+                      </span>
+                    )}
+                    {"count" in tab && typeof tab.count === "number" && !("badge" in tab && tab.badge) && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-400">
+                        {tab.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Next Flip Button (Left in RTL) */}
+            <button
+              type="button"
+              onClick={() => scrollAndFlipSubTab("next")}
+              className="p-2.5 rounded-xl bg-slate-950 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all shrink-0 active:scale-95 cursor-pointer"
+              title="ورق زدن به بخش بعدی"
+            >
+              <ChevronLeft className="w-4 h-4" />
             </button>
-          );
-        })}
-      </div>
+
+            {/* Page Indicator & Wrap Mode Toggle */}
+            <div className="hidden sm:flex items-center gap-1.5 pl-1 border-r border-slate-800 pr-2 shrink-0">
+              <span className="text-[11px] font-mono text-cyan-400 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                {currentIdx + 1} / {subTabsList.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsSubTabsWrapped((prev) => !prev)}
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                  isSubTabsWrapped
+                    ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
+                }`}
+                title="نمایش همه تب‌ها به صورت چندخطی یا اسلایدی"
+              >
+                {isSubTabsWrapped ? "حالت اسلایدی" : "نمایش همه"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ========================================================= */}
       {/* 1. OVERVIEW & QUICK ACTIONS */}
@@ -1082,6 +1280,183 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
               </div>
             </div>
           )}
+
+          {/* Automated Self & Tabchi Onboarding Pipeline Banner (Interactive Flipper) */}
+          <div className="bg-gradient-to-r from-cyan-950/60 via-slate-900/90 to-emerald-950/60 border border-cyan-500/40 rounded-3xl p-5 sm:p-6 space-y-5 shadow-2xl">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500/25 to-emerald-500/25 border border-cyan-500/40 flex items-center justify-center text-cyan-300 shrink-0 shadow-lg shadow-cyan-500/10">
+                  <Smartphone className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-black text-white">
+                      پایپ‌لاین اتصال خودکار سلف و تبچی پس از تأیید رسید (Zero-Touch Onboarding)
+                    </h3>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                        autoConnectAfterApproval
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                          : "bg-slate-800 text-slate-400 border-slate-700"
+                      }`}
+                    >
+                      {autoConnectAfterApproval ? "⚡ اتصال اتوماتیک فعال" : "تحویل دستی لایسنس"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    روی هر گام کلیک کنید یا با دکمه‌های «گام قبلی / گام بعدی» مراحل را ورق بزنید و در شبیه‌ساز زنده تست کنید:
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setActivePipelineStep((prev) => (prev - 1 + 4) % 4)}
+                  className="px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span>گام قبلی</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePipelineStep((prev) => (prev + 1) % 4)}
+                  className="px-3 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                >
+                  <span>گام بعدی</span>
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const simStepMap: Array<"receipt_sent" | "onboard_phone" | "onboard_code" | "onboard_connected"> = [
+                      "receipt_sent",
+                      "onboard_phone",
+                      "onboard_code",
+                      "onboard_connected",
+                    ];
+                    setActiveSubTab("simulator");
+                    setSimStep(simStepMap[activePipelineStep] || "onboard_phone");
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>اجرای گام {activePipelineStep + 1} در شبیه‌ساز</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4-Step Interactive Visual Pipeline */}
+            {(() => {
+              const pipelineSteps = [
+                {
+                  badge: "گام ۱ • تأیید فیش",
+                  title: "تأیید رسید توسط مدیریت",
+                  desc: "تأیید ۱-کلیکی فیش از داخل ربات تلگرام (پی‌وی ادمین) یا از تب سفارشات پنل وب.",
+                  detail:
+                    "به محض ارسال عکس فیش یا کد رهگیری توسط خریدار، فیش همراه با دکمه شیشه‌ای «✅ تأیید فیش و شروع اتصال خودکار» برای شما در تلگرام ارسال می‌شود.",
+                  simTarget: "receipt_sent" as const,
+                  icon: CheckCircle2,
+                  colorClass: "amber",
+                },
+                {
+                  badge: "گام ۲ • دریافت شماره",
+                  title: "دریافت شماره اکانت سلف/تبچی",
+                  desc: "مشتری شماره مورد نظر را تایپ می‌کند یا دکمه «ارسال سریع شماره تلگرام» را می‌زند.",
+                  detail:
+                    "بلافاصله پس از تأیید فیش، ربات در پی‌وی مشتری پیام می‌دهد و شماره تلفنی که می‌خواهد سلف یا تبچی روی آن نصب شود را دریافت می‌کند.",
+                  simTarget: "onboard_phone" as const,
+                  icon: Smartphone,
+                  colorClass: "cyan",
+                },
+                {
+                  badge: "گام ۳ • کد + رمز دومرحله‌ای",
+                  title: "کیبورد شیشه‌ای کد و 2FA",
+                  desc: "ارسال کد با کیبورد شیشه‌ای ضد ریووک تلگرام و دریافت خودکار رمز دو مرحله‌ای (در صورت وجود).",
+                  detail:
+                    "ربات کد ۵ رقمی تلگرام را ارسال کرده و مشتری با کیبورد شیشه‌ای شماره‌گیر کد را وارد می‌کند. اگر اکانت رمز دو مرحله‌ای داشته باشد، ربات رمز را هم می‌پرسد.",
+                  simTarget: "onboard_code" as const,
+                  icon: KeyRound,
+                  colorClass: "purple",
+                },
+                {
+                  badge: "گام ۴ • اتصال اتوماتیک",
+                  title: "نصب و فعال‌سازی آنی اکانت",
+                  desc: "اتصال مستقیم به هسته MTProto، فعال‌سازی اشتراک، ساعت زنده و ارسال مشخصات پنل به مشتری!",
+                  detail:
+                    "سشن تلگرام مشتری به صورت خودکار روی سرور ساخته شده، اشتراک طبق مدت پلن خریداری‌شده فعال می‌گردد و رمز ورود به وب‌پنل برای مشتری ارسال می‌شود.",
+                  simTarget: "onboard_connected" as const,
+                  icon: Zap,
+                  colorClass: "emerald",
+                },
+              ];
+
+              const currentStepObj = pipelineSteps[activePipelineStep] || pipelineSteps[0];
+
+              return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                    {pipelineSteps.map((st, idx) => {
+                      const StepIcon = st.icon;
+                      const isCurrent = activePipelineStep === idx;
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setActivePipelineStep(idx)}
+                          className={`rounded-2xl p-3.5 space-y-1.5 relative transition-all cursor-pointer border ${
+                            isCurrent
+                              ? "bg-slate-900 border-cyan-400 shadow-lg shadow-cyan-500/15 scale-[1.01]"
+                              : "bg-slate-950/80 border-slate-800/90 hover:border-slate-700 opacity-85 hover:opacity-100"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${
+                                isCurrent
+                                  ? "bg-cyan-500/25 text-cyan-200 border-cyan-400/50"
+                                  : "bg-slate-800 text-slate-300 border-slate-700"
+                              }`}
+                            >
+                              {st.badge}
+                            </span>
+                            <StepIcon className={`w-4 h-4 ${isCurrent ? "text-cyan-400" : "text-slate-400"}`} />
+                          </div>
+                          <div className="font-bold text-white">{st.title}</div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">{st.desc}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Active Flipped Step Detail Box */}
+                  <div className="bg-slate-950/90 border border-cyan-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold text-[11px]">
+                          جزئیات {currentStepObj.badge}
+                        </span>
+                        <span className="font-bold text-white">{currentStepObj.title}</span>
+                      </div>
+                      <p className="text-slate-300 text-[11px] leading-relaxed">{currentStepObj.detail}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSubTab("simulator");
+                          setSimStep(currentStepObj.simTarget);
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>مشاهده زنده این گام در شبیه‌ساز</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
 
           {/* Quick Guide / Feature highlights */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1371,6 +1746,115 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                     </div>
                   </div>
 
+                  {/* Automated Account Connection / Onboarding Pipeline Status */}
+                  {ord.status === "approved" && (
+                    <div className="bg-slate-950/80 border border-cyan-500/30 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Smartphone className="w-4 h-4 text-cyan-400" />
+                          <span className="text-xs font-bold text-white">
+                            وضعیت اتصال خودکار اکانت سلف/تبچی در ربات:
+                          </span>
+                          {ord.onboardingStatus === "connected" ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>متصل و فعال روی شماره {ord.connectedPhone || ord.generatedCredentials?.accountPhone}</span>
+                            </span>
+                          ) : ord.onboardingStatus === "awaiting_phone" ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse">
+                              📱 گام ۱ از ۳: در انتظار ارسال شماره تلفن توسط مشتری...
+                            </span>
+                          ) : ord.onboardingStatus === "awaiting_code" ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 animate-pulse">
+                              🔢 گام ۲ از ۳: کد ارسال شد ({ord.connectedPhone}) • منتظر ورود کد ۵ رقمی...
+                            </span>
+                          ) : ord.onboardingStatus === "awaiting_2fa" ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                              🔐 گام ۳ از ۳: در انتظار رمز دو مرحله‌ای (2FA) مشتری...
+                            </span>
+                          ) : ord.onboardingStatus === "failed" ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                              ⚠️ خطا در اتصال خودکار (نیاز به تلاش مجدد)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                              تحویل لایسنس (آماده شروع اتصال خودکار)
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => handleTriggerOnboarding(ord.id)}
+                          disabled={triggeringOnboardId === ord.id}
+                          className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all self-start sm:self-auto shrink-0"
+                          title="ارسال مجدد پیام درخواست شماره تلفن و شروع فرآیند اتصال خودکار در پی‌وی تلگرام مشتری"
+                        >
+                          {triggeringOnboardId === ord.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Smartphone className="w-3.5 h-3.5" />
+                          )}
+                          <span>
+                            {ord.onboardingStatus === "connected"
+                              ? "تغییر شماره / اتصال مجدد در تلگرام"
+                              : "📲 ارسال مجدد درخواست شماره و کد در تلگرام"}
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Visual 4-step progress bar */}
+                      <div className="grid grid-cols-4 gap-1.5 pt-1 text-[10px]">
+                        {[
+                          {
+                            label: "۱. تأیید رسید",
+                            done: true,
+                            active: false,
+                          },
+                          {
+                            label: "۲. دریافت شماره",
+                            done:
+                              ord.onboardingStatus === "awaiting_code" ||
+                              ord.onboardingStatus === "awaiting_2fa" ||
+                              ord.onboardingStatus === "connected",
+                            active: ord.onboardingStatus === "awaiting_phone",
+                          },
+                          {
+                            label: "۳. کد و رمز دومرحله‌ای",
+                            done: ord.onboardingStatus === "connected",
+                            active:
+                              ord.onboardingStatus === "awaiting_code" ||
+                              ord.onboardingStatus === "awaiting_2fa",
+                          },
+                          {
+                            label: "۴. اتصال نهایی سلف/تبچی",
+                            done: ord.onboardingStatus === "connected",
+                            active: false,
+                          },
+                        ].map((st, idx) => (
+                          <div
+                            key={idx}
+                            className={`px-2 py-1.5 rounded-lg border text-center font-semibold transition-all ${
+                              st.done
+                                ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
+                                : st.active
+                                ? "bg-cyan-950/70 border-cyan-400 text-cyan-200 animate-pulse"
+                                : "bg-slate-900/60 border-slate-800 text-slate-500"
+                            }`}
+                          >
+                            {st.done ? "✅ " : st.active ? "⏳ " : ""}
+                            {st.label}
+                          </div>
+                        ))}
+                      </div>
+
+                      {ord.onboardingError && (
+                        <div className="text-[11px] text-rose-300 bg-rose-950/40 border border-rose-500/30 rounded-lg px-3 py-1.5">
+                          علت آخرین خطا: {ord.onboardingError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Credentials if approved */}
                   {ord.generatedCredentials && (
                     <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -1379,9 +1863,14 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                         <div className="font-mono text-white">
                           کد لایسنس: <span className="text-emerald-400 font-bold">{ord.generatedCredentials.licenseCode}</span>
                         </div>
+                        {(ord.connectedPhone || ord.generatedCredentials.accountPhone) && (
+                          <div className="font-mono text-cyan-300">
+                            شماره متصل شده: <span dir="ltr">{ord.connectedPhone || ord.generatedCredentials.accountPhone}</span>
+                          </div>
+                        )}
                         {ord.generatedCredentials.password && (
                           <div className="font-mono text-slate-300">
-                            رمز وب پنل: {ord.generatedCredentials.password}
+                            رمز وب پنل مشتری: {ord.generatedCredentials.password}
                           </div>
                         )}
                       </div>
@@ -1397,7 +1886,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
 
                   {/* Action buttons if pending */}
                   {ord.status === "pending" && (
-                    <div className="flex items-center justify-end gap-3 pt-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
                       <button
                         onClick={() => {
                           setRejectingOrder(ord);
@@ -1414,10 +1903,19 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                           setApprovingOrder(ord);
                           setApprovalLicense(`VIP-${ord.category.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`);
                         }}
-                        className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5"
+                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-all flex items-center gap-1.5"
                       >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>تأیید سفارش و ارسال آنی لایسنس به تلگرام</span>
+                        <Key className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>تأیید با تنظیم دستی لایسنس</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleQuickApproveOrder(ord)}
+                        disabled={processingOrder}
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Zap className="w-4 h-4 fill-current" />
+                        <span>⚡ تأیید فوری رسید + دریافت خودکار شماره و کد در ربات</span>
                       </button>
                     </div>
                   )}
@@ -1826,6 +2324,38 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 focus:border-cyan-500 outline-none leading-relaxed"
                   />
                 </div>
+
+                {/* Automated Account Connection After Receipt Approval Toggle */}
+                <div className="bg-gradient-to-r from-emerald-950/50 to-cyan-950/50 border border-emerald-500/40 rounded-2xl p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                        <Zap className="w-4 h-4 text-emerald-400" />
+                        <span>اتصال اتوماتیک سلف و تبچی پس از تأیید رسید (Auto-Onboarding)</span>
+                      </span>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        وقتی این گزینه فعال باشد، بلافاصله پس از اینکه فیش واریزی مشتری را تأیید کردید، ربات به صورت خودکار از مشتری <strong>شماره تلگرام</strong>، سپس <strong>کد ۵ رقمی</strong> (با کیبورد شیشه‌ای ضد باطل شدن) و در صورت نیاز <strong>رمز دو مرحله‌ای (2FA)</strong> را می‌گیرد و اکانت را بدون نیاز به دخالت شما متصل و فعال می‌سازد.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoConnectAfterApproval}
+                      onClick={() => setAutoConnectAfterApproval(!autoConnectAfterApproval)}
+                      className={`relative inline-flex h-7 w-13 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        autoConnectAfterApproval
+                          ? "bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]"
+                          : "bg-slate-800"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          autoConnectAfterApproval ? "translate-x-6" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2171,11 +2701,11 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
       {/* ========================================================= */}
       {activeSubTab === "simulator" && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-white">پیش‌نمایش زنده و شبیه‌ساز چت ربات تلگرام</h2>
               <p className="text-xs text-slate-400">
-                مشاهده ظاهر دکمه‌های شیشه‌ای و کیبوردی همان‌گونه که مشتری در نرم‌افزار تلگرام می‌بیند
+                مشاهده و ورق زدن تمام مراحل خرید، تأیید رسید، دریافت شماره، کد ۵ رقمی شیشه‌ای و رمز دو مرحله‌ای
               </p>
             </div>
 
@@ -2184,12 +2714,94 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                 setSimStep("menu");
                 setSimSelectedPlan(null);
               }}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>ریستارت به منوی اول (/start)</span>
             </button>
           </div>
+
+          {/* Interactive Simulator Step Flipper */}
+          {(() => {
+            const simFlowSteps = [
+              { id: "menu", label: "۱. منوی /start" },
+              { id: "category", label: "۲. انتخاب پکیج" },
+              { id: "plan_details", label: "۳. فاکتور پلن" },
+              { id: "card_pay", label: "۴. کارت به کارت" },
+              { id: "crypto_pay", label: "۵. درگاه ارزی" },
+              { id: "receipt_sent", label: "۶. ارسال فیش" },
+              { id: "onboard_phone", label: "۷. دریافت شماره" },
+              { id: "onboard_code", label: "۸. کد شیشه‌ای" },
+              { id: "onboard_2fa", label: "۹. رمز دومرحله‌ای" },
+              { id: "onboard_connected", label: "۱۰. اتصال خودکار" },
+            ] as const;
+
+            const currentSimIdx = Math.max(
+              0,
+              simFlowSteps.findIndex((s) => s.id === simStep)
+            );
+
+            const flipSimStep = (targetStep: typeof simStep) => {
+              if (targetStep === "plan_details" && !simSelectedPlan && plans.length > 0) {
+                setSimSelectedPlan(plans[0]);
+              }
+              setSimStep(targetStep);
+            };
+
+            return (
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-cyan-300">
+                    ورق زدن مراحل شبیه‌ساز ({currentSimIdx + 1} از {simFlowSteps.length}):
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prevIdx = (currentSimIdx - 1 + simFlowSteps.length) % simFlowSteps.length;
+                        flipSimStep(simFlowSteps[prevIdx].id);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-cyan-500/20 text-slate-200 hover:text-cyan-300 border border-slate-700 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                      <span>مرحله قبلی</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextIdx = (currentSimIdx + 1) % simFlowSteps.length;
+                        flipSimStep(simFlowSteps[nextIdx].id);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    >
+                      <span>مرحله بعدی</span>
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {simFlowSteps.map((st) => {
+                    const active = simStep === st.id;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => flipSimStep(st.id)}
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                          active
+                            ? "bg-cyan-500 text-slate-950 border-cyan-400 shadow-md"
+                            : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="max-w-xl mx-auto bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl relative overflow-hidden">
             {/* Phone Notch & Header */}
@@ -2484,20 +3096,240 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
               {/* Step: Receipt Submitted Successfully */}
               {simStep === "receipt_sent" && (
                 <div className="flex justify-start animate-in fade-in">
-                  <div className="max-w-[90%] bg-emerald-950/40 border border-emerald-500/40 rounded-2xl rounded-tl-none p-4 space-y-2 text-xs">
+                  <div className="max-w-[92%] bg-emerald-950/40 border border-emerald-500/40 rounded-2xl rounded-tl-none p-4 space-y-3 text-xs">
                     <h5 className="font-bold text-emerald-300 flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                       <span>فیش واریزی با موفقیت دریافت شد!</span>
                     </h5>
-                    <p className="text-slate-300 text-[11px]">
-                      سفارش شما در صف بررسی مدیریت پنل قرار گرفت. به محض تأیید، اکانت شما فعال خواهد شد.
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      سفارش شما در صف بررسی مدیریت قرار گرفت. همچنین در تلگرام مالک ربات دکمه شیشه‌ای <strong>«✅ تأیید فیش و شروع اتصال خودکار»</strong> ارسال شده است.
                     </p>
-                    <button
-                      onClick={() => setSimStep("menu")}
-                      className="text-xs text-cyan-400 hover:text-cyan-300 font-bold pt-2 block"
-                    >
-                      🏠 بازگشت به منوی اصلی
-                    </button>
+                    <div className="pt-1 space-y-1.5">
+                      <button
+                        onClick={() => {
+                          setSimCode("");
+                          setSimStep("onboard_phone");
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-md flex items-center justify-center gap-1.5"
+                      >
+                        <Zap className="w-4 h-4 fill-current" />
+                        <span>شبیه‌سازی تأیید فیش توسط شما (شروع دریافت شماره)</span>
+                      </button>
+                      <button
+                        onClick={() => setSimStep("menu")}
+                        className="w-full text-center text-xs text-slate-400 hover:text-white py-1 block"
+                      >
+                        🏠 بازگشت به منوی اصلی
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step: Automated Onboarding 1 - Ask Phone Number */}
+              {simStep === "onboard_phone" && (
+                <div className="space-y-3 animate-in fade-in">
+                  <div className="flex justify-start">
+                    <div className="max-w-[92%] bg-slate-900 border border-cyan-500/40 rounded-2xl rounded-tl-none p-4 space-y-2.5 text-xs shadow-lg">
+                      <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>🎉 رسید پرداخت شما توسط مدیریت تأیید شد!</span>
+                      </div>
+                      <p className="text-slate-200 text-[11px] leading-relaxed">
+                        📲 <strong>گام ۱ از ۳ (دریافت شماره تلگرام):</strong>
+                        <br />
+                        لطفاً شماره تلفنی که می‌خواهید ربات سلف/تبچی روی آن فعال شود را با پیش‌شماره ارسال کنید (مثال: <code className="text-cyan-300">09123456789</code> یا <code className="text-cyan-300">+989123456789</code>) و یا روی دکمه زیر بزنید:
+                      </p>
+                      <div className="pt-2 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={simPhone}
+                            onChange={(e) => setSimPhone(e.target.value)}
+                            placeholder="+98912..."
+                            dir="ltr"
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono text-cyan-300 text-xs outline-none focus:border-cyan-500"
+                          />
+                          <button
+                            onClick={() => {
+                              setSimCode("");
+                              setSimStep("onboard_code");
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs"
+                          >
+                            ارسال شماره
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSimCode("");
+                            setSimStep("onboard_code");
+                          }}
+                          className="w-full py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[11px] flex items-center justify-center gap-1.5"
+                        >
+                          <span>📱 اشتراک‌گذاری سریع شماره تلگرام (Contact)</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step: Automated Onboarding 2 - Interactive Glass Keypad for Code */}
+              {simStep === "onboard_code" && (
+                <div className="space-y-3 animate-in fade-in">
+                  <div className="flex justify-end">
+                    <div className="bg-cyan-600 text-slate-950 font-mono text-xs px-3.5 py-2 rounded-2xl rounded-tr-none shadow-md" dir="ltr">
+                      {simPhone}
+                    </div>
+                  </div>
+                  <div className="flex justify-start">
+                    <div className="max-w-[95%] bg-slate-900 border border-purple-500/40 rounded-2xl rounded-tl-none p-4 space-y-3 text-xs shadow-lg">
+                      <div className="text-purple-300 font-bold">
+                        📩 گام ۲ از ۳: کد تأیید ۵ رقمی تلگرام ارسال شد!
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        شماره: <code className="text-cyan-300 font-mono" dir="ltr">{simPhone}</code>
+                        <br />
+                        ⚠️ برای جلوگیری از باطل شدن کد توسط تلگرام، کد را با <strong>کیبورد شیشه‌ای زیر</strong> وارد کنید:
+                      </p>
+
+                      {/* Live Code Display */}
+                      <div className="bg-slate-950 border border-purple-500/40 rounded-xl py-2.5 px-3 text-center font-mono text-sm tracking-widest text-cyan-300 font-bold">
+                        🔢 کد وارد شده: {simCode ? simCode.split("").join(" ") : "— — — — —"}
+                      </div>
+
+                      {/* Glass Keypad */}
+                      <div className="grid grid-cols-3 gap-1.5 font-mono text-xs">
+                        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                          <button
+                            key={d}
+                            onClick={() => {
+                              const next = (simCode + d).slice(0, 6);
+                              setSimCode(next);
+                              if (next.length === 5) {
+                                setTimeout(() => {
+                                  setSimStep(simNeeds2FA ? "onboard_2fa" : "onboard_connected");
+                                }, 350);
+                              }
+                            }}
+                            className="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold border border-slate-700 active:scale-95 transition-all"
+                          >
+                            {d}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setSimCode("")}
+                          className="py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 font-bold border border-rose-500/30 text-[11px]"
+                        >
+                          🔄 پاک کردن
+                        </button>
+                        <button
+                          onClick={() => {
+                            const next = (simCode + "0").slice(0, 6);
+                            setSimCode(next);
+                            if (next.length === 5) {
+                              setTimeout(() => {
+                                setSimStep(simNeeds2FA ? "onboard_2fa" : "onboard_connected");
+                              }, 350);
+                            }
+                          }}
+                          className="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold border border-slate-700"
+                        >
+                          0
+                        </button>
+                        <button
+                          onClick={() => setSimCode((prev) => prev.slice(0, -1))}
+                          className="py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 font-bold border border-amber-500/30 text-[11px]"
+                        >
+                          ⌫ حذف
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={simNeeds2FA}
+                            onChange={(e) => setSimNeeds2FA(e.target.checked)}
+                            className="rounded accent-purple-500"
+                          />
+                          <span>اکانت دارای رمز دو مرحله‌ای (2FA) است</span>
+                        </label>
+                        <button
+                          onClick={() => setSimStep(simNeeds2FA ? "onboard_2fa" : "onboard_connected")}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px]"
+                        >
+                          ✅ ثبت و بررسی کد
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step: Automated Onboarding 3 - 2FA Password */}
+              {simStep === "onboard_2fa" && (
+                <div className="space-y-3 animate-in fade-in">
+                  <div className="flex justify-start">
+                    <div className="max-w-[92%] bg-slate-900 border border-amber-500/40 rounded-2xl rounded-tl-none p-4 space-y-3 text-xs shadow-lg">
+                      <div className="text-amber-300 font-bold flex items-center gap-1.5">
+                        <Lock className="w-4 h-4 text-amber-400" />
+                        <span>🔐 گام ۳ از ۳: تایید دو مرحله‌ای (Two-Step Verification)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        کد ورود صحیح بود! روی این اکانت رمز دو مرحله‌ای (Cloud Password) فعال است.
+                        <br />
+                        💡 راهنمای رمز (Hint): <code className="text-amber-300">MySecretHint</code>
+                        <br />
+                        لطفاً رمز دو مرحله‌ای خود را ارسال نمایید (پیام شما بلافاصله برای امنیت حذف می‌شود):
+                      </p>
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <input
+                          type="password"
+                          value={sim2FA}
+                          onChange={(e) => setSim2FA(e.target.value)}
+                          placeholder="رمز دو مرحله‌ای تلگرام..."
+                          dir="ltr"
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 font-mono text-white text-xs outline-none focus:border-amber-500"
+                        />
+                        <button
+                          onClick={() => setSimStep("onboard_connected")}
+                          className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs"
+                        >
+                          تأیید و اتصال
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step: Automated Onboarding 4 - Connected & Provisioned! */}
+              {simStep === "onboard_connected" && (
+                <div className="space-y-3 animate-in fade-in">
+                  <div className="flex justify-start">
+                    <div className="max-w-[95%] bg-emerald-950/50 border border-emerald-500/50 rounded-2xl rounded-tl-none p-4 space-y-2.5 text-xs shadow-xl">
+                      <div className="text-emerald-300 font-black text-sm flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                        <span>🎉 تبریک! اکانت سلف و تبچی شما با موفقیت متصل و فعال شد!</span>
+                      </div>
+                      <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-1 font-mono text-[11px]">
+                        <div className="text-cyan-300">📱 شماره متصل شده: <span dir="ltr">{simPhone}</span></div>
+                        <div className="text-emerald-400">💎 اشتراک: {simSelectedPlan?.title || "اکانت سلف زمان‌دار VIP"}</div>
+                        <div className="text-purple-300">🔑 رمز ورود وب پنل: SK-849201</div>
+                        <div className="text-slate-300">🕒 ساعت زنده و دستورات سلف: فعال ✅</div>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        💡 می‌توانید در هر چتی دستور <code className="text-cyan-300">.پنل</code> یا <code className="text-cyan-300">.راهنما</code> را ارسال کنید.
+                      </p>
+                      <button
+                        onClick={() => setSimStep("menu")}
+                        className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs mt-1"
+                      >
+                        🏠 بازگشت به منوی اصلی فروشگاه
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

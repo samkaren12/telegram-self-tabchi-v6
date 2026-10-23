@@ -35,6 +35,8 @@ import {
   Mic,
   UserX,
   Lightbulb,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import {
@@ -71,6 +73,8 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<
     "cosmic" | "clock" | "lockPv" | "mediaSaver" | "autoReply" | "smartFilters" | "mandatoryJoin" | "tools" | "market" | "pmBroadcast" | "fonts"
   >("cosmic");
+  const [isSelfTabsWrapped, setIsSelfTabsWrapped] = useState<boolean>(false);
+  const selfTabsScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Lock PV State
   const [lockPvActive, setLockPvActive] = useState<boolean>(false);
@@ -901,9 +905,9 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
         </div>
       </div>
 
-      {/* SUB-TABS NAVIGATION */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800/80">
-        {[
+      {/* SUB-TABS NAVIGATION (Interactive Flip / Scroll / Wrap Bar) */}
+      {(() => {
+        const selfTabsList = [
           { id: "cosmic", label: lang === "fa" ? "سلف ساز سام‌کارن پرو (Samkaren Pro) 🚀" : "Samkaren Pro Arsenal", icon: Flame, color: "text-amber-400" },
           { id: "clock", label: t.self.tabs.clock, icon: Clock, color: "text-cyan-400" },
           { id: "lockPv", label: lang === "fa" ? "قفل پیوی 🔒" : "Lock PV", icon: ShieldAlert, color: "text-rose-400" },
@@ -915,25 +919,107 @@ export const SelfModule: React.FC<SelfModuleProps> = ({
           { id: "tools", label: t.self.tabs.tools, icon: Calculator, color: "text-blue-400" },
           { id: "pmBroadcast", label: t.self.tabs.pmBroadcast, icon: Radio, color: "text-rose-400" },
           { id: "fonts", label: t.self.tabs.fonts, icon: Type, color: "text-purple-400" },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeSubTab === tab.id;
-          return (
+        ] as const;
+
+        const currentSelfIdx = selfTabsList.findIndex((item) => item.id === activeSubTab);
+
+        const flipSelfTab = (dir: "prev" | "next") => {
+          const nextIdx =
+            dir === "next"
+              ? (currentSelfIdx + 1) % selfTabsList.length
+              : (currentSelfIdx - 1 + selfTabsList.length) % selfTabsList.length;
+          const targetId = selfTabsList[nextIdx].id;
+          setActiveSubTab(targetId);
+
+          requestAnimationFrame(() => {
+            const container = selfTabsScrollRef.current;
+            if (!container) return;
+            const btn = container.querySelector(`[data-selftab="${targetId}"]`) as HTMLElement | null;
+            if (btn) {
+              btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }
+          });
+        };
+
+        return (
+          <div className="bg-slate-900/75 border border-slate-800/90 rounded-2xl p-2 flex items-center gap-2 shadow-lg">
             <button
-              key={tab.id}
-              onClick={() => setActiveSubTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 ${
-                isActive
-                  ? "bg-slate-800/90 text-white shadow-lg border border-slate-700/80 backdrop-blur-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+              type="button"
+              onClick={() => flipSelfTab("prev")}
+              className="p-2.5 rounded-xl bg-slate-950 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all shrink-0 active:scale-95 cursor-pointer"
+              title="ورق زدن به تب قبلی"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            <div
+              ref={selfTabsScrollRef}
+              onWheel={(e) => {
+                if (!isSelfTabsWrapped && selfTabsScrollRef.current && Math.abs(e.deltaY) > 0) {
+                  selfTabsScrollRef.current.scrollLeft -= e.deltaY;
+                }
+              }}
+              className={`flex-1 flex items-center gap-1.5 ${
+                isSelfTabsWrapped ? "flex-wrap" : "overflow-x-auto scroll-smooth pb-1"
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? tab.color : "text-slate-400"}`} />
-              <span>{tab.label}</span>
+              {selfTabsList.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeSubTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    data-selftab={tab.id}
+                    type="button"
+                    onClick={(e) => {
+                      setActiveSubTab(tab.id as any);
+                      e.currentTarget.scrollIntoView({
+                        behavior: "smooth",
+                        block: "nearest",
+                        inline: "center",
+                      });
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 cursor-pointer ${
+                      isActive
+                        ? "bg-slate-800/90 text-white shadow-lg border border-cyan-500/40 backdrop-blur-md"
+                        : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+                    }`}
+                  >
+                    <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? tab.color : "text-slate-400"}`} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => flipSelfTab("next")}
+              className="p-2.5 rounded-xl bg-slate-950 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-slate-800 hover:border-cyan-500/40 transition-all shrink-0 active:scale-95 cursor-pointer"
+              title="ورق زدن به تب بعدی"
+            >
+              <ChevronLeft className="w-4 h-4" />
             </button>
-          );
-        })}
-      </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 pl-1 border-r border-slate-800 pr-2 shrink-0">
+              <span className="text-[11px] font-mono text-cyan-400 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                {currentSelfIdx + 1} / {selfTabsList.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsSelfTabsWrapped((prev) => !prev)}
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                  isSelfTabsWrapped
+                    ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                    : "bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200"
+                }`}
+              >
+                {isSelfTabsWrapped ? "حالت اسلایدی" : "نمایش همه"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 0. SUB-TAB: COSMIC ARSENAL SUPER-SUITE */}
       {activeSubTab === "cosmic" && (

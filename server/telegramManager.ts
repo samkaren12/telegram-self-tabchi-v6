@@ -964,6 +964,114 @@ export class TelegramManager {
     return account.subscription;
   }
 
+  public async provisionStoreAccount(
+    phone: string,
+    options: {
+      category: "self" | "tabchi" | "combo" | "subscription";
+      durationDays: number;
+      isUnlimited: boolean;
+      orderId: string;
+      planTitle: string;
+      customPassword?: string;
+    }
+  ) {
+    let cleanPhone = phone.replace(/[\s\-\(\)]/g, "");
+    if (!cleanPhone.startsWith("+")) cleanPhone = "+" + cleanPhone;
+
+    const account = this.accounts.get(cleanPhone);
+    if (!account) {
+      throw new Error(`اکانت ${cleanPhone} در لیست سشن‌های سرور یافت نشد.`);
+    }
+
+    // 1. Update Subscription
+    const sub = this.updateAccountSubscription(cleanPhone, {
+      is_unlimited: Boolean(options.isUnlimited || options.durationDays === 0),
+      days_to_add: options.isUnlimited ? undefined : options.durationDays || 30,
+      notes: `خریداری و متصل‌شده خودکار از ربات فروشگاه • فاکتور #${options.orderId} (${options.planTitle})`,
+    });
+
+    // 2. Configure Self & Tabchi Access based on purchased plan category
+    const hasSelf =
+      options.category === "self" ||
+      options.category === "combo" ||
+      options.category === "subscription";
+    const hasTabchi =
+      options.category === "tabchi" ||
+      options.category === "combo" ||
+      options.category === "subscription";
+
+    account.features.self_access = {
+      enabled: hasSelf,
+      expires_at: sub.expires_at || null,
+    };
+    account.features.tabchi_access = {
+      enabled: hasTabchi,
+      expires_at: sub.expires_at || null,
+    };
+
+    // Enable live profile clock automatically if Self is included
+    if (hasSelf && account.features.self_time) {
+      account.features.self_time.active = true;
+    }
+
+    // Update customer web panel credentials if customPassword provided
+    if (options.customPassword && account.client_credentials) {
+      account.client_credentials.password = options.customPassword.trim();
+    }
+
+    this.saveState();
+
+    // Restart self-time loop if worker is active
+    const worker = this.workers.get(cleanPhone);
+    if (worker && hasSelf) {
+      this.setupSelfTimeLoop(cleanPhone, worker);
+    }
+
+    // Also send a welcome message into the user's Saved Messages ("me")
+    if (worker?.client) {
+      try {
+        const expText = sub.is_unlimited
+          ? "♾️ مادام‌العمر (دائمی)"
+          : sub.expires_at
+          ? new Date(sub.expires_at).toLocaleDateString("fa-IR")
+          : `${options.durationDays} روز`;
+        await worker.client.sendMessage("me", {
+          message:
+            `🚀 <b>سرویس ${options.planTitle} با موفقیت روی این اکانت فعال شد!</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🧾 <b>شماره سفارش:</b> <code>${options.orderId}</code>\n` +
+            `📱 <b>شماره متصل‌شده:</b> <code>${cleanPhone}</code>\n` +
+            `⏱️ <b>اعتبار اشتراک:</b> <code>${expText}</code>\n` +
+            `💎 <b>وضعیت سلف هوشمند:</b> ${hasSelf ? "✅ فعال (ساعت زنده و منشی آماده)" : "➖ غیرفعال"}\n` +
+            `📣 <b>وضعیت تبچی تبلیغاتی:</b> ${hasTabchi ? "✅ فعال و آماده ارسال" : "➖ غیرفعال"}\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🔐 <b>مشخصات ورود به وب پنل مشتری:</b>\n` +
+            `🌐 <b>آدرس پنل:</b> ${this.getEffectiveAppUrl()}\n` +
+            `👤 <b>نام کاربری:</b> <code>${account.client_credentials?.username || cleanPhone}</code>\n` +
+            `🔑 <b>رمز عبور:</b> <code>${account.client_credentials?.password || ""}</code>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `💡 <i>در هر چتی کلمه</i> <code>.پنل</code> <i>یا</i> <code>.راهنما</code> <i>را ارسال کنید تا منوی مدیریت سلف باز شود.</i>`,
+          parseMode: "html",
+        });
+      } catch (_) {}
+    }
+
+    this.addLog(
+      "success",
+      "system",
+      `✅ اکانت ${cleanPhone} به صورت خودکار برای سفارش فروشگاه #${options.orderId} (${options.planTitle}) فعال و پیکربندی شد.`,
+      cleanPhone
+    );
+
+    return {
+      account,
+      portalUrl: this.getEffectiveAppUrl(),
+      username: account.client_credentials?.username || cleanPhone,
+      password: account.client_credentials?.password || "",
+      subscription: sub,
+    };
+  }
+
   // -------------------------------------------------------------
   // REAL TELEGRAM AUTHENTICATION FLOW
   // -------------------------------------------------------------

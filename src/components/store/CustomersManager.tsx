@@ -786,15 +786,36 @@ export function CustomersManager({
                         </div>
                       </td>
 
-                      {/* Active Plan */}
+                      {/* Active Plan & Connected Self/Tabchi Phone */}
                       <td className="py-3 px-3">
-                        {customer.activePlan ? (
-                          <span className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-200 border border-slate-700/80 inline-block">
-                            {customer.activePlan}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500 text-[11px]">طرحی فعال نیست</span>
-                        )}
+                        <div className="space-y-1">
+                          {customer.activePlan ? (
+                            <span className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-200 border border-slate-700/80 inline-block">
+                              {customer.activePlan}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-[11px] block">طرحی فعال نیست</span>
+                          )}
+                          {customer.connectedPhone ? (
+                            <span
+                              className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1"
+                              dir="ltr"
+                            >
+                              <Smartphone className="w-3 h-3 text-emerald-400" />
+                              <span>{customer.connectedPhone}</span>
+                            </span>
+                          ) : customer.onboardingStatus && customer.onboardingStatus !== "idle" ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 inline-block">
+                              {customer.onboardingStatus === "awaiting_phone"
+                                ? "📲 منتظر ارسال شماره"
+                                : customer.onboardingStatus === "awaiting_code"
+                                ? "🔢 منتظر کد ۵ رقمی"
+                                : customer.onboardingStatus === "awaiting_2fa"
+                                ? "🔐 منتظر رمز دومرحله‌ای"
+                                : "⚠️ در حال اتصال"}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
 
                       {/* Expiration Status */}

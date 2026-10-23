@@ -513,6 +513,7 @@ export interface StoreBotSettings {
   buttonLabels: StoreBotButtonLabels;
   welcomeText: string;
   rulesText?: string;
+  autoConnectAfterApproval?: boolean;
   stats: {
     totalUsers: number;
     totalOrders: number;
@@ -520,6 +521,14 @@ export interface StoreBotSettings {
     totalRevenueUsdt: number;
   };
 }
+
+export type StoreOnboardingStatus =
+  | "idle"
+  | "awaiting_phone"
+  | "awaiting_code"
+  | "awaiting_2fa"
+  | "connected"
+  | "failed";
 
 export interface StoreOrder {
   id: string;
@@ -542,8 +551,13 @@ export interface StoreOrder {
     walletAddress?: string;
     receiptProof?: string;
     receiptType?: "image" | "text" | "txid";
+    receiptPhotoFileId?: string;
   };
   status: "pending" | "approved" | "rejected";
+  onboardingStatus?: StoreOnboardingStatus;
+  connectedPhone?: string;
+  connectedAt?: string;
+  onboardingError?: string;
   adminNote?: string;
   rejectionReason?: string;
   createdAt: string;
@@ -591,6 +605,8 @@ export interface StoreCustomer {
   expiresAt?: string | null;
   preferredKeyboardMode?: StoreKeyboardMode;
   extensionsHistory?: StoreSubscriptionExtension[];
+  connectedPhone?: string;
+  onboardingStatus?: StoreOnboardingStatus;
 }
 
 export interface StoreAdminCredentials {
