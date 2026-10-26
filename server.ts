@@ -769,7 +769,9 @@ async function startServer() {
   });
 
   // Accounts list (sanitized & tenant-scoped)
-  app.get("/api/accounts", (req, res) => {
+  app.get("/api/accounts", async (req, res) => {
+    // Live refresh account names from Telegram so profile name changes in Telegram are immediately reflected!
+    await telegramManager.syncLiveAccountProfiles().catch(() => {});
     const session = getSessionFromReq(req);
     let accounts = telegramManager.getAccounts();
 
@@ -780,6 +782,21 @@ async function startServer() {
 
     const sanitized = accounts.map((a) => sanitizeAccount(a));
     res.json({ accounts: sanitized });
+  });
+
+  // Explicit sync live account names from Telegram
+  app.post("/api/accounts/sync-names", async (_req, res) => {
+    try {
+      const syncResult = await telegramManager.syncLiveAccountProfiles();
+      const sanitized = syncResult.accounts.map((a) => sanitizeAccount(a));
+      return res.json({
+        success: true,
+        accounts: sanitized,
+        message: "نام و مشخصات پروفایل تمامی اکانت‌ها از تلگرام همگام‌سازی شد.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
   });
 
   // Web Panel Authentication: Owner & Customer Logins
@@ -1059,6 +1076,147 @@ async function startServer() {
       }
       const data = storeBotManager.getData();
       return res.json({ success: true, status: data.settings.status, message: enabled ? "سرویس ربات فروشگاه روشن شد." : "سرویس ربات فروشگاه متوقف شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // STORE BOT CATEGORIES CRUD APIS
+  // ==========================================
+  app.get("/api/store-bot/categories", (_req, res) => {
+    try {
+      const categories = storeBotManager.getCategories();
+      return res.json({ success: true, categories });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/categories", (req, res) => {
+    try {
+      const { title, description, icon, badge, color, customEmojiId, orderIndex, isActive } = req.body;
+      if (!title || !title.trim()) {
+        return res.status(400).json({ success: false, message: "عنوان دسته‌بندی الزامی است." });
+      }
+      const category = storeBotManager.addCategory({
+        title: title.trim(),
+        description,
+        icon: icon || "📁",
+        badge,
+        color: color || "cyan",
+        customEmojiId,
+        orderIndex: Number(orderIndex) || 1,
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
+      });
+      return res.json({ success: true, category, message: "دسته‌بندی جدید با موفقیت اضافه شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/store-bot/categories/:id", (req, res) => {
+    try {
+      const category = storeBotManager.updateCategory(req.params.id, req.body);
+      return res.json({ success: true, category, message: "دسته‌بندی با موفقیت بروزرسانی شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/store-bot/categories/:id", (req, res) => {
+    try {
+      storeBotManager.deleteCategory(req.params.id);
+      return res.json({ success: true, message: "دسته‌بندی با موفقیت حذف گردید." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.patch("/api/store-bot/categories/:id/toggle", (req, res) => {
+    try {
+      const category = storeBotManager.toggleCategory(req.params.id);
+      return res.json({
+        success: true,
+        category,
+        message: category.isActive ? "دسته‌بندی در ربات فعال شد." : "دسته‌بندی غیرفعال و پنهان گردید.",
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // STORE BOT CHANNELS & REPORTS APIS
+  // ==========================================
+  app.post("/api/store-bot/channels/test", async (req, res) => {
+    try {
+      const { channel } = req.body;
+      const result = await storeBotManager.testChannel(channel);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ valid: false, error: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/channels/test-report", async (_req, res) => {
+    try {
+      const sampleOrder: any = {
+        id: `DEMO-${Math.floor(1000 + Math.random() * 9000)}`,
+        planTitle: "💎 اکانت سلف زمان‌دار (۱ ماهه VIP)",
+        category: "self",
+        priceToman: 99000,
+        finalPriceToman: 99000,
+        priceUsdt: 1.5,
+        finalPriceUsdt: 1.5,
+        paymentMethod: "card",
+        userId: 12345678,
+        userFirstName: "علیرضا",
+        userUsername: "alireza_sample",
+        connectedPhone: "+989123456789",
+      };
+      const sent = await storeBotManager.sendPurchaseReport(sampleOrder);
+      if (sent) {
+        return res.json({ success: true, message: "پیام گزارش تستی با پوشش حریم خصوصی به کانال گزارشات ارسال گردید!" });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "ارسال ناموفق بود. اطمینان حاصل کنید کانال گزارشات فعال بوده و آیدی یا چت‌آیدی آن صحیح است.",
+        });
+      }
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/store-bot/channels/mandatory", (req, res) => {
+    try {
+      const { channels } = req.body;
+      const updated = storeBotManager.updateMandatoryChannels(channels);
+      return res.json({ success: true, mandatoryChannels: updated, message: "لیست کانال‌های عضویت اجباری ذخیره شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // ==========================================
+  // CUSTOM BUTTONS & MESSAGES TEMPLATES APIS
+  // ==========================================
+  app.put("/api/store-bot/custom-buttons", (req, res) => {
+    try {
+      const { buttons } = req.body;
+      const updated = storeBotManager.updateCustomButtons(buttons);
+      return res.json({ success: true, customButtons: updated, message: "چیدمان و رنگ دکمه‌های سفارشی ذخیره شد." });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.put("/api/store-bot/messages", (req, res) => {
+    try {
+      const { messages } = req.body;
+      const updated = storeBotManager.updateMessages(messages);
+      return res.json({ success: true, messages: updated, message: "متون و قالب پیام‌های ربات با موفقیت ذخیره شد." });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }

@@ -1467,7 +1467,13 @@ export class TelegramManager {
     account.isOnline = true;
     this.saveState();
 
-    const me = (await client.getMe()) as any;
+    const me = (await client.getMe().catch(() => null)) as any;
+    if (me) {
+      if (me.firstName !== undefined) account.firstName = me.firstName || "";
+      if (me.lastName !== undefined) account.lastName = me.lastName || "";
+      if (me.username !== undefined) account.username = me.username || "";
+      this.saveState();
+    }
     const initialStatusClass = me?.status?.className;
     const isInitiallyOnline = initialStatusClass === "UserStatusOnline";
 
@@ -7873,6 +7879,37 @@ export class TelegramManager {
 
   public getAccounts(): TelegramAccount[] {
     return Array.from(this.accounts.values());
+  }
+
+  public async syncLiveAccountProfiles() {
+    let changed = false;
+    for (const [phone, account] of this.accounts.entries()) {
+      const worker = this.workers.get(phone);
+      if (worker && worker.client && worker.client.connected) {
+        try {
+          const me = (await worker.client.getMe()) as any;
+          if (me) {
+            const newFirst = me.firstName || "";
+            const newLast = me.lastName || "";
+            const newUsername = me.username || "";
+            if (
+              account.firstName !== newFirst ||
+              account.lastName !== newLast ||
+              account.username !== newUsername
+            ) {
+              account.firstName = newFirst;
+              account.lastName = newLast;
+              account.username = newUsername;
+              changed = true;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    if (changed) {
+      this.saveState();
+    }
+    return { success: true, accounts: Array.from(this.accounts.values()) };
   }
 
   public getAccount(phone: string): TelegramAccount | undefined {

@@ -16,6 +16,10 @@ import {
   StoreData,
   StoreKeyboardMode,
   StoreButtonTheme,
+  StoreCategory,
+  StoreMandatoryChannel,
+  StoreCustomButton,
+  StoreBotMessages,
 } from "../src/types.js";
 import { telegramManager } from "./telegramManager.js";
 
@@ -27,6 +31,39 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 export function defaultStoreData(): StoreData {
+  const defaultCategories: StoreCategory[] = [
+    {
+      id: "self",
+      title: "اکانت سلف زمان‌دار",
+      description: "ساعت زنده روی پروفایل، منشی هوشمند و ابزارهای محاسباتی",
+      icon: "💎",
+      badge: "محبوب‌ترین",
+      color: "cyan",
+      isActive: true,
+      orderIndex: 1,
+    },
+    {
+      id: "tabchi",
+      title: "اکانت تبچی تبلیغاتی",
+      description: "ارسال خودکار بنر به تمام گروه‌ها با آنتی‌فلود پیشرفته",
+      icon: "🚀",
+      badge: "پرفروش",
+      color: "purple",
+      isActive: true,
+      orderIndex: 2,
+    },
+    {
+      id: "combo",
+      title: "پکیج‌های ترکیبی VIP",
+      description: "سلف + تبچی به همراه تخفیف‌های شگفت‌انگیز",
+      icon: "⚡",
+      badge: "تخفیف ۴۰٪",
+      color: "emerald",
+      isActive: true,
+      orderIndex: 3,
+    },
+  ];
+
   const defaultPlans: StorePlan[] = [
     {
       id: "plan-self-1m",
@@ -248,7 +285,100 @@ export function defaultStoreData(): StoreData {
     status: "stopped",
     keyboardMode: "inline", // "inline" | "reply" | "hybrid"
     allowCustomerKeyboardSwitch: true,
-    buttonTheme: "cyber_neon", // "cyber_neon" | "galaxy_purple" | "luxury_gold" | "crypto_cyan"
+    buttonTheme: "aiogram_colored", // "aiogram_colored" | "cyber_neon" | "galaxy_purple" | "luxury_gold" | "crypto_cyan"
+    buttonAiogramStyle: "primary",
+    reportsChannelEnabled: false,
+    reportsChannelId: "",
+    mandatoryChannels: [],
+    customButtons: [
+      {
+        id: "btn-self",
+        text: "💎 خرید اکانت سلف زمان‌دار",
+        action: "buy_category",
+        targetCategoryId: "self",
+        style: "success",
+        rowIndex: 0,
+        columnIndex: 0,
+        isActive: true,
+      },
+      {
+        id: "btn-tabchi",
+        text: "🚀 خرید اکانت تبچی تبلیغاتی",
+        action: "buy_category",
+        targetCategoryId: "tabchi",
+        style: "primary",
+        rowIndex: 0,
+        columnIndex: 1,
+        isActive: true,
+      },
+      {
+        id: "btn-combo",
+        text: "⚡ پکیج VIP (سلف + تبچی)",
+        action: "buy_category",
+        targetCategoryId: "combo",
+        style: "danger",
+        rowIndex: 1,
+        columnIndex: 0,
+        isActive: true,
+      },
+      {
+        id: "btn-catalog",
+        text: "🛍️ تعرفه‌ها و لیست پکیج‌ها",
+        action: "help",
+        style: "primary",
+        rowIndex: 1,
+        columnIndex: 1,
+        isActive: true,
+      },
+      {
+        id: "btn-account",
+        text: "👤 حساب کاربری و اشتراک",
+        action: "my_account",
+        style: "default",
+        rowIndex: 2,
+        columnIndex: 0,
+        isActive: true,
+      },
+      {
+        id: "btn-orders",
+        text: "📦 پیگیری سفارشات من",
+        action: "my_orders",
+        style: "default",
+        rowIndex: 2,
+        columnIndex: 1,
+        isActive: true,
+      },
+      {
+        id: "btn-support",
+        text: "📞 پشتیبانی و راهنما",
+        action: "support",
+        style: "warning",
+        rowIndex: 3,
+        columnIndex: 0,
+        isActive: true,
+      },
+      {
+        id: "btn-guide",
+        text: "📖 آموزش اتصال به پنل",
+        action: "rules",
+        style: "primary",
+        rowIndex: 3,
+        columnIndex: 1,
+        isActive: true,
+      },
+    ],
+    messages: {
+      welcome: "👋 درود! به فروشگاه رسمی اکانت‌های سلف هوشمند و تبچی خوش آمدید.\n\nجهت مشاهده تعرفه‌ها و ثبت سفارش، از دکمه‌های زیر استفاده نمایید:",
+      help: "📖 <b>راهنمای ربات فروشگاهی:</b>\n\n۱. اشتراک مورد نظر خود را انتخاب کنید.\n۲. روش پرداخت (کارت به کارت یا ارز دیجیتال) را انتخاب نمایید.\n۳. فیش واریز را ارسال کنید تا شماره شما فوراً فعال گردد.",
+      rules: "📜 <b>قوانین و شرایط خرید:</b>\n\n• پس از تایید فیش واریزی، فرایند اتصال شماره به صورت خودکار در ربات آغاز می‌شود.\n• هرگونه اسپم یا ارسال فیش فیک منجر به مسدودسازی حساب خواهد شد.",
+      cardPayment: "💳 <b>راهنمای پرداخت کارت به کارت:</b>\n\nمبلغ فاکتور را به شماره کارت مشخص شده واریز کرده و تصویر فیش یا شماره پیگیری را ارسال نمایید.",
+      cryptoPayment: "🪙 <b>راهنمای پرداخت ارزی:</b>\n\nمعادل ارزی را به آدرس کیف پول واریز کرده و کد هش TXID را ارسال نمایید.",
+      orderSubmitted: "⏳ <b>رسید شما با موفقیت ثبت شد!</b>\n\nفیش شما جهت بررسی برای مدیریت ارسال شد. به محض تأیید، پیام فعال‌سازی برای شما ارسال می‌گردد.",
+      orderApproved: "✅ <b>سفارش شما تایید شد!</b>\n\nاشتراک شما فعال گردید. اکنون شماره خود را ارسال نمایید تا به ربات متصل شود.",
+      orderRejected: "❌ <b>سفارش شما تایید نشد.</b>\n\nعلت رد: اطلاعات واریزی نامعتبر است. لطفاً با پشتیبانی در ارتباط باشید.",
+      forceJoinAlert: "🔒 <b>عضویت در کانال الزامی است!</b>\n\nبرای استفاده از ربات، لطفاً ابتدا در کانال‌های زیر عضو شوید و سپس دکمه «تایید عضویت» را بزنید:",
+      support: "📞 <b>ارتباط با پشتیبانی:</b>\n\nجهت راهنمایی و حل هرگونه مشکل با آیدی پشتیبانی در ارتباط باشید.",
+    },
     buttonLabels: {
       buySelf: "💎 خرید اکانت سلف زمان‌دار",
       buyTabchi: "🚀 خرید اکانت تبچی تبلیغاتی",
@@ -448,11 +578,32 @@ export class StoreBotManager {
               parsed.settings?.allowCustomerKeyboardSwitch !== undefined
                 ? Boolean(parsed.settings.allowCustomerKeyboardSwitch)
                 : true,
+            buttonAiogramStyle: parsed.settings?.buttonAiogramStyle || defaults.settings.buttonAiogramStyle || "primary",
+            reportsChannelEnabled:
+              parsed.settings?.reportsChannelEnabled !== undefined
+                ? Boolean(parsed.settings.reportsChannelEnabled)
+                : defaults.settings.reportsChannelEnabled,
+            reportsChannelId: parsed.settings?.reportsChannelId || defaults.settings.reportsChannelId || "",
+            mandatoryChannels: Array.isArray(parsed.settings?.mandatoryChannels)
+              ? parsed.settings.mandatoryChannels
+              : defaults.settings.mandatoryChannels || [],
+            customButtons:
+              Array.isArray(parsed.settings?.customButtons) && parsed.settings.customButtons.length > 0
+                ? parsed.settings.customButtons
+                : defaults.settings.customButtons || [],
+            messages: {
+              ...defaults.settings.messages,
+              ...(parsed.settings?.messages || {}),
+            },
             buttonLabels: {
               ...defaults.settings.buttonLabels,
               ...(parsed.settings?.buttonLabels || {}),
             },
           },
+          categories:
+            Array.isArray(parsed.categories) && parsed.categories.length > 0
+              ? parsed.categories
+              : defaults.categories || [],
           plans: Array.isArray(parsed.plans) && parsed.plans.length > 0 ? parsed.plans : defaults.plans,
           payments: {
             cardPayment: { ...defaults.payments.cardPayment, ...(parsed.payments?.cardPayment || {}) },
@@ -795,27 +946,41 @@ export class StoreBotManager {
     }
   }
 
-  public getReplyKeyboardMarkup() {
+  public getReplyKeyboardMarkup(userId?: number | string) {
     const labels = this.data.settings.buttonLabels;
     const theme = this.getThemePrefix(this.data.settings.buttonTheme);
     const cols = Number(this.data.settings.replyKeyboardColumns || this.data.settings.keyboardColumns || 2);
 
-    const allButtons: any[] = [
-      { text: `${theme.self} ${labels.buySelf}` },
-      { text: `${theme.tabchi} ${labels.buyTabchi}` },
-      { text: `${theme.combo} ${labels.buyCombo}` },
-      { text: `${theme.catalog} ${labels.plansCatalog}` },
-      { text: `${theme.account} ${labels.myAccount}` },
-      { text: `${theme.orders} ${labels.myOrders}` },
-      { text: `${theme.support} ${labels.support}` },
-      { text: `${theme.guide} ${labels.helpGuide}` },
-      { text: `${theme.discount} ${labels.applyDiscount}` },
-    ];
+    const categories = this.getCategories().filter((c) => c.isActive);
+    const allButtons: any[] = [];
+
+    // Dynamically insert active categories
+    if (categories.length > 0) {
+      for (const cat of categories) {
+        allButtons.push({ text: `${cat.icon || "💎"} ${cat.title}` });
+      }
+    } else {
+      allButtons.push({ text: `${theme.self} ${labels.buySelf}` });
+      allButtons.push({ text: `${theme.tabchi} ${labels.buyTabchi}` });
+      allButtons.push({ text: `${theme.combo} ${labels.buyCombo}` });
+    }
+
+    // Common system buttons
+    allButtons.push({ text: `${theme.catalog} ${labels.plansCatalog}` });
+    allButtons.push({ text: `${theme.account} ${labels.myAccount}` });
+    allButtons.push({ text: `${theme.orders} ${labels.myOrders}` });
+    allButtons.push({ text: `${theme.support} ${labels.support}` });
+    allButtons.push({ text: `${theme.guide} ${labels.helpGuide}` });
+    allButtons.push({ text: `${theme.discount} ${labels.applyDiscount}` });
 
     // Chunk buttons into rows based on chosen columns (1, 2, or 3)
     const keyboardRows: any[][] = [];
     for (let i = 0; i < allButtons.length; i += cols) {
       keyboardRows.push(allButtons.slice(i, i + cols));
+    }
+
+    if (userId && this.isUserAdmin(userId)) {
+      keyboardRows.push([{ text: "👑 پنل مدیریت" }]);
     }
 
     if (this.data.settings.allowCustomerKeyboardSwitch) {
@@ -829,64 +994,140 @@ export class StoreBotManager {
     };
   }
 
-  public getInlineKeyboardMenu() {
+  public getInlineKeyboardMenu(userId?: number | string) {
     const labels = this.data.settings.buttonLabels;
     const theme = this.getThemePrefix(this.data.settings.buttonTheme);
     const isAiogram = this.data.settings.buttonTheme === "aiogram_colored";
     const cols = Number(this.data.settings.keyboardColumns || 2);
 
-    const allButtons: any[] = [
-      {
+    const categories = this.getCategories().filter((c) => c.isActive);
+    const customBtns = this.data.settings.customButtons?.filter((b) => b.isActive) || [];
+
+    const allButtons: any[] = [];
+
+    // If custom buttons are defined and active, use them as priority
+    if (customBtns.length > 0) {
+      // Sort by rowIndex, columnIndex
+      const sorted = [...customBtns].sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex);
+      const rowsMap: Map<number, any[]> = new Map();
+
+      for (const btn of sorted) {
+        let callbackData = "main_menu";
+        if (btn.action === "buy_category") callbackData = `cat_${btn.targetCategoryId || "all"}`;
+        else if (btn.action === "buy_plan") callbackData = `plan_details_${btn.targetPlanId}`;
+        else if (btn.action === "my_orders") callbackData = "menu_orders";
+        else if (btn.action === "my_account") callbackData = "menu_account";
+        else if (btn.action === "support") callbackData = "menu_support";
+        else if (btn.action === "help") callbackData = "cat_all";
+        else if (btn.action === "rules") callbackData = "menu_guide";
+
+        const btnObj: any = {
+          text: btn.text,
+          ...(btn.url ? { url: btn.url } : { callback_data: callbackData }),
+          ...(isAiogram || btn.style !== "default" ? { style: btn.style || "primary" } : {}),
+        };
+
+        const rIndex = btn.rowIndex || 0;
+        if (!rowsMap.has(rIndex)) rowsMap.set(rIndex, []);
+        rowsMap.get(rIndex)!.push(btnObj);
+      }
+
+      const inlineRows: any[][] = [];
+      const sortedRowKeys = Array.from(rowsMap.keys()).sort((a, b) => a - b);
+      for (const rk of sortedRowKeys) {
+        inlineRows.push(rowsMap.get(rk)!);
+      }
+
+      if (userId && this.isUserAdmin(userId)) {
+        inlineRows.push([{ text: "👑 ورود به پنل مدیریت ربات (/admin)", callback_data: "admin_menu", ...(isAiogram ? { style: "danger" } : {}) }]);
+      }
+
+      if (this.data.settings.allowCustomerKeyboardSwitch) {
+        inlineRows.push([
+          {
+            text: labels.switchKeyboard || "⌨️ تغییر به کیبورد باتن (پایین صفحه)",
+            callback_data: "switch_to_reply",
+            ...(isAiogram ? { style: "primary" } : {}),
+          },
+        ]);
+      }
+
+      return { inline_keyboard: inlineRows };
+    }
+
+    // Dynamic Categories in Inline Menu
+    if (categories.length > 0) {
+      for (const cat of categories) {
+        const style = cat.id === "self" ? "success" : cat.id === "tabchi" ? "primary" : "danger";
+        allButtons.push({
+          text: `${cat.icon || "💎"} ${cat.title}`,
+          callback_data: `cat_${cat.id}`,
+          ...(isAiogram ? { style } : {}),
+        });
+      }
+    } else {
+      allButtons.push({
         text: `${theme.self} ${labels.buySelf}`,
         callback_data: "cat_self",
         ...(isAiogram ? { style: "success" } : {}),
-      },
-      {
+      });
+      allButtons.push({
         text: `${theme.tabchi} ${labels.buyTabchi}`,
         callback_data: "cat_tabchi",
         ...(isAiogram ? { style: "primary" } : {}),
-      },
-      {
+      });
+      allButtons.push({
         text: `${theme.combo} ${labels.buyCombo}`,
         callback_data: "cat_combo",
         ...(isAiogram ? { style: "danger" } : {}),
-      },
-      {
-        text: `${theme.catalog} ${labels.plansCatalog}`,
-        callback_data: "cat_all",
-        ...(isAiogram ? { style: "primary" } : {}),
-      },
-      {
-        text: `${theme.account} ${labels.myAccount}`,
-        callback_data: "menu_account",
-        ...(isAiogram ? { style: "primary" } : {}),
-      },
-      {
-        text: `${theme.orders} ${labels.myOrders}`,
-        callback_data: "menu_orders",
-        ...(isAiogram ? { style: "success" } : {}),
-      },
-      {
-        text: `${theme.support} ${labels.support}`,
-        callback_data: "menu_support",
-        ...(isAiogram ? { style: "danger" } : {}),
-      },
-      {
-        text: `${theme.guide} ${labels.helpGuide}`,
-        callback_data: "menu_guide",
-        ...(isAiogram ? { style: "primary" } : {}),
-      },
-      {
-        text: `${theme.discount} ${labels.applyDiscount}`,
-        callback_data: "menu_discount",
-        ...(isAiogram ? { style: "success" } : {}),
-      },
-    ];
+      });
+    }
+
+    allButtons.push({
+      text: `${theme.catalog} ${labels.plansCatalog}`,
+      callback_data: "cat_all",
+      ...(isAiogram ? { style: "primary" } : {}),
+    });
+    allButtons.push({
+      text: `${theme.account} ${labels.myAccount}`,
+      callback_data: "menu_account",
+      ...(isAiogram ? { style: "primary" } : {}),
+    });
+    allButtons.push({
+      text: `${theme.orders} ${labels.myOrders}`,
+      callback_data: "menu_orders",
+      ...(isAiogram ? { style: "success" } : {}),
+    });
+    allButtons.push({
+      text: `${theme.support} ${labels.support}`,
+      callback_data: "menu_support",
+      ...(isAiogram ? { style: "danger" } : {}),
+    });
+    allButtons.push({
+      text: `${theme.guide} ${labels.helpGuide}`,
+      callback_data: "menu_guide",
+      ...(isAiogram ? { style: "primary" } : {}),
+    });
+    allButtons.push({
+      text: `${theme.discount} ${labels.applyDiscount}`,
+      callback_data: "menu_discount",
+      ...(isAiogram ? { style: "success" } : {}),
+    });
 
     // Chunk buttons into rows according to column setting (1, 2, or 3)
     const inlineRows: any[][] = [];
     for (let i = 0; i < allButtons.length; i += cols) {
       inlineRows.push(allButtons.slice(i, i + cols));
+    }
+
+    if (userId && this.isUserAdmin(userId)) {
+      inlineRows.push([
+        {
+          text: "👑 ورود به پنل مدیریت ربات (/admin)",
+          callback_data: "admin_menu",
+          ...(isAiogram ? { style: "danger" } : {}),
+        },
+      ]);
     }
 
     if (this.data.settings.allowCustomerKeyboardSwitch) {
@@ -963,6 +1204,23 @@ export class StoreBotManager {
         ordersCount: 0,
       });
       this.saveData();
+    } else {
+      let changed = false;
+      if (user.first_name !== undefined && existing.firstName !== user.first_name) {
+        existing.firstName = user.first_name;
+        changed = true;
+      }
+      if (user.last_name !== undefined && existing.lastName !== user.last_name) {
+        existing.lastName = user.last_name;
+        changed = true;
+      }
+      if (user.username !== undefined && existing.username !== user.username) {
+        existing.username = user.username;
+        changed = true;
+      }
+      if (changed) {
+        this.saveData();
+      }
     }
   }
 
@@ -980,6 +1238,23 @@ export class StoreBotManager {
       this.userSessions.delete(chatId);
       await this.sendMainMenu(chatId);
       return;
+    }
+
+    // In-Bot Admin Menu (/admin, "👑 پنل مدیریت", "مدیریت", "/panel")
+    if (text === "/admin" || text === "👑 پنل مدیریت" || text === "پنل مدیریت" || text === "مدیریت" || text === "/panel") {
+      if (this.isUserAdmin(user?.id)) {
+        await this.sendInBotAdminMenu(chatId);
+        return;
+      }
+    }
+
+    // Check Mandatory Channel Membership (عضویت اجباری)
+    if (session.state === "idle" && !this.isUserAdmin(user?.id)) {
+      const membership = await this.checkUserMandatoryMembership(user?.id);
+      if (!membership.isMember) {
+        await this.sendForceJoinPrompt(chatId, membership.unjoined);
+        return;
+      }
     }
 
     // =========================================================================
@@ -1315,14 +1590,87 @@ export class StoreBotManager {
         }
       );
       await this.sendMainMenu(chatId);
-    } else if (data === "cat_self") {
-      await this.sendCategoryPlans(chatId, "self");
-    } else if (data === "cat_tabchi") {
-      await this.sendCategoryPlans(chatId, "tabchi");
-    } else if (data === "cat_combo") {
-      await this.sendCategoryPlans(chatId, "combo");
-    } else if (data === "cat_all") {
-      await this.sendCategoryPlans(chatId, "all");
+    } else if (data === "verify_membership") {
+      const membership = await this.checkUserMandatoryMembership(user?.id);
+      if (membership.isMember) {
+        await this.sendMessage(
+          chatId,
+          "✅ <b>عضویت شما با موفقیت تأیید شد!</b>\n\nخوش آمدید، اکنون می‌توانید از تمامی امکانات و پلن‌های ربات استفاده فرمایید.",
+          { parse_mode: "HTML" }
+        );
+        await this.sendMainMenu(chatId);
+      } else {
+        await this.sendMessage(
+          chatId,
+          "⚠️ <b>عضویت شما هنوز تکمیل نشده است!</b>\n\nلطفاً ابتدا در تمام کانال‌های اعلام‌شده عضو شوید و سپس مجدداً روی دکمه «تأیید عضویت» کلیک نمایید.",
+          { parse_mode: "HTML" }
+        );
+        await this.sendForceJoinPrompt(chatId, membership.unjoined);
+      }
+    } else if (data === "admin_menu") {
+      if (this.isUserAdmin(user?.id)) {
+        await this.sendInBotAdminMenu(chatId, cb.message?.message_id);
+      }
+    } else if (data === "admin_orders_pending") {
+      if (this.isUserAdmin(user?.id)) {
+        await this.sendInBotAdminPendingOrders(chatId, cb.message?.message_id);
+      }
+    } else if (data === "admin_categories") {
+      if (this.isUserAdmin(user?.id)) {
+        await this.sendInBotAdminCategories(chatId, cb.message?.message_id);
+      }
+    } else if (data.startsWith("admin_toggle_cat_")) {
+      const catId = data.replace("admin_toggle_cat_", "");
+      if (this.isUserAdmin(user?.id)) {
+        this.toggleCategory(catId);
+        await this.sendInBotAdminCategories(chatId, cb.message?.message_id);
+      }
+    } else if (data === "admin_plans") {
+      if (this.isUserAdmin(user?.id)) {
+        await this.sendInBotAdminPlans(chatId, cb.message?.message_id);
+      }
+    } else if (data.startsWith("admin_toggle_plan_")) {
+      const planId = data.replace("admin_toggle_plan_", "");
+      if (this.isUserAdmin(user?.id)) {
+        this.togglePlanActive(planId);
+        await this.sendInBotAdminPlans(chatId, cb.message?.message_id);
+      }
+    } else if (data === "admin_toggle_reports") {
+      if (this.isUserAdmin(user?.id)) {
+        this.data.settings.reportsChannelEnabled = !this.data.settings.reportsChannelEnabled;
+        this.saveData();
+        await this.sendInBotAdminMenu(chatId, cb.message?.message_id);
+      }
+    } else if (data === "admin_toggle_force") {
+      if (this.isUserAdmin(user?.id)) {
+        this.data.settings.forceJoinChannel = !this.data.settings.forceJoinChannel;
+        this.saveData();
+        await this.sendInBotAdminMenu(chatId, cb.message?.message_id);
+      }
+    } else if (data === "admin_sync_profiles") {
+      if (this.isUserAdmin(user?.id)) {
+        const syncRes = await telegramManager.syncLiveAccountProfiles();
+        const count = syncRes?.accounts?.length || 0;
+        await this.sendMessage(
+          chatId,
+          `🔄 <b>همگام‌سازی نام پروفایل‌ها از تلگرام انجام شد!</b>\n\nتعداد <b>${count}</b> اکانت زنده بررسی شدند و جدیدترین نام و نام‌خانوادگی آن‌ها در وب پنل بروزرسانی گردید.`,
+          { parse_mode: "HTML" }
+        );
+        await this.sendInBotAdminMenu(chatId);
+      }
+    } else if (data === "admin_webpanel_link") {
+      if (this.isUserAdmin(user?.id)) {
+        const creds = this.getAdminCredentials();
+        const appUrl = telegramManager.getEffectiveAppUrl();
+        await this.sendMessage(
+          chatId,
+          `🌐 <b>مشخصات ورود به وب پنل اختصاصی مدیریت:</b>\n━━━━━━━━━━━━━━━━━━━━\n🔗 <b>آدرس وب‌پنل:</b> ${appUrl}\n👤 <b>نام کاربری:</b> <code>${creds.username}</code>\n🔑 <b>رمز عبور:</b> <code>${creds.password || "admin_store_2026"}</code>\n━━━━━━━━━━━━━━━━━━━━\n💡 با ورود به وب پنل به داشبورد کامل فروش، تنظیم دسته‌بندی‌ها، درگاه‌ها و دکمه‌ها دسترسی دارید.`,
+          { parse_mode: "HTML" }
+        );
+      }
+    } else if (data.startsWith("cat_")) {
+      const catId = data.replace("cat_", "");
+      await this.sendCategoryPlans(chatId, catId);
     } else if (data === "menu_account") {
       await this.sendUserAccount(chatId, user);
     } else if (data === "menu_orders") {
@@ -1491,7 +1839,7 @@ export class StoreBotManager {
     });
   }
 
-  public async sendCategoryPlans(chatId: number | string, category: "self" | "tabchi" | "combo" | "all") {
+  public async sendCategoryPlans(chatId: number | string, category: string) {
     const plans = this.data.plans.filter((p) => p.isActive && (category === "all" || p.category === category));
 
     if (plans.length === 0) {
@@ -1500,9 +1848,10 @@ export class StoreBotManager {
     }
 
     const inlineKeyboard: any[] = [];
+    const catObj = this.getCategories().find((c) => c.id === category);
 
     for (const plan of plans) {
-      const icon = plan.category === "self" ? "💎" : plan.category === "tabchi" ? "🚀" : "⚡";
+      const icon = plan.category === "self" ? "💎" : plan.category === "tabchi" ? "🚀" : plan.category === "combo" ? "⚡" : (catObj?.icon || "📦");
       const duration = plan.isUnlimited ? "♾️ دائمی" : `${plan.durationDays} روزه`;
       const price = `${plan.priceToman.toLocaleString("fa-IR")} ت | $${plan.priceUsdt}`;
 
@@ -1516,14 +1865,11 @@ export class StoreBotManager {
 
     inlineKeyboard.push([{ text: "🔙 بازگشت به منوی اصلی", callback_data: "main_menu" }]);
 
-    const catTitle =
-      category === "self"
-        ? "💎 اکانت‌های سلف زمان‌دار"
-        : category === "tabchi"
-        ? "🚀 اکانت‌های تبچی تبلیغاتی"
-        : category === "combo"
-        ? "⚡ پکیج‌های ترکیبی VIP"
-        : "🛍️ تعرفه‌ها و پکیج‌های موجود";
+    const catTitle = catObj
+      ? `${catObj.icon || "📁"} ${catObj.title}`
+      : category === "all"
+      ? "🛍️ تعرفه‌ها و پکیج‌های موجود"
+      : `📁 دسته‌بندی ${category}`;
 
     await this.sendMessage(
       chatId,
@@ -1849,6 +2195,7 @@ export class StoreBotManager {
     }
 
     this.saveData();
+    this.sendPurchaseReport(newOrder).catch(() => {});
 
     // Success response to user
     const successMsg =
@@ -2535,6 +2882,7 @@ export class StoreBotManager {
     }
 
     this.saveData();
+    this.sendPurchaseReport(order).catch(() => {});
 
     // Send confirmation message to customer on Telegram & automatically start phone/code/2FA onboarding!
     if (this.data.settings.botToken && order.userId) {
@@ -2991,6 +3339,503 @@ export class StoreBotManager {
   public deleteCoupon(couponId: string) {
     this.data.coupons = this.data.coupons.filter((c) => c.id !== couponId);
     this.saveData();
+  }
+
+  // =============================================================
+  // CATEGORIES CRUD MANAGEMENT
+  // =============================================================
+
+  public getCategories(): StoreCategory[] {
+    if (!this.data.categories || !Array.isArray(this.data.categories)) {
+      this.data.categories = defaultStoreData().categories || [];
+      this.saveData();
+    }
+    return [...this.data.categories].sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+  }
+
+  public addCategory(cat: Omit<StoreCategory, "id">): StoreCategory {
+    if (!this.data.categories) this.data.categories = [];
+    const newCat: StoreCategory = {
+      ...cat,
+      id: `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      isActive: cat.isActive !== undefined ? cat.isActive : true,
+      orderIndex: cat.orderIndex || this.data.categories.length + 1,
+    };
+    this.data.categories.push(newCat);
+    this.saveData();
+    return newCat;
+  }
+
+  public updateCategory(id: string, updates: Partial<StoreCategory>): StoreCategory {
+    if (!this.data.categories) this.data.categories = [];
+    const idx = this.data.categories.findIndex((c) => c.id === id);
+    if (idx === -1) throw new Error("دسته‌بندی مورد نظر یافت نشد.");
+    this.data.categories[idx] = { ...this.data.categories[idx], ...updates };
+    this.saveData();
+    return this.data.categories[idx];
+  }
+
+  public deleteCategory(id: string) {
+    if (!this.data.categories) return;
+    this.data.categories = this.data.categories.filter((c) => c.id !== id);
+    this.saveData();
+  }
+
+  public toggleCategory(id: string): StoreCategory {
+    if (!this.data.categories) this.data.categories = [];
+    const cat = this.data.categories.find((c) => c.id === id);
+    if (!cat) throw new Error("دسته‌بندی مورد نظر یافت نشد.");
+    cat.isActive = !cat.isActive;
+    this.saveData();
+    return cat;
+  }
+
+  // =============================================================
+  // MANDATORY CHANNELS & PURCHASE REPORTS
+  // =============================================================
+
+  public updateMandatoryChannels(channels: StoreMandatoryChannel[]): StoreMandatoryChannel[] {
+    this.data.settings.mandatoryChannels = Array.isArray(channels) ? channels : [];
+    this.saveData();
+    return this.data.settings.mandatoryChannels;
+  }
+
+  public async testChannel(channelIdentifier: string): Promise<{
+    valid: boolean;
+    chatTitle?: string;
+    chatType?: string;
+    memberCount?: number;
+    isBotAdmin?: boolean;
+    error?: string;
+  }> {
+    if (!this.data.settings.botToken) {
+      return { valid: false, error: "توکن ربات تلگرام تنظیم نشده است." };
+    }
+    const cleanId = channelIdentifier.trim();
+    if (!cleanId) {
+      return { valid: false, error: "شناسه یا آیدی کانال الزامی است." };
+    }
+
+    const chatId = cleanId.startsWith("@") || cleanId.startsWith("-100") ? cleanId : `@${cleanId}`;
+
+    try {
+      const chatInfo = await this.callBotApi("getChat", { chat_id: chatId });
+      let memberCount = 0;
+      let isBotAdmin = false;
+
+      try {
+        memberCount = await this.callBotApi("getChatMemberCount", { chat_id: chatId });
+      } catch (_) {}
+
+      try {
+        const botMe = await this.callBotApi("getMe");
+        if (botMe?.id) {
+          const botMember = await this.callBotApi("getChatMember", {
+            chat_id: chatId,
+            user_id: botMe.id,
+          });
+          isBotAdmin = botMember?.status === "administrator" || botMember?.status === "creator";
+        }
+      } catch (_) {}
+
+      return {
+        valid: true,
+        chatTitle: chatInfo.title || chatInfo.username || "کانال",
+        chatType: chatInfo.type,
+        memberCount,
+        isBotAdmin,
+      };
+    } catch (err: any) {
+      return {
+        valid: false,
+        error: err?.message || "خطا در ارتباط با کانال. اطمینان حاصل کنید ربات در کانال عضو/ادمین است.",
+      };
+    }
+  }
+
+  public maskUserIdentity(order: StoreOrder): { displayName: string; maskedId: string } {
+    let displayName = "کاربر گرامی";
+    if (order.userFirstName) {
+      const fn = order.userFirstName.trim();
+      if (fn.length <= 2) {
+        displayName = fn[0] + "***";
+      } else {
+        displayName = fn.slice(0, 2) + "***" + fn.slice(-1);
+      }
+    }
+
+    let maskedId = "";
+    if (order.userUsername) {
+      const u = order.userUsername.replace(/^@/, "");
+      if (u.length <= 3) {
+        maskedId = `@${u[0]}***`;
+      } else {
+        maskedId = `@${u.slice(0, 2)}***${u.slice(-2)}`;
+      }
+    } else if (order.connectedPhone) {
+      const p = order.connectedPhone;
+      maskedId = `${p.slice(0, 4)}***${p.slice(-3)}`;
+    } else {
+      const uid = String(order.userId || "9999");
+      maskedId = `ID: ***${uid.slice(-3)}`;
+    }
+
+    return { displayName, maskedId };
+  }
+
+  public async sendPurchaseReport(order: StoreOrder): Promise<boolean> {
+    const settings = this.data.settings;
+    if (!settings.reportsChannelEnabled || !settings.reportsChannelId || !settings.botToken) {
+      return false;
+    }
+
+    try {
+      const { displayName, maskedId } = this.maskUserIdentity(order);
+      const categoryIcon = order.category === "self" ? "💎" : order.category === "tabchi" ? "🚀" : "⚡";
+      const paymentMethodLabel =
+        order.paymentMethod === "stars"
+          ? "⭐ ستاره‌های تلگرام (Telegram Stars)"
+          : order.paymentMethod === "crypto"
+          ? "🪙 ارز دیجیتال (Crypto)"
+          : "💳 کارت به کارت شتاب";
+
+      const nowTime = new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+      const nowDate = new Date().toLocaleDateString("fa-IR");
+
+      const reportText =
+        `📢 <b>گزارش ثبت خرید موفق جدید</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 <b>خریدار:</b> <code>${displayName}</code> (${maskedId})\n` +
+        `${categoryIcon} <b>پکیج:</b> ${order.planTitle}\n` +
+        `💰 <b>مبلغ پرداختی:</b> ${Number(order.finalPriceToman || order.priceToman || 0).toLocaleString("fa-IR")} تومان` +
+        (order.finalPriceUsdt ? ` (${order.finalPriceUsdt} USDT)` : "") +
+        `\n💳 <b>روش پرداخت:</b> ${paymentMethodLabel}\n` +
+        `⏰ <b>زمان خرید:</b> ${nowDate} - ساعت ${nowTime}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `✨ <i>تحویل آنی و اتصال خودکار توسط ربات رسمی فروشگاه</i>\n` +
+        (settings.channelUsername ? `🔗 @${settings.channelUsername.replace(/^@/, "")}` : "");
+
+      await this.callBotApi("sendMessage", {
+        chat_id: settings.reportsChannelId.trim(),
+        text: reportText,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      });
+
+      return true;
+    } catch (err: any) {
+      console.error("[STORE BOT] Error sending purchase report to channel:", err?.message);
+      return false;
+    }
+  }
+
+  public async checkUserMandatoryMembership(userId: number | string): Promise<{
+    isMember: boolean;
+    unjoined: StoreMandatoryChannel[];
+  }> {
+    const channels = [...(this.data.settings.mandatoryChannels?.filter((c) => c.isActive) || [])];
+
+    if (this.data.settings.forceJoinChannel && this.data.settings.channelUsername) {
+      const cleanU = this.data.settings.channelUsername.trim();
+      const exists = channels.some((c) => c.username.replace(/^@/, "").toLowerCase() === cleanU.replace(/^@/, "").toLowerCase());
+      if (!exists) {
+        channels.push({
+          id: "legacy-channel",
+          username: cleanU.startsWith("@") ? cleanU : `@${cleanU}`,
+          title: "کانال رسمی فروشگاه",
+          isActive: true,
+        });
+      }
+    }
+
+    if (channels.length === 0 || !this.data.settings.botToken) {
+      return { isMember: true, unjoined: [] };
+    }
+
+    const unjoined: StoreMandatoryChannel[] = [];
+
+    for (const channel of channels) {
+      try {
+        const rawChatId = channel.username.trim();
+        const chatId = rawChatId.startsWith("@") || rawChatId.startsWith("-100") ? rawChatId : `@${rawChatId}`;
+        const member = await this.callBotApi("getChatMember", {
+          chat_id: chatId,
+          user_id: Number(userId),
+        });
+
+        const status = member?.status;
+        const validStatuses = ["creator", "administrator", "member", "restricted"];
+        if (!validStatuses.includes(status)) {
+          unjoined.push(channel);
+        }
+      } catch (err: any) {
+        console.warn(`[STORE BOT] Could not verify membership in ${channel.username}:`, err?.message);
+      }
+    }
+
+    return {
+      isMember: unjoined.length === 0,
+      unjoined,
+    };
+  }
+
+  public async sendForceJoinPrompt(chatId: number | string, unjoined: StoreMandatoryChannel[]) {
+    const customMsg = this.data.settings.messages?.forceJoinAlert;
+    const baseText =
+      customMsg ||
+      `🔒 <b>عضویت در کانال‌های زیر الزامی است!</b>\n\nبرای استفاده از امکانات ربات فروشگاه، لطفاً ابتدا در کانال‌های زیر عضو شده و سپس روی دکمه «✅ بررسی و تأیید عضویت» کلیک کنید:`;
+
+    const inlineKeyboard: any[][] = [];
+    for (const ch of unjoined) {
+      const cleanUser = ch.username.replace(/^@/, "");
+      const link = ch.inviteLink || `https://t.me/${cleanUser}`;
+      inlineKeyboard.push([
+        {
+          text: `📢 عضویت در ${ch.title || ch.username}`,
+          url: link,
+        },
+      ]);
+    }
+
+    inlineKeyboard.push([
+      {
+        text: "✅ بررسی و تأیید عضویت",
+        callback_data: "verify_membership",
+      },
+    ]);
+
+    await this.callBotApi("sendMessage", {
+      chat_id: chatId,
+      text: baseText,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: inlineKeyboard,
+      },
+    }).catch(() => {});
+  }
+
+  // =============================================================
+  // CUSTOM BUTTONS & MESSAGES TEMPLATES MANAGEMENT
+  // =============================================================
+
+  public updateCustomButtons(buttons: StoreCustomButton[]): StoreCustomButton[] {
+    this.data.settings.customButtons = Array.isArray(buttons) ? buttons : [];
+    this.saveData();
+    return this.data.settings.customButtons;
+  }
+
+  public updateMessages(messages: StoreBotMessages): StoreBotMessages {
+    this.data.settings.messages = {
+      ...this.data.settings.messages,
+      ...messages,
+    };
+    this.saveData();
+    return this.data.settings.messages;
+  }
+
+  // =============================================================
+  // IN-BOT ADMIN PANEL (TELEGRAM /ADMIN INTERFACE)
+  // =============================================================
+
+  public isUserAdmin(userId: number | string): boolean {
+    const ownerId = this.data.settings.ownerTelegramId;
+    if (!ownerId) return true; // if not set yet, allow initial configuration
+    return String(userId) === String(ownerId);
+  }
+
+  public async sendInBotAdminMenu(chatId: number | string, messageIdToEdit?: number) {
+    const pendingOrders = this.data.orders.filter((o) => o.status === "pending");
+    const approvedOrders = this.data.orders.filter((o) => o.status === "approved");
+    const totalUsers = this.data.customers.length;
+    const totalRevenue = approvedOrders.reduce((acc, o) => acc + (o.finalPriceToman || 0), 0);
+
+    const activeCats = this.getCategories().filter((c) => c.isActive).length;
+    const activePlans = this.data.plans.filter((p) => p.isActive).length;
+    const reportsOn = this.data.settings.reportsChannelEnabled ? "🟢 فعال" : "🔴 غیرفعال";
+    const forceJoinOn =
+      this.data.settings.forceJoinChannel ||
+      (this.data.settings.mandatoryChannels && this.data.settings.mandatoryChannels.length > 0)
+        ? "🟢 فعال"
+        : "🔴 غیرفعال";
+
+    const text =
+      `👑 <b>پنل اختصاصی مدیریت ربات فروشگاه</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📊 <b>آمار زنده کسب‌وکار:</b>\n` +
+      `• کل مشتریان ثبت‌شده: <b>${totalUsers} نفر</b>\n` +
+      `• سفارشات در انتظار بررسی: <b>${pendingOrders.length} سفارش</b> ⏳\n` +
+      `• کل سفارشات تأیید شده: <b>${approvedOrders.length} عدد</b> ✅\n` +
+      `• مجموع درآمد فروش: <b>${totalRevenue.toLocaleString("fa-IR")} تومان</b> 💰\n` +
+      `• دسته‌بندی‌های فعال: <b>${activeCats} دسته</b>\n` +
+      `• تعرفه‌ها و پلن‌های فعال: <b>${activePlans} پلن</b>\n` +
+      `• ارسال گزارشات به کانال: <b>${reportsOn}</b>\n` +
+      `• قفل عضویت اجباری: <b>${forceJoinOn}</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `دستورات مدیریتی ربات:`;
+
+    const buttons = [
+      [
+        { text: `⏳ سفارشات در انتظار (${pendingOrders.length})`, callback_data: "admin_orders_pending" },
+        { text: "📦 مدیریت تعرفه‌ها و پلن‌ها", callback_data: "admin_plans" },
+      ],
+      [
+        { text: "📁 مدیریت دسته‌بندی‌ها", callback_data: "admin_categories" },
+        { text: `📢 گزارشات خرید (${reportsOn})`, callback_data: "admin_toggle_reports" },
+      ],
+      [
+        { text: `🔒 عضویت اجباری (${forceJoinOn})`, callback_data: "admin_toggle_force" },
+        { text: "🔄 همگام‌سازی نام اکانت‌ها", callback_data: "admin_sync_profiles" },
+      ],
+      [
+        { text: "🌐 آدرس و مشخصات وب‌پنل", callback_data: "admin_webpanel_link" },
+        { text: "🏠 بازگشت به منوی کاربری", callback_data: "main_menu" },
+      ],
+    ];
+
+    if (messageIdToEdit) {
+      await this.callBotApi("editMessageText", {
+        chat_id: chatId,
+        message_id: messageIdToEdit,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      }).catch(async () => {
+        await this.callBotApi("sendMessage", {
+          chat_id: chatId,
+          text,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: buttons },
+        });
+      });
+    } else {
+      await this.callBotApi("sendMessage", {
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      });
+    }
+  }
+
+  public async sendInBotAdminPendingOrders(chatId: number | string, messageIdToEdit?: number) {
+    const pending = this.data.orders.filter((o) => o.status === "pending").slice(0, 5);
+
+    if (pending.length === 0) {
+      const text =
+        `✅ <b>هیچ سفارشی در انتظار بررسی نیست!</b>\n\nتمامی سفارشات و فیش‌های واریزی بررسی و تعیین تکلیف شده‌اند.`;
+      const buttons = [[{ text: "🔙 بازگشت به منوی ادمین", callback_data: "admin_menu" }]];
+      if (messageIdToEdit) {
+        await this.callBotApi("editMessageText", {
+          chat_id: chatId,
+          message_id: messageIdToEdit,
+          text,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: buttons },
+        }).catch(() => {});
+      } else {
+        await this.sendMessage(chatId, text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+      }
+      return;
+    }
+
+    let text = `⏳ <b>لیست سفارشات در انتظار بررسی (${pending.length} مورد):</b>\n\n`;
+    const buttons: any[][] = [];
+
+    for (const ord of pending) {
+      text +=
+        `🧾 <b>سفارش:</b> <code>#${ord.id}</code>\n` +
+        `👤 <b>مشتری:</b> ${ord.userFirstName || "کاربر"} (@${ord.userUsername || "ندارد"})\n` +
+        `📦 <b>پکیج:</b> ${ord.planTitle}\n` +
+        `💰 <b>مبلغ:</b> ${Number(ord.finalPriceToman || ord.priceToman || 0).toLocaleString("fa-IR")} تومان\n` +
+        `💳 <b>روش پرداخت:</b> ${ord.paymentMethod === "card" ? "کارت به کارت" : "ارز دیجیتال"}\n` +
+        `📝 <b>توضیح/هش فیش:</b> <code>${ord.paymentDetails?.receiptProof || "بدون متن"}</code>\n\n`;
+
+      buttons.push([
+        { text: `✅ تأیید #${ord.id}`, callback_data: `admin_approve_ord_${ord.id}` },
+        { text: `❌ رد #${ord.id}`, callback_data: `admin_reject_ord_${ord.id}` },
+      ]);
+    }
+
+    buttons.push([{ text: "🔙 بازگشت به منوی ادمین", callback_data: "admin_menu" }]);
+
+    if (messageIdToEdit) {
+      await this.callBotApi("editMessageText", {
+        chat_id: chatId,
+        message_id: messageIdToEdit,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      }).catch(() => {});
+    } else {
+      await this.sendMessage(chatId, text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+    }
+  }
+
+  public async sendInBotAdminCategories(chatId: number | string, messageIdToEdit?: number) {
+    const cats = this.getCategories();
+    let text =
+      `📁 <b>مدیریت دسته‌بندی‌های ربات فروشگاه</b>\n\n` +
+      `با کلیک بر روی هر دکمه، وضعیت فعال یا غیرفعال بودن آن دسته فوراً تغییر می‌کند:\n\n`;
+
+    const buttons: any[][] = [];
+    for (const c of cats) {
+      const statusIcon = c.isActive ? "🟢" : "🔴";
+      text += `• ${statusIcon} <b>${c.title}</b> (${c.isActive ? "فعال" : "غیرفعال"})\n`;
+      buttons.push([
+        {
+          text: `${statusIcon} ${c.icon || "📁"} ${c.title} (${c.isActive ? "فعال" : "غیرفعال"})`,
+          callback_data: `admin_toggle_cat_${c.id}`,
+        },
+      ]);
+    }
+
+    buttons.push([{ text: "🔙 بازگشت به منوی ادمین", callback_data: "admin_menu" }]);
+
+    if (messageIdToEdit) {
+      await this.callBotApi("editMessageText", {
+        chat_id: chatId,
+        message_id: messageIdToEdit,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      }).catch(() => {});
+    } else {
+      await this.sendMessage(chatId, text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+    }
+  }
+
+  public async sendInBotAdminPlans(chatId: number | string, messageIdToEdit?: number) {
+    const plans = this.data.plans.slice(0, 10);
+    let text =
+      `📦 <b>مدیریت پلن‌ها و تعرفه‌ها</b>\n\n` +
+      `برای خاموش یا روشن کردن نمایش هر پلن در ربات، روی دکمه آن بزنید:\n\n`;
+
+    const buttons: any[][] = [];
+    for (const p of plans) {
+      const statusIcon = p.isActive ? "🟢" : "🔴";
+      const price = Number(p.priceToman || 0).toLocaleString("fa-IR");
+      text += `• ${statusIcon} <b>${p.title}</b>: ${price} ت\n`;
+      buttons.push([
+        {
+          text: `${statusIcon} ${p.title} (${price} ت)`,
+          callback_data: `admin_toggle_plan_${p.id}`,
+        },
+      ]);
+    }
+
+    buttons.push([{ text: "🔙 بازگشت به منوی ادمین", callback_data: "admin_menu" }]);
+
+    if (messageIdToEdit) {
+      await this.callBotApi("editMessageText", {
+        chat_id: chatId,
+        message_id: messageIdToEdit,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      }).catch(() => {});
+    } else {
+      await this.sendMessage(chatId, text, { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+    }
   }
 }
 

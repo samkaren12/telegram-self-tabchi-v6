@@ -416,10 +416,57 @@ export type StoreButtonTheme =
   | "rainbow_vivid"
   | "aiogram_colored"; // aiogram-style primary/success/danger
 
+export interface StoreCategory {
+  id: string;
+  title: string;
+  description?: string;
+  icon?: string;
+  isActive: boolean;
+  orderIndex: number;
+  badge?: string;
+  color?: string; // "emerald" | "cyan" | "purple" | "amber" | "rose" | "blue"
+  customEmojiId?: string; // Telegram Premium Custom Emoji ID
+}
+
+export interface StoreMandatoryChannel {
+  id: string;
+  username: string; // @channel or link or chat ID
+  title?: string;
+  inviteLink?: string;
+  isActive: boolean;
+}
+
+export interface StoreCustomButton {
+  id: string;
+  text: string;
+  action: "buy_category" | "buy_plan" | "my_orders" | "my_account" | "support" | "help" | "rules" | "custom_url";
+  targetCategoryId?: string;
+  targetPlanId?: string;
+  url?: string;
+  style: "primary" | "success" | "danger" | "warning" | "default";
+  customEmojiId?: string;
+  rowIndex: number;
+  columnIndex: number;
+  isActive: boolean;
+}
+
+export interface StoreBotMessages {
+  welcome?: string;
+  help?: string;
+  rules?: string;
+  cardPayment?: string;
+  cryptoPayment?: string;
+  orderSubmitted?: string;
+  orderApproved?: string;
+  orderRejected?: string;
+  forceJoinAlert?: string;
+  support?: string;
+}
+
 export interface StorePlan {
   id: string;
   title: string;
-  category: "self" | "tabchi" | "combo" | "subscription";
+  category: "self" | "tabchi" | "combo" | "subscription" | string;
   durationDays: number; // 0 = unlimited
   isUnlimited: boolean;
   priceToman: number;
@@ -430,6 +477,7 @@ export interface StorePlan {
   color?: string; // "emerald" | "cyan" | "purple" | "amber" | "rose"
   isActive: boolean;
   orderIndex: number;
+  customEmojiId?: string;
 }
 
 export interface StorePaymentCard {
@@ -510,7 +558,13 @@ export interface StoreBotSettings {
   replyKeyboardColumns?: StoreKeyboardColumns; // 1 | 2 | 3
   allowCustomerKeyboardSwitch: boolean;
   buttonTheme: StoreButtonTheme;
+  buttonAiogramStyle?: "primary" | "success" | "danger" | "warning" | "default";
   buttonLabels: StoreBotButtonLabels;
+  customButtons?: StoreCustomButton[];
+  mandatoryChannels?: StoreMandatoryChannel[];
+  reportsChannelEnabled?: boolean;
+  reportsChannelId?: string;
+  messages?: StoreBotMessages;
   welcomeText: string;
   rulesText?: string;
   autoConnectAfterApproval?: boolean;
@@ -618,6 +672,7 @@ export interface StoreAdminCredentials {
 
 export interface StoreData {
   settings: StoreBotSettings;
+  categories?: StoreCategory[];
   plans: StorePlan[];
   payments: StorePaymentSettings;
   orders: StoreOrder[];
