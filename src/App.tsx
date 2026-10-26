@@ -44,6 +44,8 @@ import { OwnerPasswordModal } from "./components/OwnerPasswordModal";
 import { VisualHelpModal, HelpSectionId } from "./components/VisualHelpModal";
 import { DonateModal } from "./components/DonateModal";
 import { MatrixRain } from "./components/MatrixRain";
+import { MobileBottomDock } from "./components/MobileBottomDock";
+import { ActiveAccountBanner } from "./components/ActiveAccountBanner";
 import { useSoundNotification } from "./hooks/useSoundNotification";
 import { ConfirmProvider } from "./components/ui/ConfirmProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -371,7 +373,7 @@ export default function App() {
         />
 
         {/* Viewport Container */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 space-y-5">
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-28 md:pb-8 space-y-5">
           {/* Customer Access Alert if on admin URL */}
           {isUnlocked && isCustomer && portalMode === "admin" && (
             <div className="glass-panel border-rose-500/30 rounded-2xl p-4 text-center space-y-2.5 shadow-xl shadow-rose-950/20">
@@ -385,162 +387,22 @@ export default function App() {
                   setPortalMode("client");
                   setActiveTab("self");
                 }}
-                className="px-4 py-2 rounded-xl saas-btn-primary text-xs font-bold transition-all active:scale-95"
+                className="px-4 py-2 rounded-xl saas-btn-primary text-xs font-bold transition-all active:scale-95 cursor-pointer"
               >
                 انتقال به پنل اختصاصی مشتریان
               </button>
             </div>
           )}
 
-          {/* Customer Welcome & Subscription Info Banner */}
-          {isCustomer && selectedAccount && (
-            <div className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl relative overflow-hidden">
-              <div className="flex items-center gap-3.5">
-                <div className="w-11 h-11 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 flex items-center justify-center shrink-0 shadow-md">
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-white">
-                    پنل اختصاصی کاربر تلگرام ({selectedAccount.phone})
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    مدیریت ساعت زنده روی پروفایل، تبچی و منشی اختصاصی اکانت شما
-                  </p>
-                </div>
-              </div>
-
-              <div className="text-xs font-mono text-cyan-300 bg-cyan-950/50 border border-cyan-500/30 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-inner">
-                <Calendar className="w-4 h-4 text-cyan-400" />
-                <span>
-                  {selectedAccount.subscription?.is_unlimited ? (
-                    "اعتبار اشتراک: دائمی و نامحدود ♾️"
-                  ) : selectedAccount.subscription?.expires_at ? (
-                    (() => {
-                      const diffMs = new Date(selectedAccount.subscription.expires_at).getTime() - Date.now();
-                      if (diffMs <= 0) return "وضعیت اشتراک: منقضی شده (جهت تمدید به مالک پیام دهید)";
-                      const days = Math.floor(diffMs / (24 * 3600 * 1000));
-                      const hours = Math.floor((diffMs % (24 * 3600 * 1000)) / (3600 * 1000));
-                      return `روزشمار اعتبار: ${days} روز و ${hours} ساعت باقی‌مانده`;
-                    })()
-                  ) : (
-                    "اعتبار اشتراک: نامحدود"
-                  )}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Active Account Quick Status Banner */}
+          {/* Active Account Cyber Banner */}
           {selectedAccount && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="glass-panel rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl animate-shimmer"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="relative group">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-lg shadow-violet-600/25 group-hover:scale-105 transition-transform">
-                    <div className="w-full h-full bg-[#0a0e20] rounded-[14px] flex items-center justify-center text-white font-black text-base">
-                      {selectedAccount.firstName ? selectedAccount.firstName[0].toUpperCase() : "U"}
-                    </div>
-                  </div>
-                  <span
-                    className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#060814] ${
-                      selectedAccount.isOnline
-                        ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]"
-                        : "bg-slate-500"
-                    }`}
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm sm:text-base font-bold text-white">
-                      {selectedAccount.firstName} {selectedAccount.lastName}
-                    </h2>
-                    <span className="text-xs text-cyan-400 font-mono">
-                      {selectedAccount.username ? `@${selectedAccount.username}` : ""}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 font-mono" dir="ltr">
-                    {selectedAccount.phone}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <span
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border backdrop-blur-md ${
-                    selectedAccount.isOnline
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                      : "bg-slate-900/60 text-slate-400 border-slate-800"
-                  }`}
-                >
-                  {selectedAccount.isOnline ? t.status.online : t.status.offline}
-                </span>
-
-                {/* Subscription Status Tag */}
-                {selectedAccount.subscription?.is_unlimited ? (
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-300 border border-violet-500/30 flex items-center gap-1.5">
-                    <InfinityIcon className="w-3.5 h-3.5 text-violet-400" />
-                    <span>{lang === "fa" ? "اشتراک نامحدود" : "Unlimited"}</span>
-                  </span>
-                ) : selectedAccount.subscription?.expires_at &&
-                  new Date(selectedAccount.subscription.expires_at).getTime() <= Date.now() ? (
-                  isCustomer ? (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/40 flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                      <span>{lang === "fa" ? "اشتراک منقضی شده" : "Expired"}</span>
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => setExtendModalAccount(selectedAccount)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/40 flex items-center gap-1.5 hover:bg-rose-500/25 transition-colors cursor-pointer"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                      <span>{lang === "fa" ? "تمدید اشتراک منقضی" : "Extend Expired"}</span>
-                    </button>
-                  )
-                ) : selectedAccount.subscription?.expires_at ? (
-                  isCustomer ? (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>
-                        {(() => {
-                          const diffMs = new Date(selectedAccount.subscription.expires_at).getTime() - Date.now();
-                          const days = Math.max(0, Math.floor(diffMs / (24 * 3600 * 1000)));
-                          const hours = Math.max(0, Math.floor((diffMs % (24 * 3600 * 1000)) / (3600 * 1000)));
-                          return `${days} روز و ${hours} ساعت باقی‌مانده`;
-                        })()}
-                      </span>
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => setExtendModalAccount(selectedAccount)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 hover:bg-cyan-500/20 transition-all cursor-pointer"
-                      title="تمدید اشتراک"
-                    >
-                      <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>{lang === "fa" ? "تمدید اشتراک" : "Extend Sub"}</span>
-                    </button>
-                  )
-                ) : null}
-
-                {selectedAccount.features?.self_time?.active && (
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{lang === "fa" ? "ساعت پروفایل" : "Self-Time"}</span>
-                  </span>
-                )}
-
-                {selectedAccount.features?.tabchi?.status === "broadcasting" && (
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/35 flex items-center gap-1.5">
-                    <Radio className="w-3.5 h-3.5 text-violet-400 animate-pulse" />
-                    <span>{lang === "fa" ? "تبچی درحال ارسال" : "Tabchi Active"}</span>
-                  </span>
-                )}
-              </div>
-            </motion.div>
+            <ActiveAccountBanner
+              account={selectedAccount}
+              lang={lang}
+              isCustomer={isCustomer}
+              onSelectTab={(tab) => setActiveTab(tab)}
+              onExtendSubscription={(acc) => setExtendModalAccount(acc)}
+            />
           )}
 
           {/* Quick Tab Bar on Tablet / Mobile */}
@@ -764,6 +626,17 @@ export default function App() {
         isOpen={isDonateModalOpen}
         onClose={() => setIsDonateModalOpen(false)}
         lang={lang}
+      />
+
+      {/* Floating Cybernetic Mobile Navigation Dock */}
+      <MobileBottomDock
+        activeTab={activeTab}
+        onSelectTab={(tab) => setActiveTab(tab)}
+        isCustomer={isCustomer}
+        onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
+        lang={lang}
+        storePendingCount={storePendingCount}
+        accountsCount={visibleAccounts.length}
       />
     </div>
     </ConfirmProvider>

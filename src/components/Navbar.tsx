@@ -262,7 +262,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline">{t.connectAccount}</span>
           </motion.button>
 
-          {/* Donate Button */}
+          {/* Donate Button (Tablet & Desktop) */}
           {onOpenDonateModal && (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -270,14 +270,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onOpenDonateModal}
               title={lang === "fa" ? "دونیت و حمایت مالی" : "Donate & Support"}
-              className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-rose-500/12 hover:bg-rose-500/22 border border-rose-500/30 text-rose-300 transition-all text-xs font-semibold cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-rose-500/12 hover:bg-rose-500/22 border border-rose-500/30 text-rose-300 transition-all text-xs font-semibold cursor-pointer"
             >
               <Heart className="w-4 h-4 text-rose-400" />
               <span className="hidden xl:inline">{lang === "fa" ? "حمایت" : "Donate"}</span>
             </motion.button>
           )}
 
-          {/* Visual Help Button */}
+          {/* Visual Help Button (Tablet & Desktop) */}
           {onOpenHelpModal && (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -285,7 +285,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onOpenHelpModal}
               title={lang === "fa" ? "راهنمای تصویری" : "Visual Guide"}
-              className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-500/40 text-cyan-300 transition-all text-xs font-semibold cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-500/40 text-cyan-300 transition-all text-xs font-semibold cursor-pointer"
             >
               <HelpCircle className="w-4 h-4 text-cyan-400" />
               <span className="hidden xl:inline">{lang === "fa" ? "راهنما" : "Guide"}</span>

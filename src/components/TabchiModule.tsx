@@ -16,6 +16,9 @@ import {
   Target,
   ListFilter,
   Lightbulb,
+  Clock,
+  Timer,
+  Zap,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
@@ -38,6 +41,8 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
   // Tabchi form state
   const [message, setMessage] = useState("");
   const [intervalSeconds, setIntervalSeconds] = useState(4);
+  const [intervalUnit, setIntervalUnit] = useState<"seconds" | "minutes">("seconds");
+  const [customMinutesInput, setCustomMinutesInput] = useState<number>(5);
   const [repeatRounds, setRepeatRounds] = useState(3);
   const [repeatInfinite, setRepeatInfinite] = useState(false);
   const [targetMode, setTargetMode] = useState<"all" | "selected">("all");
@@ -64,7 +69,15 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
     loadedPhoneRef.current = account.phone;
 
     setMessage(account.features.tabchi.message || "");
-    setIntervalSeconds(account.features.tabchi.interval_seconds || 4);
+    const initialSec = account.features.tabchi.interval_seconds || 4;
+    setIntervalSeconds(initialSec);
+    if (initialSec >= 60 && initialSec % 60 === 0) {
+      setIntervalUnit("minutes");
+      setCustomMinutesInput(Math.floor(initialSec / 60));
+    } else {
+      setIntervalUnit(initialSec >= 60 ? "minutes" : "seconds");
+      setCustomMinutesInput(Math.max(1, Math.round(initialSec / 60)) || 5);
+    }
     setRepeatRounds(account.features.tabchi.repeat_rounds || 3);
     setRepeatInfinite(Boolean(account.features.tabchi.repeat_infinite));
     setTargetMode(account.features.tabchi.target_mode === "selected" ? "selected" : "all");
@@ -110,6 +123,43 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
   };
+
+  const formatIntervalText = (sec: number, isFa: boolean) => {
+    if (sec >= 60) {
+      const mins = Math.floor(sec / 60);
+      const remSec = sec % 60;
+      if (remSec === 0) {
+        return isFa ? `${mins} دقیقه` : `${mins} min`;
+      }
+      return isFa ? `${mins} دقیقه و ${remSec} ثانیه` : `${mins} min ${remSec}s`;
+    }
+    return isFa ? `${sec} ثانیه` : `${sec}s`;
+  };
+
+  const handleSelectPresetMinutes = (minutes: number) => {
+    const sec = minutes * 60;
+    setIntervalSeconds(sec);
+    setIntervalUnit("minutes");
+    setCustomMinutesInput(minutes);
+  };
+
+  const handleSelectPresetSeconds = (sec: number) => {
+    setIntervalSeconds(sec);
+    setIntervalUnit("seconds");
+  };
+
+  const handleMinuteChange = (minutesVal: number) => {
+    const clamped = Math.max(1, Math.min(minutesVal, 1440));
+    setCustomMinutesInput(clamped);
+    setIntervalSeconds(clamped * 60);
+  };
+
+  const handleSecondChange = (secVal: number) => {
+    const clamped = Math.max(2, Math.min(secVal, 3600));
+    setIntervalSeconds(clamped);
+  };
+
+  const currentMinutes = Math.max(1, Math.round(intervalSeconds / 60));
 
   // Save Settings
   const handleSaveSettings = async () => {
@@ -343,10 +393,19 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
             </span>
           </div>
           <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800">
-            <span className="text-[11px] text-slate-400 block mb-1">{t.tabchi.intervalLabel}</span>
-            <span className="text-xl font-bold font-mono text-amber-400">
-              {intervalSeconds}s
+            <span className="text-[11px] text-slate-400 block mb-1">
+              {lang === "fa" ? "زمان‌بندی ارسال بنر" : t.tabchi.intervalLabel}
             </span>
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="text-base sm:text-lg font-bold font-mono text-amber-400">
+                {formatIntervalText(intervalSeconds, lang === "fa")}
+              </span>
+              {intervalSeconds >= 60 && (
+                <span className="text-[10px] font-mono text-slate-500">
+                  ({intervalSeconds}s)
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -422,58 +481,281 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
             )}
           </div>
 
-          {/* Configuration sliders & repeat options */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-950 border border-slate-800 rounded-xl">
-            {/* Interval slider */}
-            <div>
-              <div className="flex justify-between items-center text-xs mb-1.5">
-                <span className="text-slate-300">{t.tabchi.intervalLabel}</span>
-                <span className="font-mono font-bold text-cyan-400">{intervalSeconds}s</span>
+          {/* BANNER TIMING & INTERVAL CONTROLS */}
+          <div className="p-4 sm:p-5 bg-slate-950 border border-slate-800 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-850">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs sm:text-sm font-bold text-slate-100">
+                      {lang === "fa" ? "زمان‌بندی و فاصله ارسال بنر تبلیغاتی" : "Banner Sending Timing & Interval"}
+                    </span>
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono font-bold">
+                      {formatIntervalText(intervalSeconds, lang === "fa")}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {lang === "fa"
+                      ? "تعیین فاصله زمانی بین ارسال بنرها به گروه‌ها (بر حسب دقیقه یا ثانیه)"
+                      : "Configure delay between banner broadcasts to groups (minutes or seconds)"}
+                  </p>
+                </div>
               </div>
-              <input
-                type="range"
-                min={2}
-                max={30}
-                value={intervalSeconds}
-                onChange={(e) => setIntervalSeconds(Number(e.target.value))}
-                className="w-full accent-cyan-400 cursor-pointer"
-              />
-              <p className="text-[10px] text-slate-500 mt-1">
-                {lang === "fa"
-                  ? "توصیه: حداقل ۴ ثانیه جهت جلوگیری از حساسیت آنتی‌اسپم تلگرام"
-                  : "Recommended: minimum 4s to prevent FloodWait limits"}
-              </p>
+
+              {/* Unit Toggle Tabs (Seconds vs Minutes) */}
+              <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIntervalUnit("minutes");
+                    if (intervalSeconds < 60) {
+                      setIntervalSeconds(5 * 60);
+                      setCustomMinutesInput(5);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    intervalUnit === "minutes"
+                      ? "bg-amber-500/25 text-amber-200 border border-amber-500/50 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Timer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{lang === "fa" ? "بر حسب دقیقه" : "Minutes"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIntervalUnit("seconds");
+                    if (intervalSeconds > 120) {
+                      setIntervalSeconds(30);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    intervalUnit === "seconds"
+                      ? "bg-cyan-500/25 text-cyan-200 border border-cyan-500/50 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{lang === "fa" ? "بر حسب ثانیه" : "Seconds"}</span>
+                </button>
+              </div>
             </div>
 
-            {/* Repeat rounds / infinite */}
-            <div>
-              <div className="flex justify-between items-center text-xs mb-1.5">
-                <span className="text-slate-300">{t.tabchi.roundsLabel}</span>
-                <span className="font-mono font-bold text-cyan-400">
-                  {repeatInfinite ? "24/7" : `${repeatRounds} rounds`}
+            {/* Quick Presets for Minutes (User requested: 5, 10, 15, 30 min) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-200 font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{lang === "fa" ? "دکمه‌های انتخاب سریع ارسال بنر (دقیقه):" : "Quick Minute Presets:"}</span>
+                </span>
+                <span className="text-[11px] text-amber-400/90 font-mono">
+                  {intervalSeconds >= 60
+                    ? `${lang === "fa" ? "تنظیم فعلی:" : "Current:"} هر ${Math.floor(intervalSeconds / 60)} دقیقه`
+                    : `${lang === "fa" ? "تنظیم فعلی:" : "Current:"} ${intervalSeconds} ثانیه`}
                 </span>
               </div>
-              <input
-                type="range"
-                min={1}
-                max={20}
-                disabled={repeatInfinite}
-                value={repeatRounds}
-                onChange={(e) => setRepeatRounds(Number(e.target.value))}
-                className="w-full accent-cyan-400 cursor-pointer disabled:opacity-30"
-              />
-              <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={repeatInfinite}
-                  onChange={(e) => setRepeatInfinite(e.target.checked)}
-                  className="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0"
-                />
-                <span className="text-xs text-slate-400 font-medium">
-                  {t.tabchi.infiniteLoop}
-                </span>
-              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                {[
+                  { m: 5, labelFa: "۵ دقیقه", sub: "۳۰۰ ثانیه", popular: true },
+                  { m: 10, labelFa: "۱۰ دقیقه", sub: "۶۰۰ ثانیه" },
+                  { m: 15, labelFa: "۱۵ دقیقه", sub: "۹۰۰ ثانیه" },
+                  { m: 30, labelFa: "۳۰ دقیقه", sub: "۱۸۰۰ ثانیه" },
+                  { m: 45, labelFa: "۴۵ دقیقه", sub: "۲۷۰۰ ثانیه" },
+                  { m: 60, labelFa: "۶۰ دقیقه (۱ ساعت)", sub: "۳۶۰۰ ثانیه" },
+                ].map((preset) => {
+                  const isSelected = intervalSeconds === preset.m * 60;
+                  return (
+                    <button
+                      key={preset.m}
+                      type="button"
+                      onClick={() => handleSelectPresetMinutes(preset.m)}
+                      className={`relative p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-amber-500/20 border-amber-500 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.25)] ring-1 ring-amber-500/50"
+                          : "bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900"
+                      }`}
+                    >
+                      {preset.popular && (
+                        <span className="absolute -top-2 right-2 px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 text-[9px] font-bold">
+                          {lang === "fa" ? "پیشنهادی" : "Best"}
+                        </span>
+                      )}
+                      <div className="font-bold text-xs sm:text-sm">
+                        {lang === "fa" ? preset.labelFa : `${preset.m} min`}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {preset.sub}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Quick Presets for Seconds (Fast broadcast) */}
+            <div className="space-y-2 pt-1 border-t border-slate-900">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 flex items-center gap-1.5 text-[11px]">
+                  <Zap className="w-3 h-3 text-cyan-400" />
+                  <span>{lang === "fa" ? "انتخاب سریع بر حسب ثانیه (ارسال سریع):" : "Quick Second Presets:"}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { s: 4, labelFa: "۴ ثانیه (ضداسپم)", labelEn: "4s (AntiSpam)" },
+                  { s: 10, labelFa: "۱۰ ثانیه", labelEn: "10s" },
+                  { s: 20, labelFa: "۲۰ ثانیه", labelEn: "20s" },
+                  { s: 30, labelFa: "۳۰ ثانیه", labelEn: "30s" },
+                  { s: 45, labelFa: "۴۵ ثانیه", labelEn: "45s" },
+                  { s: 60, labelFa: "۶۰ ثانیه (۱ دقیقه)", labelEn: "60s (1m)" },
+                ].map((p) => {
+                  const isSelected = intervalSeconds === p.s;
+                  return (
+                    <button
+                      key={p.s}
+                      type="button"
+                      onClick={() => handleSelectPresetSeconds(p.s)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-mono transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold shadow-sm"
+                          : "bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                      }`}
+                    >
+                      {lang === "fa" ? p.labelFa : p.labelEn}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SLIDER & NUMERIC INPUT DUAL CONTROLS */}
+            <div className="pt-2 border-t border-slate-850">
+              {intervalUnit === "minutes" ? (
+                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-200 font-medium">
+                      {lang === "fa" ? "اسلایدر یا تایپ دستی بر حسب دقیقه:" : "Custom Minute Interval:"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={1440}
+                        value={currentMinutes}
+                        onChange={(e) => handleMinuteChange(Number(e.target.value) || 1)}
+                        className="w-16 px-2 py-1 bg-slate-950 border border-amber-500/40 rounded-lg text-amber-300 font-mono font-bold text-center text-xs focus:outline-none focus:border-amber-400"
+                      />
+                      <span className="font-bold text-amber-400 text-xs">
+                        {lang === "fa" ? "دقیقه" : "min"}
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={60}
+                    step={1}
+                    value={Math.min(60, currentMinutes)}
+                    onChange={(e) => handleMinuteChange(Number(e.target.value))}
+                    className="w-full accent-amber-400 cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{lang === "fa" ? "۱ دقیقه" : "1 min"}</span>
+                    <span className="text-amber-300/80 font-mono">
+                      {lang === "fa"
+                        ? `معادل ${currentMinutes * 60} ثانیه تأخیر بین ارسال بنرها`
+                        : `Equals ${currentMinutes * 60} seconds delay`}
+                    </span>
+                    <span>{lang === "fa" ? "۶۰ دقیقه" : "60 min"}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 bg-slate-900/40 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-200 font-medium">
+                      {lang === "fa" ? "اسلایدر یا تایپ دستی بر حسب ثانیه:" : "Custom Seconds Interval:"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={2}
+                        max={3600}
+                        value={intervalSeconds}
+                        onChange={(e) => handleSecondChange(Number(e.target.value) || 2)}
+                        className="w-16 px-2 py-1 bg-slate-950 border border-cyan-500/40 rounded-lg text-cyan-300 font-mono font-bold text-center text-xs focus:outline-none focus:border-cyan-400"
+                      />
+                      <span className="font-bold text-cyan-400 text-xs">
+                        {lang === "fa" ? "ثانیه" : "sec"}
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min={2}
+                    max={120}
+                    value={Math.min(120, intervalSeconds)}
+                    onChange={(e) => handleSecondChange(Number(e.target.value))}
+                    className="w-full accent-cyan-400 cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{lang === "fa" ? "۲ ثانیه" : "2s"}</span>
+                    <span className="text-cyan-300/80 font-mono">
+                      {intervalSeconds >= 60
+                        ? `معادل ${(intervalSeconds / 60).toFixed(1)} دقیقه`
+                        : (lang === "fa" ? "توصیه: حداقل ۴ ثانیه جهت امنیت اکانت" : "Min 4s recommended")}
+                    </span>
+                    <span>{lang === "fa" ? "۱۲۰ ثانیه" : "120s"}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Informational tips banner */}
+            <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-xl text-[11px] text-amber-300/90 leading-relaxed flex items-start gap-2">
+              <Lightbulb className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                {lang === "fa"
+                  ? "💡 زمان‌بندی هوشمند بنر: برای ارسال‌های مداوم و تبلیغات گسترده در طول روز، تنظیم روی ۵ تا ۳۰ دقیقه بهترین بازدهی را دارد؛ چون بدون بن شدن اکانت تلگرام یا محدودیت فلود، بنر تبلیغاتی شما مرتباً در گروه‌ها تازه و در معرض دید قرار می‌گیرد."
+                  : "💡 Pro Tip: For 24/7 continuous promotion without Telegram spam restrictions, setting intervals between 5 to 30 minutes gives maximum visibility and keeps your account completely safe."}
+              </div>
+            </div>
+          </div>
+
+          {/* REPEAT ROUNDS & INFINITE LOOP */}
+          <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-200 font-bold flex items-center gap-1.5">
+                <Repeat className="w-4 h-4 text-cyan-400" />
+                <span>{t.tabchi.roundsLabel}</span>
+              </span>
+              <span className="font-mono font-bold text-cyan-400">
+                {repeatInfinite ? "24/7 بدون توقف (Infinite)" : `${repeatRounds} دور (Rounds)`}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={20}
+              disabled={repeatInfinite}
+              value={repeatRounds}
+              onChange={(e) => setRepeatRounds(Number(e.target.value))}
+              className="w-full accent-cyan-400 cursor-pointer disabled:opacity-30"
+            />
+            <label className="flex items-center gap-2 pt-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={repeatInfinite}
+                onChange={(e) => setRepeatInfinite(e.target.checked)}
+                className="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0"
+              />
+              <span className="text-xs text-slate-300 font-medium">
+                {t.tabchi.infiniteLoop}
+              </span>
+            </label>
           </div>
         </div>
 

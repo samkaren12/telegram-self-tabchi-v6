@@ -396,12 +396,12 @@ export const VisualHelpModal: React.FC<VisualHelpModalProps> = ({
                   <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 font-bold text-xs flex items-center justify-center">
                     ۳
                   </div>
-                  <h4 className="font-bold text-xs text-white">تکرار چرخه‌ای و تاخیر</h4>
-                  <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-mono text-rose-400" dir="ltr">
-                    Delay: 45s ~ 90s
+                  <h4 className="font-bold text-xs text-white">زمان‌بندی دقیق (ثانیه یا دقیقه)</h4>
+                  <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-mono text-amber-300" dir="ltr">
+                    Interval: 5m, 10m, 15m, 30m
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    تاخیر متغیر بذار تا الگوریتم‌های تلگرام پیام‌ها رو به عنوان انسان تشخیص بدن.
+                    امکان انتخاب دکمه‌های سریع ۵، ۱۰، ۱۵ و ۳۰ دقیقه یا تنظیم بر حسب ثانیه جهت ارسال مداوم و امن بنر.
                   </p>
                 </div>
               </div>

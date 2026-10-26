@@ -4110,7 +4110,26 @@ export class TelegramManager {
             account.features.tabchi.last_run = new Date().toISOString();
             this.saveState();
 
-            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+            if (intervalMs >= 60000) {
+              const mins = Math.floor(intervalMs / 60000);
+              const remSec = Math.floor((intervalMs % 60000) / 1000);
+              const timeStr = remSec > 0 ? `${mins} دقیقه و ${remSec} ثانیه` : `${mins} دقیقه`;
+              this.addLog("info", "tabchi", `بنر با موفقیت به ${chat.title || chat.id || "گروه"} ارسال شد. استراحت هوشمند به مدت ${timeStr} تا ارسال بعدی...`, account.phone);
+            }
+
+            // Abortable wait timer so stopping Tabchi is instant even with long minute intervals
+            await new Promise<void>((resolve) => {
+              if (abortController.signal.aborted) {
+                resolve();
+                return;
+              }
+              const timer = setTimeout(resolve, intervalMs);
+              const onAbort = () => {
+                clearTimeout(timer);
+                resolve();
+              };
+              abortController.signal.addEventListener("abort", onAbort, { once: true });
+            });
           }
         }
 
@@ -5510,6 +5529,9 @@ export class TelegramManager {
     const activeCount = accounts.filter((a) => a.features?.broadcast?.active || a.features?.tabchi?.status === "broadcasting").length;
     const firstAcc = accounts[0];
     const delaySec = (firstAcc?.features?.broadcast as any)?.interval_seconds || firstAcc?.features?.tabchi?.interval_seconds || 15;
+    const delayDisplay = delaySec >= 60
+      ? `${Math.floor(delaySec / 60)} دقیقه${delaySec % 60 ? ` و ${delaySec % 60} ثانیه` : ""}`
+      : `${delaySec} ثانیه`;
     const msgPreview = (firstAcc?.features?.broadcast?.message || firstAcc?.features?.tabchi?.message || "پیامی تنظیم نشده است.").slice(0, 100);
 
     const text =
@@ -5517,7 +5539,7 @@ export class TelegramManager {
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `🔘 <b>وضعیت تبچی:</b> ${anyTabchiActive ? "روشن و در حال ارسال 🟢" : "متوقف شده 🔴"}\n` +
       `📱 <b>اکانت‌های فعال تبچی:</b> ${activeCount} از ${accounts.length}\n` +
-      `⏱ <b>فاصله زمانی بین ارسال‌ها:</b> ${delaySec} ثانیه\n\n` +
+      `⏱ <b>فاصله زمانی بین ارسال‌ها:</b> ${delayDisplay}\n\n` +
       `📝 <b>پیش‌نمایش پیام ارسالی:</b>\n` +
       `<i>«${msgPreview}»</i>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +

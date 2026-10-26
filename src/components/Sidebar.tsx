@@ -357,7 +357,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sticky Sidebar */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 glass-header border-l border-violet-500/20 transition-all duration-300 z-30 sticky top-0 h-screen ${
+        className={`hidden md:flex flex-col shrink-0 glass-header ${
+          isRtl ? "border-l" : "border-r"
+        } border-violet-500/20 transition-all duration-300 z-30 sticky top-0 h-screen ${
           isCollapsed ? "w-20" : "w-64"
         }`}
       >
@@ -368,10 +370,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isMobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div
-            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity"
             onClick={onCloseMobile}
           />
-          <aside className="relative w-72 max-w-[85vw] glass-header border-l border-violet-500/30 h-full z-10 flex flex-col">
+          <aside
+            className={`relative w-72 max-w-[85vw] glass-header ${
+              isRtl ? "border-l" : "border-r"
+            } border-violet-500/30 h-full z-10 flex flex-col shadow-2xl`}
+          >
             {renderSidebarContent(true)}
           </aside>
         </div>
