@@ -57,6 +57,10 @@ import { Language } from "../utils/i18n";
 import { PaymentMethodsManager } from "./store/PaymentMethodsManager";
 import { BatchPricingModal } from "./store/BatchPricingModal";
 import { CustomersManager } from "./store/CustomersManager";
+import { CategoriesManager } from "./store/CategoriesManager";
+import { ChannelsManager } from "./store/ChannelsManager";
+import { ButtonCustomizer } from "./store/ButtonCustomizer";
+import { BotMessagesManager } from "./store/BotMessagesManager";
 import { useConfirm } from "./ui/ConfirmProvider";
 
 interface StoreBotModuleProps {
@@ -69,7 +73,19 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   const [data, setData] = useState<StoreData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<
-    "overview" | "customers" | "orders" | "plans" | "payments" | "bot_config" | "simulator" | "coupons" | "broadcast"
+    | "overview"
+    | "categories"
+    | "customers"
+    | "orders"
+    | "plans"
+    | "payments"
+    | "buttons"
+    | "channels"
+    | "messages"
+    | "bot_config"
+    | "simulator"
+    | "coupons"
+    | "broadcast"
   >("overview");
   const [isSubTabsWrapped, setIsSubTabsWrapped] = useState<boolean>(false);
   const [activePipelineStep, setActivePipelineStep] = useState<number>(0);
@@ -1092,6 +1108,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
       {(() => {
         const subTabsList = [
           { id: "overview", label: "📊 داشبورد و آمار", icon: TrendingUp },
+          { id: "categories", label: "📁 دسته‌بندی‌ها", icon: Layers, count: data?.categories?.length || 0 },
           {
             id: "customers",
             label: "👥 مشتریان و تمدید اشتراک",
@@ -1104,9 +1121,12 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
             icon: ShoppingBag,
             badge: pendingOrders.length > 0 ? pendingOrders.length : undefined,
           },
-          { id: "plans", label: "💎 مدیریت پکیج‌ها (سلف و تبچی)", icon: Layers, count: plans.length },
+          { id: "plans", label: "💎 مدیریت پکیج‌ها (سلف و تبچی)", icon: Sparkles, count: plans.length },
           { id: "payments", label: "💳 درگاه کارت و ارز دیجیتال", icon: CreditCard },
-          { id: "bot_config", label: "⚙️ تنظیمات ربات و دکمه‌ها", icon: Bot },
+          { id: "buttons", label: "🎛️ دکمه‌ها و رنگ Aiogram", icon: Sliders },
+          { id: "channels", label: "📢 کانال‌ها و عضویت اجباری", icon: Radio },
+          { id: "messages", label: "💬 متون و قالب پیام‌ها", icon: MessageSquare },
+          { id: "bot_config", label: "⚙️ اتصال توکن ربات", icon: Bot },
           { id: "simulator", label: "📱 پیش‌نمایش زنده ربات تلگرام", icon: Smartphone },
           { id: "coupons", label: "🎁 کدهای تخفیف", icon: Tag, count: coupons.length },
           { id: "broadcast", label: "📢 ارسال پیام همگانی", icon: Send },
@@ -1611,6 +1631,57 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
             )}
           </div>
         </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* CATEGORIES MANAGEMENT */}
+      {/* ========================================================= */}
+      {activeSubTab === "categories" && (
+        <CategoriesManager
+          categories={data?.categories || []}
+          lang={lang}
+          onRefresh={() => fetchStoreData(true)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ========================================================= */}
+      {/* BUTTONS & AIOGRAM STYLING */}
+      {/* ========================================================= */}
+      {activeSubTab === "buttons" && settings && (
+        <ButtonCustomizer
+          settings={settings}
+          categories={data?.categories || []}
+          lang={lang}
+          onRefresh={() => fetchStoreData(true)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ========================================================= */}
+      {/* CHANNELS: MANDATORY JOIN & PURCHASE REPORTS */}
+      {/* ========================================================= */}
+      {activeSubTab === "channels" && settings && (
+        <ChannelsManager
+          settings={settings}
+          lang={lang}
+          onRefresh={() => fetchStoreData(true)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ========================================================= */}
+      {/* MESSAGES & BEAUTIFICATION */}
+      {/* ========================================================= */}
+      {activeSubTab === "messages" && settings && (
+        <BotMessagesManager
+          messages={settings.messages}
+          welcomeText={settings.welcomeText}
+          rulesText={settings.rulesText}
+          lang={lang}
+          onRefresh={() => fetchStoreData(true)}
+          showToast={showToast}
+        />
       )}
 
       {/* ========================================================= */}

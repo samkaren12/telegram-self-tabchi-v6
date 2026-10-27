@@ -967,7 +967,7 @@ export class TelegramManager {
   public async provisionStoreAccount(
     phone: string,
     options: {
-      category: "self" | "tabchi" | "combo" | "subscription";
+      category: "self" | "tabchi" | "combo" | "subscription" | string;
       durationDays: number;
       isUnlimited: boolean;
       orderId: string;

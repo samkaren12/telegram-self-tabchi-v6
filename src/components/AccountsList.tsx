@@ -60,6 +60,30 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [botTargetAccount, setBotTargetAccount] = useState<TelegramAccount | null>(null);
   const [credentialsTargetAccount, setCredentialsTargetAccount] = useState<TelegramAccount | null>(null);
   const [filters, setFilters] = useState<AccountFiltersState>(defaultAccountFilters);
+  const [syncingProfiles, setSyncingProfiles] = useState(false);
+
+  const handleSyncProfiles = async () => {
+    setSyncingProfiles(true);
+    try {
+      const res = await fetch("/api/accounts/sync-names", { method: "POST" });
+      const json = await res.json();
+      if (json.success) {
+        toast(
+          lang === "fa"
+            ? `مشخصات ${json.updatedCount || 0} اکانت با موفقیت از سرورهای تلگرام همگام‌سازی و بروز شد.`
+            : `Synced ${json.updatedCount || 0} account profiles live from Telegram.`,
+          "success"
+        );
+        onRefresh();
+      } else {
+        toast(lang === "fa" ? (json.message || "خطا در همگام‌سازی") : "Sync failed", "error");
+      }
+    } catch {
+      toast(lang === "fa" ? "خطا در اتصال به سرور جهت همگام‌سازی مشخصات" : "Network error during sync", "error");
+    } finally {
+      setSyncingProfiles(false);
+    }
+  };
 
   const filteredAccounts = useMemo(() => {
     return accounts
@@ -309,6 +333,19 @@ export const AccountsList: React.FC<AccountsListProps> = ({
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{lang === "fa" ? "بروزرسانی" : "Refresh"}</span>
+          </button>
+          <button
+            onClick={handleSyncProfiles}
+            disabled={syncingProfiles}
+            className="p-2 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 text-cyan-300 hover:text-cyan-200 transition-all text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+            title={lang === "fa" ? "همگام‌سازی زنده نام و آیدی تلگرام تمام اکانت‌ها" : "Sync live names and usernames from Telegram"}
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${syncingProfiles ? "animate-spin text-cyan-400" : "text-cyan-400"}`} />
+            <span className="hidden sm:inline">
+              {syncingProfiles
+                ? (lang === "fa" ? "در حال دریافت..." : "Syncing...")
+                : (lang === "fa" ? "همگام‌سازی نام‌ها" : "Sync Names")}
+            </span>
           </button>
         </div>
       </div>

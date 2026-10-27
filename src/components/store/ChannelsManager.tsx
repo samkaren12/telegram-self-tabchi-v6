@@ -96,7 +96,7 @@ export function ChannelsManager({
       message: "آیا مطمئن هستید که می‌خواهید این کانال را از لیست عضویت اجباری حذف کنید؟",
       confirmText: "بله، حذف کن",
       cancelText: "انصراف",
-      danger: true,
+      variant: "danger",
     });
     if (!ok) return;
 

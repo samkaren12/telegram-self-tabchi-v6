@@ -152,7 +152,7 @@ export function ButtonCustomizer({
       message: "آیا مطمئن هستید که می‌خواهید این دکمه را حذف کنید؟",
       confirmText: "بله، حذف کن",
       cancelText: "انصراف",
-      danger: true,
+      variant: "danger",
     });
     if (!ok) return;
 

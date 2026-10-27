@@ -160,7 +160,7 @@ export function CategoriesManager({
         "آیا مطمئن هستید که می‌خواهید این دسته‌بندی را حذف کنید؟ این تغییر بلافاصله از ربات تلگرام حذف خواهد شد.",
       confirmText: "بله، حذف کن",
       cancelText: "انصراف",
-      danger: true,
+      variant: "danger",
     });
     if (!ok) return;
 

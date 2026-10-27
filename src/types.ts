@@ -588,7 +588,7 @@ export interface StoreOrder {
   id: string;
   planId: string;
   planTitle: string;
-  category: "self" | "tabchi" | "combo" | "subscription";
+  category: "self" | "tabchi" | "combo" | "subscription" | string;
   durationDays: number;
   isUnlimited: boolean;
   userId: number | string;
@@ -599,7 +599,7 @@ export interface StoreOrder {
   discountAmount?: number;
   finalPriceToman: number;
   finalPriceUsdt: number;
-  paymentMethod: "card" | "crypto";
+  paymentMethod: "card" | "crypto" | "stars";
   paymentDetails: {
     cryptoNetwork?: string;
     walletAddress?: string;
