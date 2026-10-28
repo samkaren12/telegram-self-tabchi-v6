@@ -137,6 +137,7 @@ export interface TelegramAccountFeatures {
     status: "idle" | "broadcasting" | "stopped" | "error";
     target_mode: "all" | "selected";
     targets: string[];
+    send_mode?: "sequential" | "simultaneous";
   };
   keep_alive: boolean;
   cosmic?: {
@@ -439,7 +440,19 @@ export interface StoreMandatoryChannel {
 export interface StoreCustomButton {
   id: string;
   text: string;
-  action: "buy_category" | "buy_plan" | "my_orders" | "my_account" | "support" | "help" | "rules" | "custom_url";
+  action:
+    | "buy_category"
+    | "buy_plan"
+    | "my_orders"
+    | "my_account"
+    | "manage_self_tabchi"
+    | "setup_personal_bot"
+    | "spambot_checker"
+    | "discount_coupon"
+    | "support"
+    | "help"
+    | "rules"
+    | "custom_url";
   targetCategoryId?: string;
   targetPlanId?: string;
   url?: string;
@@ -448,6 +461,25 @@ export interface StoreCustomButton {
   rowIndex: number;
   columnIndex: number;
   isActive: boolean;
+}
+
+export interface AccountSpamHealthReport {
+  success: boolean;
+  phone: string;
+  isOnline: boolean;
+  latencyMs: number;
+  dcId?: number;
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+    isPremium: boolean;
+  };
+  spamBotStatus: "clean" | "temp_restricted" | "restricted" | "offline" | "error";
+  spamBotStatusLabel: string;
+  spamBotRawResponse: string;
+  checkedAt: string;
 }
 
 export interface StoreBotMessages {

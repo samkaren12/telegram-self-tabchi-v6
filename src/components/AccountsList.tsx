@@ -61,6 +61,33 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   const [credentialsTargetAccount, setCredentialsTargetAccount] = useState<TelegramAccount | null>(null);
   const [filters, setFilters] = useState<AccountFiltersState>(defaultAccountFilters);
   const [syncingProfiles, setSyncingProfiles] = useState(false);
+  const [checkingHealthPhone, setCheckingHealthPhone] = useState<string | null>(null);
+  const [healthReports, setHealthReports] = useState<Record<string, any>>({});
+
+  const handleCheckAccountHealth = async (phone: string) => {
+    setCheckingHealthPhone(phone);
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(phone)}/check-health`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || "خطا در اجرای چکر سلامت شماره");
+      }
+      setHealthReports((prev) => ({ ...prev, [phone]: json.report }));
+      toast(
+        lang === "fa"
+          ? `تست سلامت و @SpamBot برای ${phone}: ${json.report.spamBotStatusLabel}`
+          : `Health check completed for ${phone}`,
+        json.report.spamBotStatus === "clean" ? "success" : "error"
+      );
+      onRefresh();
+    } catch (err: any) {
+      toast(err.message || "خطا در بررسی سلامت شماره", "error");
+    } finally {
+      setCheckingHealthPhone(null);
+    }
+  };
 
   const handleSyncProfiles = async () => {
     setSyncingProfiles(true);
@@ -461,35 +488,75 @@ export const AccountsList: React.FC<AccountsListProps> = ({
               </div>
 
               {/* Control Buttons */}
-              <div className="grid grid-cols-2 gap-2 my-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 my-3">
                 <button
                   onClick={() => setBotTargetAccount(acc)}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm transform active:scale-95 cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold border transition-all shadow-sm transform active:scale-95 cursor-pointer ${
                     acc.bot?.enabled && acc.bot?.bot_token
                       ? "bg-violet-500/15 border-violet-500/40 text-violet-300 hover:bg-violet-500/25 shadow-violet-500/10"
                       : "bg-slate-900/60 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white"
                   }`}
-                  title={lang === "fa" ? "ربات تلگرام اختصاصی این شماره" : "Dedicated Telegram Bot"}
+                  title={lang === "fa" ? "ربات تلگرام اختصاصی این شماره (@BotFather)" : "Dedicated Telegram Bot"}
                 >
-                  <Bot className={`w-4 h-4 ${acc.bot?.enabled ? "text-violet-400" : "text-slate-400"}`} />
+                  <Bot className={`w-4 h-4 shrink-0 ${acc.bot?.enabled ? "text-violet-400" : "text-slate-400"}`} />
                   <span className="truncate">
                     {acc.bot?.enabled && acc.bot?.bot_token
-                      ? (lang === "fa" ? "ربات تلگرام شماره" : "Account Bot")
-                      : (lang === "fa" ? "تنظیم ربات شماره" : "Setup Bot")}
+                      ? (lang === "fa" ? "ربات شخصی فعال" : "Account Bot")
+                      : (lang === "fa" ? "ربات شخصی شماره" : "Setup Bot")}
                   </span>
                 </button>
 
                 <button
                   onClick={() => setCredentialsTargetAccount(acc)}
-                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/25 transition-all shadow-sm shadow-cyan-500/10 transform active:scale-95 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/25 transition-all shadow-sm shadow-cyan-500/10 transform active:scale-95 cursor-pointer"
                   title={lang === "fa" ? "مشخصات ورود مشتری به پنل وب" : "Customer Panel Credentials"}
                 >
-                  <KeyRound className="w-4 h-4 text-cyan-400" />
+                  <KeyRound className="w-4 h-4 shrink-0 text-cyan-400" />
                   <span className="truncate">
                     {lang === "fa" ? "ورود مشتری به پنل" : "Customer Login"}
                   </span>
                 </button>
+
+                <button
+                  onClick={() => handleCheckAccountHealth(acc.phone)}
+                  disabled={checkingHealthPhone === acc.phone}
+                  className="flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 transition-all shadow-sm shadow-emerald-500/10 transform active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title={lang === "fa" ? "تست زنده سلامت شماره و استعلام از @SpamBot تلگرام" : "Check Account Health & @SpamBot"}
+                >
+                  <ShieldCheck className={`w-4 h-4 shrink-0 text-emerald-400 ${checkingHealthPhone === acc.phone ? "animate-spin" : ""}`} />
+                  <span className="truncate">
+                    {checkingHealthPhone === acc.phone
+                      ? (lang === "fa" ? "تست SpamBot..." : "Checking...")
+                      : (lang === "fa" ? "🩺 چکر سلامت شماره" : "Health Check")}
+                  </span>
+                </button>
               </div>
+
+              {healthReports[acc.phone] && (
+                <div className="my-2.5 p-3 rounded-xl bg-slate-950/90 border border-cyan-500/30 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-cyan-300">
+                      {healthReports[acc.phone].spamBotStatusLabel}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHealthReports((prev) => {
+                          const copy = { ...prev };
+                          delete copy[acc.phone];
+                          return copy;
+                        })
+                      }
+                      className="text-[10px] text-slate-400 hover:text-slate-200 px-1.5 py-0.5 rounded bg-slate-900 cursor-pointer"
+                    >
+                      بستن ✕
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-slate-300 font-mono bg-slate-900/90 p-2 rounded-lg border border-slate-800 whitespace-pre-wrap max-h-28 overflow-y-auto">
+                    {healthReports[acc.phone].spamBotRawResponse}
+                  </div>
+                </div>
+              )}
 
               {/* Status Feature Badges */}
               <div className="flex flex-wrap gap-2 mb-4 pt-2 border-t border-slate-800/80">

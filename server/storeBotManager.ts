@@ -30,6 +30,122 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
+  return [
+    {
+      id: "btn-self",
+      text: "💎 خرید اکانت سلف زمان‌دار",
+      action: "buy_category",
+      targetCategoryId: "self",
+      style: "success",
+      rowIndex: 0,
+      columnIndex: 0,
+      isActive: true,
+    },
+    {
+      id: "btn-tabchi",
+      text: "🚀 خرید اکانت تبچی تبلیغاتی",
+      action: "buy_category",
+      targetCategoryId: "tabchi",
+      style: "primary",
+      rowIndex: 0,
+      columnIndex: 1,
+      isActive: true,
+    },
+    {
+      id: "btn-combo",
+      text: "⚡ پکیج VIP (سلف + تبچی)",
+      action: "buy_category",
+      targetCategoryId: "combo",
+      style: "danger",
+      rowIndex: 1,
+      columnIndex: 0,
+      isActive: true,
+    },
+    {
+      id: "btn-catalog",
+      text: "🛍️ تعرفه‌ها و لیست پکیج‌ها",
+      action: "help",
+      style: "primary",
+      rowIndex: 1,
+      columnIndex: 1,
+      isActive: true,
+    },
+    {
+      id: "btn-account",
+      text: "👤 مشخصات من و اشتراک",
+      action: "my_account",
+      style: "success",
+      rowIndex: 2,
+      columnIndex: 0,
+      isActive: true,
+    },
+    {
+      id: "btn-orders",
+      text: "📦 پیگیری سفارشات من",
+      action: "my_orders",
+      style: "primary",
+      rowIndex: 2,
+      columnIndex: 1,
+      isActive: true,
+    },
+    {
+      id: "btn-manage-bot",
+      text: "🎛 مدیریت سلف و تبچی (در ربات)",
+      action: "manage_self_tabchi",
+      style: "success",
+      rowIndex: 3,
+      columnIndex: 0,
+      isActive: true,
+    },
+    {
+      id: "btn-personal-bot",
+      text: "🤖 ساخت ربات شخصی (BotFather)",
+      action: "setup_personal_bot",
+      style: "primary",
+      rowIndex: 3,
+      columnIndex: 1,
+      isActive: true,
+    },
+    {
+      id: "btn-spambot-checker",
+      text: "🩺 چکر سلامت شماره و تست SpamBot",
+      action: "spambot_checker",
+      style: "warning",
+      rowIndex: 4,
+      columnIndex: 0,
+      isActive: true,
+    },
+    {
+      id: "btn-discount",
+      text: "🎁 ثبت کد تخفیف",
+      action: "discount_coupon",
+      style: "success",
+      rowIndex: 4,
+      columnIndex: 1,
+      isActive: true,
+    },
+    {
+      id: "btn-support",
+      text: "📞 پشتیبانی و راهنما",
+      action: "support",
+      style: "danger",
+      rowIndex: 5,
+      columnIndex: 0,
+      isActive: true,
+    },
+    {
+      id: "btn-guide",
+      text: "📖 آموزش اتصال به پنل",
+      action: "rules",
+      style: "primary",
+      rowIndex: 5,
+      columnIndex: 1,
+      isActive: true,
+    },
+  ];
+}
+
 export function defaultStoreData(): StoreData {
   const defaultCategories: StoreCategory[] = [
     {
@@ -290,83 +406,7 @@ export function defaultStoreData(): StoreData {
     reportsChannelEnabled: false,
     reportsChannelId: "",
     mandatoryChannels: [],
-    customButtons: [
-      {
-        id: "btn-self",
-        text: "💎 خرید اکانت سلف زمان‌دار",
-        action: "buy_category",
-        targetCategoryId: "self",
-        style: "success",
-        rowIndex: 0,
-        columnIndex: 0,
-        isActive: true,
-      },
-      {
-        id: "btn-tabchi",
-        text: "🚀 خرید اکانت تبچی تبلیغاتی",
-        action: "buy_category",
-        targetCategoryId: "tabchi",
-        style: "primary",
-        rowIndex: 0,
-        columnIndex: 1,
-        isActive: true,
-      },
-      {
-        id: "btn-combo",
-        text: "⚡ پکیج VIP (سلف + تبچی)",
-        action: "buy_category",
-        targetCategoryId: "combo",
-        style: "danger",
-        rowIndex: 1,
-        columnIndex: 0,
-        isActive: true,
-      },
-      {
-        id: "btn-catalog",
-        text: "🛍️ تعرفه‌ها و لیست پکیج‌ها",
-        action: "help",
-        style: "primary",
-        rowIndex: 1,
-        columnIndex: 1,
-        isActive: true,
-      },
-      {
-        id: "btn-account",
-        text: "👤 حساب کاربری و اشتراک",
-        action: "my_account",
-        style: "default",
-        rowIndex: 2,
-        columnIndex: 0,
-        isActive: true,
-      },
-      {
-        id: "btn-orders",
-        text: "📦 پیگیری سفارشات من",
-        action: "my_orders",
-        style: "default",
-        rowIndex: 2,
-        columnIndex: 1,
-        isActive: true,
-      },
-      {
-        id: "btn-support",
-        text: "📞 پشتیبانی و راهنما",
-        action: "support",
-        style: "warning",
-        rowIndex: 3,
-        columnIndex: 0,
-        isActive: true,
-      },
-      {
-        id: "btn-guide",
-        text: "📖 آموزش اتصال به پنل",
-        action: "rules",
-        style: "primary",
-        rowIndex: 3,
-        columnIndex: 1,
-        isActive: true,
-      },
-    ],
+    customButtons: getDefaultStoreCustomButtons(),
     messages: {
       welcome: "👋 درود! به فروشگاه رسمی اکانت‌های سلف هوشمند و تبچی خوش آمدید.\n\nجهت مشاهده تعرفه‌ها و ثبت سفارش، از دکمه‌های زیر استفاده نمایید:",
       help: "📖 <b>راهنمای ربات فروشگاهی:</b>\n\n۱. اشتراک مورد نظر خود را انتخاب کنید.\n۲. روش پرداخت (کارت به کارت یا ارز دیجیتال) را انتخاب نمایید.\n۳. فیش واریز را ارسال کنید تا شماره شما فوراً فعال گردد.",
@@ -516,7 +556,9 @@ export class StoreBotManager {
         | "awaiting_coupon"
         | "awaiting_self_phone"
         | "awaiting_self_code"
-        | "awaiting_self_2fa";
+        | "awaiting_self_2fa"
+        | "awaiting_personal_bot_token"
+        | "awaiting_tabchi_banner";
       pendingPlanId?: string;
       pendingPaymentMethod?: "card" | "crypto";
       selectedCryptoNetwork?: string;
@@ -526,8 +568,17 @@ export class StoreBotManager {
       loginSessionId?: string;
       enteredCode?: string;
       passwordHint?: string;
+      targetPhone?: string;
     }
   > = new Map();
+
+  private escapeHtml(str: string): string {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
   private toEnglishDigits(str: string): string {
     const fa = "۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩";
@@ -692,6 +743,35 @@ export class StoreBotManager {
   // TELEGRAM BOT API CALLS
   // =============================================================
 
+  private stripExtendedButtonFields(replyMarkup: any): any {
+    if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
+    const copy = JSON.parse(JSON.stringify(replyMarkup));
+    if (Array.isArray(copy.inline_keyboard)) {
+      copy.inline_keyboard = copy.inline_keyboard.map((row: any[]) =>
+        Array.isArray(row)
+          ? row.map((btn: any) => {
+              const { style, icon_custom_emoji_id, ...rest } = btn || {};
+              return rest;
+            })
+          : row
+      );
+    }
+    if (Array.isArray(copy.keyboard)) {
+      copy.keyboard = copy.keyboard.map((row: any[]) =>
+        Array.isArray(row)
+          ? row.map((btn: any) => {
+              if (typeof btn === "object" && btn !== null) {
+                const { style, icon_custom_emoji_id, ...rest } = btn;
+                return rest;
+              }
+              return btn;
+            })
+          : row
+      );
+    }
+    return copy;
+  }
+
   private async callBotApi(method: string, body?: any): Promise<any> {
     const token = this.data.settings.botToken;
     if (!token) throw new Error("توکن ربات تلگرام تنظیم نشده است.");
@@ -705,6 +785,24 @@ export class StoreBotManager {
 
     const json: any = await res.json();
     if (!json.ok) {
+      const desc = String(json.description || "");
+      // Automatic fallback if parse_mode fails or extended button fields are rejected
+      if (body && (desc.includes("can't parse entities") || desc.includes("style") || desc.includes("custom_emoji") || desc.includes("reply_markup"))) {
+        const fallbackBody = { ...body };
+        if (desc.includes("can't parse entities")) {
+          delete fallbackBody.parse_mode;
+        }
+        if (fallbackBody.reply_markup) {
+          fallbackBody.reply_markup = this.stripExtendedButtonFields(fallbackBody.reply_markup);
+        }
+        const retryRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fallbackBody),
+        });
+        const retryJson: any = await retryRes.json();
+        if (retryJson.ok) return retryJson.result;
+      }
       throw new Error(json.description || `خطای API تلگرام: ${json.error_code}`);
     }
     return json.result;
@@ -946,32 +1044,107 @@ export class StoreBotManager {
     }
   }
 
+  private getAiogramStyleColorPrefix(style?: string): string {
+    switch (style) {
+      case "success":
+        return "🟢 ";
+      case "danger":
+        return "🔴 ";
+      case "primary":
+        return "🔵 ";
+      case "warning":
+        return "🟡 ";
+      default:
+        return "";
+    }
+  }
+
   public getReplyKeyboardMarkup(userId?: number | string) {
     const labels = this.data.settings.buttonLabels;
     const theme = this.getThemePrefix(this.data.settings.buttonTheme);
+    const isAiogram = this.data.settings.buttonTheme === "aiogram_colored";
     const cols = Number(this.data.settings.replyKeyboardColumns || this.data.settings.keyboardColumns || 2);
 
     const categories = this.getCategories().filter((c) => c.isActive);
+    const customBtns = this.data.settings.customButtons?.filter((b) => b.isActive) || [];
+
+    // If custom buttons are defined and active, render them in Reply Keyboard with Aiogram color styles & Premium Emoji
+    if (customBtns.length > 0) {
+      const sorted = [...customBtns].sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex);
+      const rowsMap: Map<number, any[]> = new Map();
+
+      for (const btn of sorted) {
+        const colorDot =
+          isAiogram || (btn.style && btn.style !== "default")
+            ? this.getAiogramStyleColorPrefix(btn.style)
+            : "";
+        const hasColorDotAlready =
+          btn.text.startsWith("🟢") ||
+          btn.text.startsWith("🔴") ||
+          btn.text.startsWith("🔵") ||
+          btn.text.startsWith("🟡");
+
+        const displayText = colorDot && !hasColorDotAlready ? `${colorDot}${btn.text}` : btn.text;
+
+        const btnObj: any = {
+          text: displayText,
+          ...(btn.style && btn.style !== "default" ? { style: btn.style } : {}),
+          ...(btn.customEmojiId ? { icon_custom_emoji_id: btn.customEmojiId } : {}),
+        };
+
+        const rIndex = btn.rowIndex || 0;
+        if (!rowsMap.has(rIndex)) rowsMap.set(rIndex, []);
+        rowsMap.get(rIndex)!.push(btnObj);
+      }
+
+      const keyboardRows: any[][] = [];
+      const sortedRowKeys = Array.from(rowsMap.keys()).sort((a, b) => a - b);
+      for (const rk of sortedRowKeys) {
+        keyboardRows.push(rowsMap.get(rk)!);
+      }
+
+      if (userId && this.isUserAdmin(userId)) {
+        keyboardRows.push([{ text: "👑 پنل مدیریت", ...(isAiogram ? { style: "danger" } : {}) }]);
+      }
+
+      if (this.data.settings.allowCustomerKeyboardSwitch) {
+        keyboardRows.push([{ text: "🪟 تغییر به دکمه‌های شیشه‌ای (Inline)", ...(isAiogram ? { style: "primary" } : {}) }]);
+      }
+
+      return {
+        keyboard: keyboardRows,
+        resize_keyboard: true,
+        persistent: true,
+      };
+    }
+
     const allButtons: any[] = [];
 
     // Dynamically insert active categories
     if (categories.length > 0) {
       for (const cat of categories) {
-        allButtons.push({ text: `${cat.icon || "💎"} ${cat.title}` });
+        const style = cat.id === "self" ? "success" : cat.id === "tabchi" ? "primary" : "danger";
+        allButtons.push({
+          text: `${cat.icon || "💎"} ${cat.title}`,
+          ...(isAiogram ? { style } : {}),
+        });
       }
     } else {
-      allButtons.push({ text: `${theme.self} ${labels.buySelf}` });
-      allButtons.push({ text: `${theme.tabchi} ${labels.buyTabchi}` });
-      allButtons.push({ text: `${theme.combo} ${labels.buyCombo}` });
+      allButtons.push({ text: `${theme.self} ${labels.buySelf}`, ...(isAiogram ? { style: "success" } : {}) });
+      allButtons.push({ text: `${theme.tabchi} ${labels.buyTabchi}`, ...(isAiogram ? { style: "primary" } : {}) });
+      allButtons.push({ text: `${theme.combo} ${labels.buyCombo}`, ...(isAiogram ? { style: "danger" } : {}) });
     }
 
     // Common system buttons
-    allButtons.push({ text: `${theme.catalog} ${labels.plansCatalog}` });
-    allButtons.push({ text: `${theme.account} ${labels.myAccount}` });
-    allButtons.push({ text: `${theme.orders} ${labels.myOrders}` });
-    allButtons.push({ text: `${theme.support} ${labels.support}` });
-    allButtons.push({ text: `${theme.guide} ${labels.helpGuide}` });
-    allButtons.push({ text: `${theme.discount} ${labels.applyDiscount}` });
+    allButtons.push({ text: `${theme.catalog} ${labels.plansCatalog}`, ...(isAiogram ? { style: "primary" } : {}) });
+    allButtons.push({ text: `${theme.account} ${labels.myAccount}`, ...(isAiogram ? { style: "primary" } : {}) });
+    allButtons.push({ text: `${theme.orders} ${labels.myOrders}`, ...(isAiogram ? { style: "success" } : {}) });
+    allButtons.push({ text: `🎛 مدیریت سلف و تبچی`, ...(isAiogram ? { style: "success" } : {}) });
+    allButtons.push({ text: `🤖 ربات اختصاصی من (BotFather)`, ...(isAiogram ? { style: "primary" } : {}) });
+    allButtons.push({ text: `🩺 چکر سلامت شماره (SpamBot)`, ...(isAiogram ? { style: "warning" } : {}) });
+    allButtons.push({ text: `${theme.discount} ${labels.applyDiscount}`, ...(isAiogram ? { style: "success" } : {}) });
+    allButtons.push({ text: `${theme.support} ${labels.support}`, ...(isAiogram ? { style: "danger" } : {}) });
+    allButtons.push({ text: `${theme.guide} ${labels.helpGuide}`, ...(isAiogram ? { style: "primary" } : {}) });
 
     // Chunk buttons into rows based on chosen columns (1, 2, or 3)
     const keyboardRows: any[][] = [];
@@ -1007,7 +1180,6 @@ export class StoreBotManager {
 
     // If custom buttons are defined and active, use them as priority
     if (customBtns.length > 0) {
-      // Sort by rowIndex, columnIndex
       const sorted = [...customBtns].sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex);
       const rowsMap: Map<number, any[]> = new Map();
 
@@ -1017,14 +1189,19 @@ export class StoreBotManager {
         else if (btn.action === "buy_plan") callbackData = `plan_details_${btn.targetPlanId}`;
         else if (btn.action === "my_orders") callbackData = "menu_orders";
         else if (btn.action === "my_account") callbackData = "menu_account";
+        else if (btn.action === "manage_self_tabchi") callbackData = "cust_manage_panel";
+        else if (btn.action === "setup_personal_bot") callbackData = "cust_setup_bot";
+        else if (btn.action === "spambot_checker") callbackData = "cust_spambot_check";
+        else if (btn.action === "discount_coupon") callbackData = "menu_discount";
         else if (btn.action === "support") callbackData = "menu_support";
         else if (btn.action === "help") callbackData = "cat_all";
         else if (btn.action === "rules") callbackData = "menu_guide";
 
         const btnObj: any = {
           text: btn.text,
-          ...(btn.url ? { url: btn.url } : { callback_data: callbackData }),
-          ...(isAiogram || btn.style !== "default" ? { style: btn.style || "primary" } : {}),
+          ...(btn.url && btn.action === "custom_url" ? { url: btn.url } : { callback_data: callbackData }),
+          ...(isAiogram || (btn.style && btn.style !== "default") ? { style: btn.style || "primary" } : {}),
+          ...(btn.customEmojiId ? { icon_custom_emoji_id: btn.customEmojiId } : {}),
         };
 
         const rIndex = btn.rowIndex || 0;
@@ -1039,7 +1216,13 @@ export class StoreBotManager {
       }
 
       if (userId && this.isUserAdmin(userId)) {
-        inlineRows.push([{ text: "👑 ورود به پنل مدیریت ربات (/admin)", callback_data: "admin_menu", ...(isAiogram ? { style: "danger" } : {}) }]);
+        inlineRows.push([
+          {
+            text: "👑 ورود به پنل مدیریت ربات (/admin)",
+            callback_data: "admin_menu",
+            ...(isAiogram ? { style: "danger" } : {}),
+          },
+        ]);
       }
 
       if (this.data.settings.allowCustomerKeyboardSwitch) {
@@ -1099,6 +1282,26 @@ export class StoreBotManager {
       ...(isAiogram ? { style: "success" } : {}),
     });
     allButtons.push({
+      text: "🎛 مدیریت سلف و تبچی",
+      callback_data: "cust_manage_panel",
+      ...(isAiogram ? { style: "success" } : {}),
+    });
+    allButtons.push({
+      text: "🤖 ربات اختصاصی من (BotFather)",
+      callback_data: "cust_setup_bot",
+      ...(isAiogram ? { style: "primary" } : {}),
+    });
+    allButtons.push({
+      text: "🩺 چکر سلامت شماره (SpamBot)",
+      callback_data: "cust_spambot_check",
+      ...(isAiogram ? { style: "warning" } : {}),
+    });
+    allButtons.push({
+      text: `${theme.discount} ${labels.applyDiscount}`,
+      callback_data: "menu_discount",
+      ...(isAiogram ? { style: "success" } : {}),
+    });
+    allButtons.push({
       text: `${theme.support} ${labels.support}`,
       callback_data: "menu_support",
       ...(isAiogram ? { style: "danger" } : {}),
@@ -1107,11 +1310,6 @@ export class StoreBotManager {
       text: `${theme.guide} ${labels.helpGuide}`,
       callback_data: "menu_guide",
       ...(isAiogram ? { style: "primary" } : {}),
-    });
-    allButtons.push({
-      text: `${theme.discount} ${labels.applyDiscount}`,
-      callback_data: "menu_discount",
-      ...(isAiogram ? { style: "success" } : {}),
     });
 
     // Chunk buttons into rows according to column setting (1, 2, or 3)
@@ -1143,6 +1341,80 @@ export class StoreBotManager {
     return {
       inline_keyboard: inlineRows,
     };
+  }
+
+  private stripColorDots(str: string): string {
+    return (str || "").replace(/^[🟢🔴🔵🟡⚪🟣🟠]\s*/g, "").trim();
+  }
+
+  private matchMenuButtonAction(rawText: string): {
+    action: string;
+    targetCategoryId?: string;
+    targetPlanId?: string;
+    url?: string;
+  } | null {
+    const clean = this.stripColorDots(rawText);
+    if (!clean) return null;
+
+    // 1. Check explicit slash commands
+    if (clean === "/account" || clean === "/myaccount" || clean === "مشخصات من" || clean === "حساب کاربری" || clean === "حساب کاربری من") {
+      return { action: "my_account" };
+    }
+    if (clean === "/orders" || clean === "سفارشات من" || clean === "پیگیری سفارشات") {
+      return { action: "my_orders" };
+    }
+    if (clean === "/self") return { action: "buy_category", targetCategoryId: "self" };
+    if (clean === "/tabchi") return { action: "buy_category", targetCategoryId: "tabchi" };
+    if (clean === "/combo") return { action: "buy_category", targetCategoryId: "combo" };
+    if (clean === "/plans") return { action: "help" };
+    if (clean === "/support") return { action: "support" };
+    if (clean === "/guide") return { action: "rules" };
+    if (clean === "/discount") return { action: "discount_coupon" };
+    if (clean === "/manage" || clean === "مدیریت سلف و تبچی") return { action: "manage_self_tabchi" };
+    if (clean === "/mybot" || clean === "ربات اختصاصی من") return { action: "setup_personal_bot" };
+    if (clean === "/check" || clean === "چکر سلامت شماره") return { action: "spambot_checker" };
+
+    // 2. Check active customButtons
+    const customBtns = this.data.settings.customButtons?.filter((b) => b.isActive) || [];
+    for (const btn of customBtns) {
+      const btnClean = this.stripColorDots(btn.text);
+      if (btnClean && (clean === btnClean || rawText.trim() === btn.text.trim())) {
+        return {
+          action: btn.action,
+          targetCategoryId: btn.targetCategoryId,
+          targetPlanId: btn.targetPlanId,
+          url: btn.url,
+        };
+      }
+    }
+
+    // 3. Check active categories
+    const cats = this.getCategories().filter((c) => c.isActive);
+    for (const cat of cats) {
+      const catText = `${cat.icon || "💎"} ${cat.title}`.trim();
+      if (clean === catText || clean === cat.title.trim()) {
+        return { action: "buy_category", targetCategoryId: cat.id };
+      }
+    }
+
+    // 4. Check buttonLabels & common phrases
+    const labels = this.data.settings.buttonLabels;
+    if (labels.myAccount && clean.includes(labels.myAccount)) return { action: "my_account" };
+    if (clean.includes("مشخصات من") || clean.includes("حساب کاربری")) return { action: "my_account" };
+    if (labels.myOrders && clean.includes(labels.myOrders)) return { action: "my_orders" };
+    if (clean.includes("سفارشات من") || clean.includes("پیگیری سفارشات")) return { action: "my_orders" };
+    if (clean.includes("مدیریت سلف و تبچی")) return { action: "manage_self_tabchi" };
+    if (clean.includes("ربات اختصاصی من") || clean.includes("BotFather")) return { action: "setup_personal_bot" };
+    if (clean.includes("چکر سلامت") || clean.includes("SpamBot")) return { action: "spambot_checker" };
+    if (labels.buySelf && clean.includes(labels.buySelf)) return { action: "buy_category", targetCategoryId: "self" };
+    if (labels.buyTabchi && clean.includes(labels.buyTabchi)) return { action: "buy_category", targetCategoryId: "tabchi" };
+    if (labels.buyCombo && clean.includes(labels.buyCombo)) return { action: "buy_category", targetCategoryId: "combo" };
+    if (labels.plansCatalog && clean.includes(labels.plansCatalog)) return { action: "help" };
+    if (labels.support && clean.includes(labels.support)) return { action: "support" };
+    if (labels.helpGuide && clean.includes(labels.helpGuide)) return { action: "rules" };
+    if (labels.applyDiscount && clean.includes(labels.applyDiscount)) return { action: "discount_coupon" };
+
+    return null;
   }
 
   // =============================================================
@@ -1241,9 +1513,131 @@ export class StoreBotManager {
     }
 
     // In-Bot Admin Menu (/admin, "👑 پنل مدیریت", "مدیریت", "/panel")
-    if (text === "/admin" || text === "👑 پنل مدیریت" || text === "پنل مدیریت" || text === "مدیریت" || text === "/panel") {
+    const strippedAdmin = this.stripColorDots(text);
+    if (
+      strippedAdmin === "/admin" ||
+      strippedAdmin === "👑 پنل مدیریت" ||
+      strippedAdmin === "پنل مدیریت" ||
+      strippedAdmin === "مدیریت" ||
+      strippedAdmin === "/panel"
+    ) {
       if (this.isUserAdmin(user?.id)) {
+        this.userSessions.delete(chatId);
         await this.sendInBotAdminMenu(chatId);
+        return;
+      }
+    }
+
+    // Check if user tapped any Keyboard Menu Button FIRST so menu buttons (like "مشخصات من / حساب کاربری")
+    // ALWAYS work even right after purchasing a product!
+    const labels = this.data.settings.buttonLabels;
+    if (
+      (this.data.settings.allowCustomerKeyboardSwitch && text.includes("تغییر به دکمه‌های شیشه‌ای")) ||
+      text === "/inline"
+    ) {
+      this.userSessions.delete(chatId);
+      let customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
+      if (!customer) {
+        this.recordCustomer(user);
+        customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
+      }
+      if (customer) {
+        customer.preferredKeyboardMode = "inline";
+        this.saveData();
+      }
+      await this.sendMessage(
+        chatId,
+        "✨ <b>منو به حالت دکمه‌های شیشه‌ای (Inline) تغییر یافت.</b>\nکیبورد پایین حذف گردید و دکمه‌ها به صورت شیشه‌ای نمایش داده خواهند شد.",
+        {
+          reply_markup: { remove_keyboard: true },
+          parse_mode: "HTML",
+        }
+      );
+      await this.sendMainMenu(chatId);
+      return;
+    }
+
+    if (
+      (this.data.settings.allowCustomerKeyboardSwitch &&
+        (text.includes("تغییر به کیبورد") || (labels.switchKeyboard && text.includes(labels.switchKeyboard)))) ||
+      text === "/reply" ||
+      text === "/keyboard"
+    ) {
+      this.userSessions.delete(chatId);
+      let customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
+      if (!customer) {
+        this.recordCustomer(user);
+        customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
+      }
+      if (customer) {
+        customer.preferredKeyboardMode = "reply";
+        this.saveData();
+      }
+      await this.sendMessage(
+        chatId,
+        "📱 <b>منو به حالت کیبورد دکمه‌ای پایین صفحه تغییر یافت.</b>\nدکمه‌های سریع در پایین صفحه تلگرام شما فعال شدند.",
+        {
+          reply_markup: this.getReplyKeyboardMarkup(user?.id),
+          parse_mode: "HTML",
+        }
+      );
+      await this.sendMainMenu(chatId);
+      return;
+    }
+
+    const matchedMenu = this.matchMenuButtonAction(text);
+    if (matchedMenu) {
+      // Clear any active onboarding/receipt state so the menu button executes cleanly
+      this.userSessions.delete(chatId);
+
+      if (!this.isUserAdmin(user?.id)) {
+        const membership = await this.checkUserMandatoryMembership(user?.id);
+        if (!membership.isMember) {
+          await this.sendForceJoinPrompt(chatId, membership.unjoined);
+          return;
+        }
+      }
+
+      if (matchedMenu.action === "my_account") {
+        await this.sendUserAccount(chatId, user);
+        return;
+      } else if (matchedMenu.action === "my_orders") {
+        await this.sendUserOrders(chatId, user);
+        return;
+      } else if (matchedMenu.action === "manage_self_tabchi") {
+        await this.sendCustomerSelfTabchiPanel(chatId, user);
+        return;
+      } else if (matchedMenu.action === "setup_personal_bot") {
+        await this.sendCustomerPersonalBotSetup(chatId, user);
+        return;
+      } else if (matchedMenu.action === "spambot_checker") {
+        await this.runCustomerSpamBotCheck(chatId, user);
+        return;
+      } else if (matchedMenu.action === "buy_category") {
+        await this.sendCategoryPlans(chatId, matchedMenu.targetCategoryId || "all");
+        return;
+      } else if (matchedMenu.action === "buy_plan" && matchedMenu.targetPlanId) {
+        await this.sendPlanDetails(chatId, matchedMenu.targetPlanId);
+        return;
+      } else if (matchedMenu.action === "help") {
+        await this.sendCategoryPlans(chatId, "all");
+        return;
+      } else if (matchedMenu.action === "support") {
+        await this.sendSupport(chatId);
+        return;
+      } else if (matchedMenu.action === "rules") {
+        await this.sendGuide(chatId);
+        return;
+      } else if (matchedMenu.action === "discount_coupon") {
+        this.userSessions.set(chatId, { state: "awaiting_coupon" });
+        await this.sendMessage(
+          chatId,
+          `🎁 <b>لطفاً کد تخفیف خود را به زبان انگلیسی ارسال نمایید:</b>\n\n(مثال: <code>WELCOME</code> یا <code>HACKER</code>)`,
+          { parse_mode: "HTML" }
+        );
+        return;
+      } else if (matchedMenu.action === "custom_url" && matchedMenu.url) {
+        await this.sendMessage(chatId, `🔗 لینک بخش انتخاب‌شده:\n${matchedMenu.url}`);
         return;
       }
     }
@@ -1255,6 +1649,128 @@ export class StoreBotManager {
         await this.sendForceJoinPrompt(chatId, membership.unjoined);
         return;
       }
+    }
+
+    // =========================================================================
+    // PERSONAL BOTFATHER TOKEN & TABCHI BANNER INPUT STATES
+    // =========================================================================
+
+    if (session.state === "awaiting_personal_bot_token") {
+      if (text.includes("انصراف")) {
+        this.userSessions.delete(chatId);
+        await this.sendMainMenu(chatId);
+        return;
+      }
+      const tokenMatch = text.match(/\b(\d{6,15}:[A-Za-z0-9_-]{25,})\b/);
+      if (!tokenMatch) {
+        await this.sendMessage(
+          chatId,
+          `❌ <b>فرمت توکن وارد شده معتبر نیست!</b>\n\nلطفاً توکن دریافتی از <code>@BotFather</code> را به صورت کامل ارسال کنید:\nمثال: <code>123456789:AAHxyz1234567890abcdef...</code>`,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [[{ text: "🔙 انصراف و بازگشت", callback_data: "cust_manage_panel" }]],
+            },
+          }
+        );
+        return;
+      }
+
+      const token = tokenMatch[1];
+      const targetPhone = session.targetPhone || this.getCustomerConnectedPhone(user.id);
+      if (!targetPhone) {
+        this.userSessions.delete(chatId);
+        await this.sendMessage(
+          chatId,
+          `⚠️ هنوز هیچ شماره‌ای به اشتراک شما متصل نشده است. ابتدا از بخش «📦 پیگیری سفارشات من» شماره خود را متصل نمایید.`
+        );
+        return;
+      }
+
+      await this.sendMessage(chatId, `⏳ <b>در حال تست توکن در سرور تلگرام و راه‌اندازی ربات مدیریت شخصی شما روی شماره</b> <code>${this.escapeHtml(targetPhone)}</code>...`, {
+        parse_mode: "HTML",
+      });
+
+      try {
+        const botConfig = await telegramManager.updateAccountBot(targetPhone, token, true);
+        const acc = telegramManager.getAccount(targetPhone);
+        if (acc && acc.bot) {
+          acc.bot.owner_id = Number(user.id) || 0;
+        }
+        this.userSessions.delete(chatId);
+        const botUser = botConfig?.bot_username || "";
+        await this.sendMessage(
+          chatId,
+          `🎉 <b>ربات مدیریت شخصی شما با موفقیت فعال و روشن شد!</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🤖 <b>آیدی ربات شما:</b> ${botUser ? `@${this.escapeHtml(botUser)}` : "متصل"}\n` +
+            `📱 <b>شماره متصل:</b> <code>${this.escapeHtml(targetPhone)}</code>\n` +
+            `👑 <b>ادمین اختصاصی:</b> <code>${user.id}</code>\n` +
+            `🟢 <b>وضعیت:</b> آنلاین (Polling فعال)\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `💡 هم‌اکنون می‌توانید وارد ربات شخصی خود (${botUser ? `@${this.escapeHtml(botUser)}` : ""}) شوید و دستور <code>/start</code> را بزنید تا پنل اختصاصی مدیریت سلف و تبچی برایتان باز شود!`,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                ...(botUser ? [[{ text: `🚀 ورود به ربات شخصی (@${botUser})`, url: `https://t.me/${botUser}` }]] : []),
+                [{ text: "🎛 بازگشت به پنل مدیریت سلف و تبچی", callback_data: "cust_manage_panel" }],
+                [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+              ],
+            },
+          }
+        );
+      } catch (err: any) {
+        await this.sendMessage(
+          chatId,
+          `❌ <b>خطا در راه‌اندازی ربات شخصی:</b>\n${this.escapeHtml(err.message || "توکن نامعتبر است")}\n\nلطفاً توکن صحیح را مجدداً ارسال نمایید:`,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [[{ text: "🔙 انصراف و بازگشت", callback_data: "cust_manage_panel" }]],
+            },
+          }
+        );
+      }
+      return;
+    }
+
+    if (session.state === "awaiting_tabchi_banner") {
+      if (text.includes("انصراف")) {
+        this.userSessions.delete(chatId);
+        await this.sendCustomerSelfTabchiPanel(chatId, user);
+        return;
+      }
+      const targetPhone = session.targetPhone || this.getCustomerConnectedPhone(user.id);
+      this.userSessions.delete(chatId);
+      if (!targetPhone) {
+        await this.sendMainMenu(chatId);
+        return;
+      }
+      try {
+        const acc = telegramManager.getAccount(targetPhone);
+        if (acc) {
+          telegramManager.updateTabchiConfig(
+            targetPhone,
+            text,
+            acc.features.tabchi.interval_seconds || 300,
+            acc.features.tabchi.repeat_rounds || 3,
+            acc.features.tabchi.repeat_infinite ?? true,
+            acc.features.tabchi.target_mode,
+            acc.features.tabchi.targets,
+            acc.features.tabchi.send_mode
+          );
+        }
+        await this.sendMessage(
+          chatId,
+          `✅ <b>متن بنر تبچی برای شماره</b> <code>${this.escapeHtml(targetPhone)}</code> <b>با موفقیت بروزرسانی شد!</b>`,
+          { parse_mode: "HTML" }
+        );
+        await this.sendCustomerSelfTabchiPanel(chatId, user);
+      } catch (err: any) {
+        await this.sendMessage(chatId, `❌ خطا در ذخیره بنر: ${err.message}`);
+      }
+      return;
     }
 
     // =========================================================================
@@ -1374,30 +1890,30 @@ export class StoreBotManager {
 
         // Notify customer
         const replyText =
-          `✅ *فیش واریزی شما با موفقیت ثبت گردید!*\n` +
+          `✅ <b>فیش واریزی شما با موفقیت ثبت گردید!</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `🧾 *شناسه سفارش:* \`${orderId}\`\n` +
-          `📦 *طرح انتخابی:* ${plan.title}\n` +
-          `💳 *روش پرداخت:* ${newOrder.paymentMethod === "card" ? "کارت به کارت شتاب" : "پرداخت ارزی کریپتو"}\n` +
-          `💰 *مبلغ فاکتور:* ${finalToman.toLocaleString("fa-IR")} تومان (${finalUsdt} USDT)\n` +
+          `🧾 <b>شناسه سفارش:</b> <code>${orderId}</code>\n` +
+          `📦 <b>طرح انتخابی:</b> ${this.escapeHtml(plan.title)}\n` +
+          `💳 <b>روش پرداخت:</b> ${newOrder.paymentMethod === "card" ? "کارت به کارت شتاب" : "پرداخت ارزی کریپتو"}\n` +
+          `💰 <b>مبلغ فاکتور:</b> ${finalToman.toLocaleString("fa-IR")} تومان (${finalUsdt} USDT)\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `⏳ *مرحله بعدی:* سفارش شما برای مدیریت ارسال شد. به محض تأیید فیش، ربات به صورت خودکار از شما *شماره موبایل اکانت* و *کد تلگرام* را دریافت کرده و سلف/تبچی شما را در کمتر از ۳۰ ثانیه روی سرور فعال می‌کند!`;
+          `⏳ <b>مرحله بعدی:</b> سفارش شما برای مدیریت ارسال شد. به محض تأیید فیش، ربات به صورت خودکار از شما <b>شماره موبایل اکانت</b> و <b>کد تلگرام</b> را دریافت کرده و سلف/تبچی شما را در کمتر از ۳۰ ثانیه روی سرور فعال می‌کند!`;
 
-        await this.sendMessage(chatId, replyText, { parse_mode: "Markdown" });
+        await this.sendMessage(chatId, replyText, { parse_mode: "HTML" });
 
         // Notify Admin if telegram ID configured (with 1-click Approve & Auto-Connect inline buttons!)
         if (this.data.settings.ownerTelegramId) {
           const adminNotice =
-            `🔔 *سفارش جدید در ربات فروشگاه ثبت شد!*\n` +
+            `🔔 <b>سفارش جدید در ربات فروشگاه ثبت شد!</b>\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `🧾 *شماره سفارش:* \`${orderId}\`\n` +
-            `👤 *خریدار:* ${user.first_name || "کاربر"} (@${user.username || "ندارد"} | \`${user.id}\`)\n` +
-            `📦 *پکیج:* ${plan.title}\n` +
-            `💰 *مبلغ:* ${finalToman.toLocaleString("fa-IR")} تومان (${finalUsdt} USDT)\n` +
-            `💳 *روش:* ${newOrder.paymentMethod === "card" ? "کارت به کارت" : `کریپتو (${session.selectedCryptoNetwork || "USDT"})`}\n` +
-            `📎 *مشخصات رسید:* \`${receiptProof}\`\n` +
+            `🧾 <b>شماره سفارش:</b> <code>${orderId}</code>\n` +
+            `👤 <b>خریدار:</b> ${this.escapeHtml(user.first_name || "کاربر")} (@${this.escapeHtml(user.username || "ندارد")} | <code>${user.id}</code>)\n` +
+            `📦 <b>پکیج:</b> ${this.escapeHtml(plan.title)}\n` +
+            `💰 <b>مبلغ:</b> ${finalToman.toLocaleString("fa-IR")} تومان (${finalUsdt} USDT)\n` +
+            `💳 <b>روش:</b> ${newOrder.paymentMethod === "card" ? "کارت به کارت" : `کریپتو (${this.escapeHtml(session.selectedCryptoNetwork || "USDT")})`}\n` +
+            `📎 <b>مشخصات رسید:</b> <code>${this.escapeHtml(receiptProof)}</code>\n` +
             `━━━━━━━━━━━━━━━━━━━━\n` +
-            `💡 با زدن دکمه *«✅ تأیید فیش و شروع اتصال خودکار»* در زیر، ربات بلافاصله از مشتری شماره تلفن، کد تایید و رمز دو مرحله‌ای را گرفته و اکانت را اتوماتیک وصل می‌کند:`;
+            `💡 با زدن دکمه <b>«✅ تأیید فیش و شروع اتصال خودکار»</b> در زیر، ربات بلافاصله از مشتری شماره تلفن، کد تایید و رمز دو مرحله‌ای را گرفته و اکانت را اتوماتیک وصل می‌کند:`;
 
           const adminInlineMarkup = {
             inline_keyboard: [
@@ -1421,17 +1937,17 @@ export class StoreBotManager {
               chat_id: this.data.settings.ownerTelegramId,
               photo: receiptPhotoFileId,
               caption: adminNotice,
-              parse_mode: "Markdown",
+              parse_mode: "HTML",
               reply_markup: adminInlineMarkup,
             }).catch(async () => {
               await this.sendMessage(this.data.settings.ownerTelegramId, adminNotice, {
-                parse_mode: "Markdown",
+                parse_mode: "HTML",
                 reply_markup: adminInlineMarkup,
               }).catch(() => {});
             });
           } else {
             await this.sendMessage(this.data.settings.ownerTelegramId, adminNotice, {
-              parse_mode: "Markdown",
+              parse_mode: "HTML",
               reply_markup: adminInlineMarkup,
             }).catch(() => {});
           }
@@ -1455,8 +1971,8 @@ export class StoreBotManager {
         this.saveData();
         await this.sendMessage(
           chatId,
-          `🎉 *کد تخفیف ${coupon.code} با موفقیت اعمال شد!*\n\nشما از ${coupon.discountPercent}٪ تخفیف روی تمامی پلن‌ها بهره‌مند شدید. حالا می‌توانید پلن مورد نظر خود را خریداری کنید.`,
-          { parse_mode: "Markdown" }
+          `🎉 <b>کد تخفیف ${this.escapeHtml(coupon.code)} با موفقیت اعمال شد!</b>\n\nشما از ${coupon.discountPercent}٪ تخفیف روی تمامی پلن‌ها بهره‌مند شدید. حالا می‌توانید پلن مورد نظر خود را خریداری کنید.`,
+          { parse_mode: "HTML" }
         );
         await this.sendMainMenu(chatId);
       } else {
@@ -1466,81 +1982,8 @@ export class StoreBotManager {
       return;
     }
 
-    const labels = this.data.settings.buttonLabels;
-
-    if (text.includes(labels.buySelf) || text === "/self") {
-      await this.sendCategoryPlans(chatId, "self");
-    } else if (text.includes(labels.buyTabchi) || text === "/tabchi") {
-      await this.sendCategoryPlans(chatId, "tabchi");
-    } else if (text.includes(labels.buyCombo) || text === "/combo") {
-      await this.sendCategoryPlans(chatId, "combo");
-    } else if (text.includes(labels.plansCatalog) || text === "/plans") {
-      await this.sendCategoryPlans(chatId, "all");
-    } else if (text.includes(labels.myAccount) || text === "/account") {
-      await this.sendUserAccount(chatId, user);
-    } else if (text.includes(labels.myOrders) || text === "/orders") {
-      await this.sendUserOrders(chatId, user);
-    } else if (text.includes(labels.support) || text === "/support") {
-      await this.sendSupport(chatId);
-    } else if (text.includes(labels.helpGuide) || text === "/guide") {
-      await this.sendGuide(chatId);
-    } else if (text.includes(labels.applyDiscount) || text === "/discount") {
-      this.userSessions.set(chatId, { state: "awaiting_coupon" });
-      await this.sendMessage(
-        chatId,
-        `🎁 *لطفاً کد تخفیف خود را به زبان انگلیسی ارسال نمایید:*\n\n(مثال: \`WELCOME\` یا \`HACKER\`)`,
-        { parse_mode: "Markdown" }
-      );
-    } else if (
-      (this.data.settings.allowCustomerKeyboardSwitch && text.includes("تغییر به دکمه‌های شیشه‌ای")) ||
-      text === "/inline"
-    ) {
-      let customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
-      if (!customer) {
-        this.recordCustomer(user);
-        customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
-      }
-      if (customer) {
-        customer.preferredKeyboardMode = "inline";
-        this.saveData();
-      }
-      await this.sendMessage(
-        chatId,
-        "✨ *منو به حالت دکمه‌های شیشه‌ای (Inline) تغییر یافت.*\nکیبورد پایین حذف گردید و دکمه‌ها به صورت شیشه‌ای نمایش داده خواهند شد.",
-        {
-          reply_markup: { remove_keyboard: true },
-          parse_mode: "Markdown",
-        }
-      );
-      await this.sendMainMenu(chatId);
-    } else if (
-      (this.data.settings.allowCustomerKeyboardSwitch &&
-        (text.includes("تغییر به کیبورد معمولی") || (labels.switchKeyboard && text.includes(labels.switchKeyboard)))) ||
-      text === "/reply" ||
-      text === "/keyboard"
-    ) {
-      let customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
-      if (!customer) {
-        this.recordCustomer(user);
-        customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
-      }
-      if (customer) {
-        customer.preferredKeyboardMode = "reply";
-        this.saveData();
-      }
-      await this.sendMessage(
-        chatId,
-        "📱 *منو به حالت کیبورد دکمه‌ای معمولی تغییر یافت.*\nدکمه‌های سریع در پایین صفحه تلگرام شما فعال شدند.",
-        {
-          reply_markup: this.getReplyKeyboardMarkup(),
-          parse_mode: "Markdown",
-        }
-      );
-      await this.sendMainMenu(chatId);
-    } else {
-      // Default fallback
-      await this.sendMainMenu(chatId);
-    }
+    // Default fallback
+    await this.sendMainMenu(chatId);
   }
 
   private async handleCallbackQuery(cb: any) {
@@ -1548,9 +1991,11 @@ export class StoreBotManager {
     const data = cb.data || "";
     const user = cb.from;
 
+    this.recordCustomer(user);
     await this.callBotApi("answerCallbackQuery", { callback_query_id: cb.id }).catch(() => {});
 
     if (data === "main_menu") {
+      this.userSessions.delete(chatId);
       await this.sendMainMenu(chatId);
     } else if (data === "switch_to_reply") {
       let customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
@@ -1564,10 +2009,10 @@ export class StoreBotManager {
       }
       await this.sendMessage(
         chatId,
-        "📱 *منوی سریع کیبوردی فعال شد!*\n\nدکمه‌های دسترسی سریع در پایین صفحه تلگرام شما قرار گرفتند. در صورت تمایل می‌توانید از دکمه «تغییر به دکمه‌های شیشه‌ای» مجدداً استفاده نمایید.",
+        "📱 <b>منوی سریع کیبوردی فعال شد!</b>\n\nدکمه‌های دسترسی سریع در پایین صفحه تلگرام شما قرار گرفتند. در صورت تمایل می‌توانید از دکمه «تغییر به دکمه‌های شیشه‌ای» مجدداً استفاده نمایید.",
         {
-          reply_markup: this.getReplyKeyboardMarkup(),
-          parse_mode: "Markdown",
+          reply_markup: this.getReplyKeyboardMarkup(user?.id),
+          parse_mode: "HTML",
         }
       );
       await this.sendMainMenu(chatId);
@@ -1583,10 +2028,10 @@ export class StoreBotManager {
       }
       await this.sendMessage(
         chatId,
-        "✨ *منوی شیشه‌ای (Inline) فعال شد!*\nکیبورد پایین پنهان شد.",
+        "✨ <b>منوی شیشه‌ای (Inline) فعال شد!</b>\nکیبورد پایین پنهان شد.",
         {
           reply_markup: { remove_keyboard: true },
-          parse_mode: "Markdown",
+          parse_mode: "HTML",
         }
       );
       await this.sendMainMenu(chatId);
@@ -1658,6 +2103,16 @@ export class StoreBotManager {
         );
         await this.sendInBotAdminMenu(chatId);
       }
+    } else if (data === "admin_reset_buttons") {
+      if (this.isUserAdmin(user?.id)) {
+        this.resetButtonsToDefault();
+        await this.sendMessage(
+          chatId,
+          `✅ <b>دکمه‌ها و چیدمان منوی ربات با موفقیت به حالت استاندارد پیش‌فرض بازگردانی شدند!</b>`,
+          { parse_mode: "HTML" }
+        );
+        await this.sendInBotAdminMenu(chatId);
+      }
     } else if (data === "admin_webpanel_link") {
       if (this.isUserAdmin(user?.id)) {
         const creds = this.getAdminCredentials();
@@ -1668,12 +2123,137 @@ export class StoreBotManager {
           { parse_mode: "HTML" }
         );
       }
+    } else if (data === "cust_manage_panel") {
+      await this.sendCustomerSelfTabchiPanel(chatId, user, cb.message?.message_id);
+    } else if (data === "cust_toggle_self") {
+      const phone = this.getCustomerConnectedPhone(user.id);
+      if (phone) {
+        const acc = telegramManager.getAccount(phone);
+        if (acc) {
+          const nextState = !(acc.features?.self_time?.active ?? false);
+          await telegramManager.updateSelfTimeConfig(
+            phone,
+            nextState,
+            acc.features.self_time.format || "HH:mm",
+            acc.features.self_time.font_style || "bold"
+          );
+        }
+      }
+      await this.sendCustomerSelfTabchiPanel(chatId, user, cb.message?.message_id);
+    } else if (data === "cust_toggle_tabchi") {
+      const phone = this.getCustomerConnectedPhone(user.id);
+      if (phone) {
+        const acc = telegramManager.getAccount(phone);
+        if (acc) {
+          const isBroadcasting = acc.features?.tabchi?.status === "broadcasting";
+          if (isBroadcasting) {
+            telegramManager.stopBroadcast(phone);
+          } else {
+            await telegramManager.startBroadcast(phone);
+          }
+        }
+      }
+      await this.sendCustomerSelfTabchiPanel(chatId, user, cb.message?.message_id);
+    } else if (data === "cust_toggle_tabchi_mode") {
+      const phone = this.getCustomerConnectedPhone(user.id);
+      if (phone) {
+        const acc = telegramManager.getAccount(phone);
+        if (acc) {
+          const curMode = acc.features?.tabchi?.send_mode || "sequential";
+          const nextMode = curMode === "simultaneous" ? "sequential" : "simultaneous";
+          telegramManager.updateTabchiConfig(
+            phone,
+            acc.features.tabchi.message || "",
+            acc.features.tabchi.interval_seconds || 300,
+            acc.features.tabchi.repeat_rounds || 3,
+            acc.features.tabchi.repeat_infinite ?? true,
+            acc.features.tabchi.target_mode,
+            acc.features.tabchi.targets,
+            nextMode
+          );
+        }
+      }
+      await this.sendCustomerSelfTabchiPanel(chatId, user, cb.message?.message_id);
+    } else if (data.startsWith("cust_tabchi_int_")) {
+      const sec = parseInt(data.replace("cust_tabchi_int_", ""), 10) || 300;
+      const phone = this.getCustomerConnectedPhone(user.id);
+      if (phone) {
+        const acc = telegramManager.getAccount(phone);
+        if (acc) {
+          telegramManager.updateTabchiConfig(
+            phone,
+            acc.features.tabchi.message || "",
+            sec,
+            acc.features.tabchi.repeat_rounds || 3,
+            acc.features.tabchi.repeat_infinite ?? true,
+            acc.features.tabchi.target_mode,
+            acc.features.tabchi.targets,
+            acc.features.tabchi.send_mode
+          );
+        }
+      }
+      await this.sendCustomerSelfTabchiPanel(chatId, user, cb.message?.message_id);
+    } else if (data === "cust_edit_tabchi_banner") {
+      const phone = this.getCustomerConnectedPhone(user.id);
+      if (!phone) {
+        await this.sendCustomerSelfTabchiPanel(chatId, user);
+      } else {
+        this.userSessions.set(chatId, { state: "awaiting_tabchi_banner", targetPhone: phone });
+        await this.sendMessage(
+          chatId,
+          `✏️ <b>تغییر متن بنر تبچی برای شماره</b> <code>${this.escapeHtml(phone)}</code>\n\nلطفاً متن جدید بنر تبلیغاتی خود را در پیام بعدی ارسال فرمایید:`,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [[{ text: "🔙 انصراف و بازگشت", callback_data: "cust_manage_panel" }]],
+            },
+          }
+        );
+      }
+    } else if (data === "cust_toggle_autoreply") {
+      const phone = this.getCustomerConnectedPhone(user.id);
+      if (phone) {
+        const acc = telegramManager.getAccount(phone);
+        if (acc) {
+          const nextState = !(acc.features?.auto_reply?.active ?? false);
+          telegramManager.updateAutoReplyConfig(
+            phone,
+            nextState,
+            acc.features.auto_reply.messages || [],
+            acc.features.auto_reply.delay_seconds || 3,
+            acc.features.auto_reply.ai_enabled ?? false
+          );
+        }
+      }
+      await this.sendCustomerSelfTabchiPanel(chatId, user, cb.message?.message_id);
+    } else if (data === "cust_toggle_ai") {
+      const phone = this.getCustomerConnectedPhone(user.id);
+      if (phone) {
+        const acc = telegramManager.getAccount(phone);
+        if (acc) {
+          const nextState = !(acc.features?.auto_reply?.ai_enabled ?? false);
+          telegramManager.updateAutoReplyConfig(
+            phone,
+            acc.features.auto_reply.active ?? true,
+            acc.features.auto_reply.messages || [],
+            acc.features.auto_reply.delay_seconds || 3,
+            nextState
+          );
+        }
+      }
+      await this.sendCustomerSelfTabchiPanel(chatId, user, cb.message?.message_id);
+    } else if (data === "cust_setup_bot") {
+      await this.sendCustomerPersonalBotSetup(chatId, user);
+    } else if (data === "cust_spambot_check") {
+      await this.runCustomerSpamBotCheck(chatId, user);
     } else if (data.startsWith("cat_")) {
       const catId = data.replace("cat_", "");
       await this.sendCategoryPlans(chatId, catId);
     } else if (data === "menu_account") {
+      this.userSessions.delete(chatId);
       await this.sendUserAccount(chatId, user);
     } else if (data === "menu_orders") {
+      this.userSessions.delete(chatId);
       await this.sendUserOrders(chatId, user);
     } else if (data === "menu_support") {
       await this.sendSupport(chatId);
@@ -1683,8 +2263,8 @@ export class StoreBotManager {
       this.userSessions.set(chatId, { state: "awaiting_coupon" });
       await this.sendMessage(
         chatId,
-        `🎁 *لطفاً کد تخفیف خود را ارسال نمایید:*\n\n(مثال: \`WELCOME\` یا \`HACKER\`)`,
-        { parse_mode: "Markdown" }
+        `🎁 <b>لطفاً کد تخفیف خود را ارسال نمایید:</b>\n\n(مثال: <code>WELCOME</code> یا <code>HACKER</code>)`,
+        { parse_mode: "HTML" }
       );
     } else if (data.startsWith("plan_details_")) {
       const planId = data.replace("plan_details_", "");
@@ -1716,8 +2296,8 @@ export class StoreBotManager {
         const ord = await this.approveOrder(orderId);
         await this.sendMessage(
           chatId,
-          `✅ *سفارش #${ord.id} با موفقیت تأیید شد!*\n\nربات هم‌اکنون به صورت خودکار پیام دریافت شماره موبایل و کد فعال‌سازی سلف/تبچی را برای خریدار (${ord.userFirstName || ord.userId}) ارسال کرد.`,
-          { parse_mode: "Markdown" }
+          `✅ <b>سفارش #${this.escapeHtml(ord.id)} با موفقیت تأیید شد!</b>\n\nربات هم‌اکنون به صورت خودکار پیام دریافت شماره موبایل و کد فعال‌سازی سلف/تبچی را برای خریدار (${this.escapeHtml(ord.userFirstName || String(ord.userId))}) ارسال کرد.`,
+          { parse_mode: "HTML" }
         );
       } catch (err: any) {
         await this.sendMessage(chatId, `❌ خطا در تأیید سفارش: ${err.message}`);
@@ -1737,8 +2317,8 @@ export class StoreBotManager {
       this.userSessions.delete(chatId);
       await this.sendMessage(
         chatId,
-        "⏸️ فرآیند اتصال خودکار فعلاً متوقف شد. هر زمان مایل بودید می‌توانید از بخش «📦 پیگیری سفارشات من» روی دکمه *«🚀 فعال‌سازی و اتصال اکانت»* کلیک کنید.",
-        { parse_mode: "Markdown", reply_markup: { remove_keyboard: true } }
+        "⏸️ فرآیند اتصال خودکار فعلاً متوقف شد. هر زمان مایل بودید می‌توانید از بخش «📦 پیگیری سفارشات من» روی دکمه <b>«🚀 فعال‌سازی و اتصال اکانت»</b> کلیک کنید.",
+        { parse_mode: "HTML", reply_markup: { remove_keyboard: true } }
       );
       await this.sendMainMenu(chatId);
     } else if (data.startsWith("onboard_digit_")) {
@@ -1811,7 +2391,7 @@ export class StoreBotManager {
   }
 
   public async sendMainMenu(chatId: number | string) {
-    const welcome = this.data.settings.welcomeText;
+    const welcome = (this.data.settings.messages as any)?.welcomeHeader || this.data.settings.welcomeText;
     const customer = this.data.customers.find((c) => String(c.userId) === String(chatId));
     let mode = this.data.settings.keyboardMode;
 
@@ -1821,16 +2401,15 @@ export class StoreBotManager {
 
     let replyMarkup: any;
     if (mode === "reply") {
-      replyMarkup = this.getReplyKeyboardMarkup();
+      replyMarkup = this.getReplyKeyboardMarkup(chatId);
     } else if (mode === "hybrid") {
       // In hybrid mode, send reply keyboard to keep bottom bar active, AND inline buttons in text
-      replyMarkup = this.getInlineKeyboardMenu();
-      // Also send a reply keyboard ping to set bottom bar
+      replyMarkup = this.getInlineKeyboardMenu(chatId);
       await this.sendMessage(chatId, "👇 منوی سریع کیبورد فعال شد:", {
-        reply_markup: this.getReplyKeyboardMarkup(),
+        reply_markup: this.getReplyKeyboardMarkup(chatId),
       }).catch(() => {});
     } else {
-      replyMarkup = this.getInlineKeyboardMenu();
+      replyMarkup = this.getInlineKeyboardMenu(chatId);
     }
 
     await this.sendMessage(chatId, welcome, {
@@ -2238,46 +2817,81 @@ export class StoreBotManager {
     }
   }
 
+  public getCustomerConnectedPhone(userId: number | string): string | null {
+    const customer = this.data.customers.find((c) => String(c.userId) === String(userId));
+    if (customer?.connectedPhone) return customer.connectedPhone;
+
+    const approvedOrderWithPhone = this.data.orders.find(
+      (o) =>
+        String(o.userId) === String(userId) &&
+        o.status === "approved" &&
+        (o.connectedPhone || o.generatedCredentials?.accountPhone)
+    );
+    if (approvedOrderWithPhone) {
+      return approvedOrderWithPhone.connectedPhone || approvedOrderWithPhone.generatedCredentials?.accountPhone || null;
+    }
+
+    // If user is admin, fallback to first connected account on server so admin can also test & use the panel
+    if (this.isUserAdmin(userId)) {
+      const allAccounts = telegramManager.getAccounts();
+      if (allAccounts.length > 0) {
+        return allAccounts[0].phone;
+      }
+    }
+
+    return null;
+  }
+
   public async sendUserOrders(chatId: number | string, user: any) {
-    const orders = this.data.orders.filter((o) => String(o.userId) === String(user.id));
+    const orders = this.data.orders.filter((o) => String(o.userId) === String(user?.id || chatId));
 
     if (orders.length === 0) {
       await this.sendMessage(
         chatId,
-        `📦 شما تا کنون سفارشی در این ربات ثبت نکرده‌اید.\nجهت مشاهده و خرید اشتراک روی "🛍️ تعرفه‌ها و لیست پکیج‌ها" کلیک کنید.`
+        `📦 شما تا کنون سفارشی در این ربات ثبت نکرده‌اید.\nجهت مشاهده و خرید اشتراک روی <b>«🛍️ تعرفه‌ها و لیست پکیج‌ها»</b> کلیک کنید.`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "🛍️ مشاهده تعرفه‌ها و پکیج‌ها", callback_data: "cat_all" }],
+              [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+            ],
+          },
+        }
       );
       return;
     }
 
-    let text = `📦 *لیست سفارشات و وضعیت اتصال اکانت شما:*\n\n`;
+    let text = `📦 <b>لیست سفارشات و وضعیت اتصال اکانت شما:</b>\n\n`;
     const inlineButtons: any[][] = [];
 
     for (const ord of orders.slice(0, 5)) {
       const statusIcon =
         ord.status === "approved" ? "✅ تأیید شده" : ord.status === "rejected" ? "❌ رد شده" : "⏳ در حال بررسی فیش";
+      const connectedPhone = ord.connectedPhone || ord.generatedCredentials?.accountPhone || "";
       const onboardLabel =
-        ord.onboardingStatus === "connected"
-          ? `🟢 متصل به شماره \`${ord.connectedPhone || ord.generatedCredentials?.accountPhone || ""}\``
+        ord.onboardingStatus === "connected" || connectedPhone
+          ? `🟢 متصل به شماره <code>${this.escapeHtml(connectedPhone)}</code>`
           : ord.status === "approved"
           ? "🟡 آماده اتصال خودکار شماره تلگرام"
           : "⚪ منتظر تأیید فیش";
 
       text +=
-        `🧾 *شماره سفارش:* \`${ord.id}\`\n` +
-        `📦 طرح: *${ord.planTitle}*\n` +
-        `💰 مبلغ: ${ord.finalPriceToman.toLocaleString("fa-IR")} تومان\n` +
+        `🧾 <b>شماره سفارش:</b> <code>${this.escapeHtml(ord.id)}</code>\n` +
+        `📦 طرح: <b>${this.escapeHtml(ord.planTitle)}</b>\n` +
+        `💰 مبلغ: ${Number(ord.finalPriceToman || ord.priceToman || 0).toLocaleString("fa-IR")} تومان\n` +
         `🏷️ وضعیت پرداخت: ${statusIcon}\n` +
         `📡 وضعیت اتصال سلف/تبچی: ${onboardLabel}\n` +
         `📅 تاریخ: ${new Date(ord.createdAt).toLocaleDateString("fa-IR")}\n`;
 
       if (ord.generatedCredentials?.licenseCode) {
-        text += `🔑 *کد لایسنس:* \`${ord.generatedCredentials.licenseCode}\`\n`;
+        text += `🔑 <b>کد لایسنس:</b> <code>${this.escapeHtml(ord.generatedCredentials.licenseCode)}</code>\n`;
       }
       if (ord.generatedCredentials?.password) {
-        text += `🔐 *رمز وب پنل:* \`${ord.generatedCredentials.password}\`\n`;
+        text += `🔐 <b>رمز وب پنل:</b> <code>${this.escapeHtml(ord.generatedCredentials.password)}</code>\n`;
       }
       if (ord.rejectionReason) {
-        text += `⚠️ علت رد: ${ord.rejectionReason}\n`;
+        text += `⚠️ علت رد: ${this.escapeHtml(ord.rejectionReason)}\n`;
       }
       text += `──────────────\n`;
 
@@ -2285,7 +2899,7 @@ export class StoreBotManager {
         inlineButtons.push([
           {
             text:
-              ord.onboardingStatus === "connected"
+              ord.onboardingStatus === "connected" || connectedPhone
                 ? `🔄 تغییر شماره / اتصال مجدد (${ord.id})`
                 : `🚀 فعال‌سازی و اتصال خودکار شماره (${ord.id})`,
             callback_data: `start_onboard_${ord.id}`,
@@ -2294,10 +2908,14 @@ export class StoreBotManager {
       }
     }
 
+    inlineButtons.push([
+      { text: "🎛 مدیریت سلف و تبچی در ربات", callback_data: "cust_manage_panel" },
+      { text: "🤖 ربات شخصی (BotFather)", callback_data: "cust_setup_bot" },
+    ]);
     inlineButtons.push([{ text: "🏠 منوی اصلی", callback_data: "main_menu" }]);
 
     await this.sendMessage(chatId, text, {
-      parse_mode: "Markdown",
+      parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: inlineButtons,
       },
@@ -2305,47 +2923,371 @@ export class StoreBotManager {
   }
 
   public async sendUserAccount(chatId: number | string, user: any) {
-    const customer = this.data.customers.find((c) => String(c.userId) === String(user.id));
-    const approvedOrders = this.data.orders.filter(
-      (o) => String(o.userId) === String(user.id) && o.status === "approved"
-    );
+    const uid = user?.id || chatId;
+    const customer = this.data.customers.find((c) => String(c.userId) === String(uid));
+    const userOrders = this.data.orders.filter((o) => String(o.userId) === String(uid));
+    const approvedOrders = userOrders.filter((o) => o.status === "approved");
+    const pendingOrders = userOrders.filter((o) => o.status === "pending");
     const latestApproved = approvedOrders[0];
 
+    const connectedPhone = this.getCustomerConnectedPhone(uid);
+    const liveAccount = connectedPhone
+      ? telegramManager.getAccounts().find((a) => a.phone === connectedPhone)
+      : undefined;
+
+    const fullName = `${user?.first_name || customer?.firstName || "کاربر"} ${user?.last_name || customer?.lastName || ""}`.trim();
+    const usernameStr = user?.username || customer?.username ? `@${this.escapeHtml(user?.username || customer?.username || "")}` : "ندارد";
+
+    let expiryStr = "ندارد";
+    if (customer?.expiresAt === null && customer?.activePlan) {
+      expiryStr = "♾️ مادام‌العمر (دائمی)";
+    } else if (customer?.expiresAt) {
+      const expDate = new Date(customer.expiresAt);
+      const diffDays = Math.ceil((expDate.getTime() - Date.now()) / 86400000);
+      expiryStr = `${expDate.toLocaleDateString("fa-IR")} (${diffDays > 0 ? `${diffDays} روز باقی‌مانده` : "منقضی شده"})`;
+    } else if (latestApproved?.isUnlimited) {
+      expiryStr = "♾️ مادام‌العمر (دائمی)";
+    }
+
+    const personalBotUsername = liveAccount?.bot?.bot_username;
+    const webPassword = latestApproved?.generatedCredentials?.password || "";
+    const licenseCode = latestApproved?.generatedCredentials?.licenseCode || "";
+
     const text =
-      `👤 *حساب کاربری و وضعیت اشتراک شما*\n` +
+      `👤 <b>مشخصات حساب کاربری و اشتراک شما</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🆔 شناسه کاربری تلگرام: \`${user.id}\`\n` +
-      `🏷️ نام: ${user.first_name || ""} ${user.last_name || ""}\n` +
-      `🔗 نام کاربری: @${user.username || "ندارد"}\n` +
-      `📊 تعداد کل سفارشات: ${customer?.ordersCount || approvedOrders.length}\n` +
-      `✅ خریدهای تأیید شده: ${approvedOrders.length}\n` +
-      (customer?.activePlan ? `📦 پکیج فعال: *${customer.activePlan}*\n` : "") +
-      (customer?.connectedPhone ? `📱 شماره متصل‌شده به سلف/تبچی: \`${customer.connectedPhone}\`\n` : "") +
+      `🆔 <b>شناسه تلگرام:</b> <code>${this.escapeHtml(String(uid))}</code>\n` +
+      `🏷️ <b>نام کامل:</b> ${this.escapeHtml(fullName)}\n` +
+      `🔗 <b>یوزرنیم:</b> ${usernameStr}\n` +
+      `📊 <b>کل سفارشات:</b> ${userOrders.length} عدد (✅ ${approvedOrders.length} تأیید شده | ⏳ ${pendingOrders.length} در انتظار)\n` +
+      `📦 <b>پکیج فعال:</b> <b>${this.escapeHtml(customer?.activePlan || latestApproved?.planTitle || "بدون اشتراک فعال")}</b>\n` +
+      `📅 <b>اعتبار اشتراک:</b> <code>${this.escapeHtml(expiryStr)}</code>\n` +
+      (licenseCode ? `🔑 <b>کد لایسنس:</b> <code>${this.escapeHtml(licenseCode)}</code>\n` : "") +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🌐 *لینک وب پنل مشتریان:*\n${telegramManager.getEffectiveAppUrl()}\n\n` +
-      `💡 در صورت داشتن سفارش تأیید شده، می‌توانید مستقیماً در همین ربات شماره خود را وارد کرده و سلف/تبچی را اتوماتیک فعال کنید.`;
+      `📡 <b>وضعیت اتصال اکانت سلف و تبچی:</b>\n` +
+      (connectedPhone
+        ? `• شماره متصل‌شده: <code>${this.escapeHtml(connectedPhone)}</code> (${liveAccount ? "🟢 آنلاین در سرور" : "🟡 ثبت‌شده"})\n` +
+          (webPassword ? `• رمز عبور وب‌پنل: <code>${this.escapeHtml(webPassword)}</code>\n` : "") +
+          `• ربات مدیریت شخصی: ${personalBotUsername ? `🟢 فعال (@${this.escapeHtml(personalBotUsername)})` : "⚪ تنظیم نشده (امکان اتصال با توکن BotFather)"}`
+        : `• ⚪ هنوز شماره‌ای متصل نشده است.`) +
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
+      `🌐 <b>آدرس وب پنل اختصاصی:</b>\n${this.escapeHtml(telegramManager.getEffectiveAppUrl())}`;
 
     const kb: any[][] = [];
+    if (connectedPhone) {
+      kb.push([
+        { text: "🎛 پنل مدیریت سلف و تبچی (درون ربات)", callback_data: "cust_manage_panel", style: "success" },
+      ]);
+      kb.push([
+        { text: "🤖 اتصال/تنظیم ربات شخصی (BotFather)", callback_data: "cust_setup_bot", style: "primary" },
+        { text: "🩺 چکر سلامت شماره (SpamBot)", callback_data: "cust_spambot_check", style: "warning" },
+      ]);
+    }
     if (latestApproved) {
       kb.push([
         {
           text:
-            latestApproved.onboardingStatus === "connected"
-              ? `🔄 اتصال مجدد / تغییر شماره (${latestApproved.id})`
+            latestApproved.onboardingStatus === "connected" || connectedPhone
+              ? `🔄 تغییر شماره / اتصال مجدد (${latestApproved.id})`
               : `🚀 اتصال خودکار شماره برای سفارش ${latestApproved.id}`,
           callback_data: `start_onboard_${latestApproved.id}`,
+          style: "primary",
         },
       ]);
+    } else {
+      kb.push([{ text: "🛍️ خرید اشتراک جدید سلف و تبچی", callback_data: "cat_all", style: "success" }]);
     }
-    kb.push([{ text: "📦 سفارشات من", callback_data: "menu_orders" }]);
-    kb.push([{ text: "🏠 منوی اصلی", callback_data: "main_menu" }]);
+    kb.push([
+      { text: "📦 سفارشات من", callback_data: "menu_orders" },
+      { text: "🏠 منوی اصلی", callback_data: "main_menu" },
+    ]);
 
     await this.sendMessage(chatId, text, {
-      parse_mode: "Markdown",
+      parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: kb,
       },
     });
+  }
+
+  public async sendCustomerSelfTabchiPanel(chatId: number | string, user: any, messageIdToEdit?: number) {
+    const uid = user?.id || chatId;
+    const phone = this.getCustomerConnectedPhone(uid);
+
+    if (!phone) {
+      const approvedOrder = this.data.orders.find(
+        (o) => String(o.userId) === String(uid) && o.status === "approved"
+      );
+      const msgText =
+        `🎛 <b>پنل مدیریت سلف و تبچی در ربات</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚠️ شما هنوز هیچ شماره موبایلی را به اشتراک خود متصل نکرده‌اید.\n\n` +
+        (approvedOrder
+          ? `✅ شما یک سفارش تأیید شده (<code>#${this.escapeHtml(approvedOrder.id)}</code>) دارید! روی دکمه زیر بزنید تا شماره خود را وارد کرده و سلف و تبچی را به صورت اتوماتیک فعال کنید:`
+          : `💡 ابتدا یکی از پکیج‌های سلف یا تبچی را تهیه فرمایید تا پس از تأیید، شماره شما به صورت خودکار متصل شود و بتوانید تمام امکانات سلف و تبچی را هم از طریق ربات و هم از طریق وب پنل مدیریت کنید.`);
+
+      const buttons: any[][] = [];
+      if (approvedOrder) {
+        buttons.push([
+          { text: `🚀 شروع اتصال خودکار شماره (${approvedOrder.id})`, callback_data: `start_onboard_${approvedOrder.id}`, style: "success" },
+        ]);
+      } else {
+        buttons.push([{ text: "🛍️ مشاهده و خرید پکیج‌ها", callback_data: "cat_all", style: "success" }]);
+      }
+      buttons.push([{ text: "🏠 بازگشت به منوی اصلی", callback_data: "main_menu" }]);
+
+      await this.sendMessage(chatId, msgText, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      });
+      return;
+    }
+
+    const acc = telegramManager.getAccount(phone);
+    if (!acc) {
+      await this.sendMessage(
+        chatId,
+        `⚠️ اکانت با شماره <code>${this.escapeHtml(phone)}</code> در حال حاضر روی سرور یافت نشد. لطفاً از بخش «📦 پیگیری سفارشات من» مجدداً شماره خود را متصل نمایید.`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📦 سفارشات من", callback_data: "menu_orders" }],
+              [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    const selfOn = acc.features?.self_time?.active ?? false;
+    const tabchiOn = acc.features?.tabchi?.status === "broadcasting";
+    const sendMode = acc.features?.tabchi?.send_mode || "sequential";
+    const intervalSec = acc.features?.tabchi?.interval_seconds || 300;
+    const intervalMin = Math.max(1, Math.round(intervalSec / 60));
+    const autoReplyOn = acc.features?.auto_reply?.active ?? false;
+    const aiOn = acc.features?.auto_reply?.ai_enabled ?? false;
+    const bannerPreview = (acc.features?.tabchi?.message || "بنری تنظیم نشده است").slice(0, 120);
+    const personalBot = acc.bot?.bot_username ? `@${acc.bot.bot_username}` : "تنظیم نشده";
+    const profileName = `${acc.firstName || ""} ${acc.lastName || ""}`.trim() || "کاربر";
+
+    const text =
+      `🎛 <b>پنل مدیریت زنده سلف و تبچی (درون ربات)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📱 <b>شماره اکانت:</b> <code>${this.escapeHtml(phone)}</code>\n` +
+      `👤 <b>نام پروفایل:</b> ${this.escapeHtml(profileName)}\n` +
+      `📡 <b>وضعیت سشن:</b> ${acc.isOnline ? "🟢 آنلاین و فعال" : "🔴 آفلاین"}\n` +
+      `🤖 <b>ربات شخصی (BotFather):</b> ${this.escapeHtml(personalBot)}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚙️ <b>وضعیت ماژول‌ها:</b>\n` +
+      `• ⏰ ساعت زنده پروفایل و آنلاین دائمی: <b>${selfOn ? "🟢 روشن" : "🔴 خاموش"}</b>\n` +
+      `• 📢 تبچی و ارسال بنر به گروه‌ها: <b>${tabchiOn ? "🟢 در حال ارسال" : "🔴 متوقف"}</b>\n` +
+      `• ⚡ حالت ارسال بنر تبچی: <b>${sendMode === "simultaneous" ? "⚡ همزمان به تمام گروه‌ها" : "🔄 تک‌به‌تک (نوبتی ضد اسپم)"}</b>\n` +
+      `• ⏱ فاصله زمانی ارسال تبچی: <b>هر ${intervalMin} دقیقه (${intervalSec} ثانیه)</b>\n` +
+      `• 💬 منشی خودکار پیوی: <b>${autoReplyOn ? "🟢 روشن" : "🔴 خاموش"}</b>\n` +
+      `• 🧠 هوش مصنوعی منشی: <b>${aiOn ? "🟢 روشن" : "🔴 خاموش"}</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📝 <b>متن فعلی بنر تبچی:</b>\n<code>${this.escapeHtml(bannerPreview)}</code>\n\n` +
+      `👇 از دکمه‌های زیر برای مدیریت آنی سلف و تبچی خود استفاده کنید:`;
+
+    const buttons: any[][] = [
+      [
+        {
+          text: `⏰ ساعت و سلف: ${selfOn ? "🟢 روشن" : "🔴 خاموش"}`,
+          callback_data: "cust_toggle_self",
+          style: selfOn ? "success" : "danger",
+        },
+        {
+          text: `📢 تبچی: ${tabchiOn ? "🟢 در حال ارسال" : "🔴 متوقف"}`,
+          callback_data: "cust_toggle_tabchi",
+          style: tabchiOn ? "success" : "danger",
+        },
+      ],
+      [
+        {
+          text:
+            sendMode === "simultaneous"
+              ? "⚡ حالت تبچی: ارسال همزمان به همه گروه‌ها (تغییر به تک‌به‌تک)"
+              : "🔄 حالت تبچی: ارسال تک‌به‌تک نوبتی (تغییر به همزمان)",
+          callback_data: "cust_toggle_tabchi_mode",
+          style: "primary",
+        },
+      ],
+      [
+        { text: intervalSec === 60 ? "✅ هر ۱ دقیقه" : "⏱ ۱ دقیقه", callback_data: "cust_tabchi_int_60" },
+        { text: intervalSec === 300 ? "✅ هر ۵ دقیقه" : "⏱ ۵ دقیقه", callback_data: "cust_tabchi_int_300" },
+        { text: intervalSec === 600 ? "✅ هر ۱۰ دقیقه" : "⏱ ۱۰ دقیقه", callback_data: "cust_tabchi_int_600" },
+      ],
+      [
+        { text: intervalSec === 900 ? "✅ هر ۱۵ دقیقه" : "⏱ ۱۵ دقیقه", callback_data: "cust_tabchi_int_900" },
+        { text: intervalSec === 1800 ? "✅ هر ۳۰ دقیقه" : "⏱ ۳۰ دقیقه", callback_data: "cust_tabchi_int_1800" },
+        { text: "✏️ تغییر بنر تبچی", callback_data: "cust_edit_tabchi_banner", style: "primary" },
+      ],
+      [
+        {
+          text: `💬 منشی: ${autoReplyOn ? "🟢 روشن" : "🔴 خاموش"}`,
+          callback_data: "cust_toggle_autoreply",
+          style: autoReplyOn ? "success" : "danger",
+        },
+        {
+          text: `🧠 هوش مصنوعی: ${aiOn ? "🟢 روشن" : "🔴 خاموش"}`,
+          callback_data: "cust_toggle_ai",
+          style: aiOn ? "success" : "danger",
+        },
+      ],
+      [
+        { text: "🤖 اتصال ربات شخصی (@BotFather)", callback_data: "cust_setup_bot", style: "primary" },
+        { text: "🩺 چکر سلامت شماره (SpamBot)", callback_data: "cust_spambot_check", style: "warning" },
+      ],
+      [
+        { text: "👤 مشخصات من", callback_data: "menu_account" },
+        { text: "🏠 منوی اصلی", callback_data: "main_menu" },
+      ],
+    ];
+
+    if (messageIdToEdit) {
+      await this.callBotApi("editMessageText", {
+        chat_id: chatId,
+        message_id: messageIdToEdit,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      }).catch(async () => {
+        await this.sendMessage(chatId, text, {
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: buttons },
+        });
+      });
+    } else {
+      await this.sendMessage(chatId, text, {
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: buttons },
+      });
+    }
+  }
+
+  public async sendCustomerPersonalBotSetup(chatId: number | string, user: any) {
+    const uid = user?.id || chatId;
+    const phone = this.getCustomerConnectedPhone(uid);
+
+    if (!phone) {
+      await this.sendMessage(
+        chatId,
+        `🤖 <b>راه‌اندازی ربات مدیریت شخصی (@BotFather)</b>\n\n⚠️ ابتدا باید شماره موبایل اکانت سلف/تبچی خود را متصل کنید تا بتوانید ربات مدیریت شخصی خود را روی آن فعال نمایید.`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📦 پیگیری سفارشات و اتصال شماره", callback_data: "menu_orders" }],
+              [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    const acc = telegramManager.getAccount(phone);
+    const currentBot = acc?.bot?.bot_username;
+
+    this.userSessions.set(chatId, {
+      state: "awaiting_personal_bot_token",
+      targetPhone: phone,
+    });
+
+    const text =
+      `🤖 <b>راه‌اندازی ربات مدیریت شخصی (BotFather API)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📱 <b>شماره اکانت شما:</b> <code>${this.escapeHtml(phone)}</code>\n` +
+      `🤖 <b>ربات فعلی متصل:</b> ${currentBot ? `@${this.escapeHtml(currentBot)} (🟢 فعال)` : "⚪ هنوز تنظیم نشده"}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💡 شما می‌توانید یک ربات شخصی در <code>@BotFather</code> تلگرام بسازید و توکن (API Token) آن را اینجا بفرستید تا <b>پنل اختصاصی مدیریت سلف و تبچی</b> مستقیماً داخل ربات شخصی خودتان فعال شود!\n\n` +
+      `📌 <b>مراحل دریافت توکن:</b>\n` +
+      `۱. وارد ربات رسمی @BotFather شوید و دستور <code>/newbot</code> را بزنید.\n` +
+      `۲. یک نام و یوزرنیم دلخواه برای ربات خود انتخاب کنید.\n` +
+      `۳. توکن دریافتی (مانند <code>123456789:AAHxyz...</code>) را در پیام بعدی برای من ارسال کنید:`;
+
+    const kb: any[][] = [];
+    if (currentBot) {
+      kb.push([{ text: `🚀 ورود به ربات فعلی (@${currentBot})`, url: `https://t.me/${currentBot}` }]);
+    }
+    kb.push([{ text: "🔙 انصراف و بازگشت به پنل مدیریت", callback_data: "cust_manage_panel" }]);
+
+    await this.sendMessage(chatId, text, {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: kb },
+    });
+  }
+
+  public async runCustomerSpamBotCheck(chatId: number | string, user: any) {
+    const uid = user?.id || chatId;
+    const phone = this.getCustomerConnectedPhone(uid);
+
+    if (!phone) {
+      await this.sendMessage(
+        chatId,
+        `🩺 <b>چکر سلامت شماره و تست @SpamBot تلگرام</b>\n\n⚠️ هنوز شماره‌ای به اشتراک شما متصل نشده است. ابتدا از بخش «📦 پیگیری سفارشات من» شماره خود را متصل نمایید.`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📦 سفارشات من", callback_data: "menu_orders" }],
+              [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+            ],
+          },
+        }
+      );
+      return;
+    }
+
+    await this.sendMessage(
+      chatId,
+      `🩺 <b>در حال استعلام زنده سلامت شماره</b> <code>${this.escapeHtml(phone)}</code> <b>از سرور تلگرام و ربات رسمی @SpamBot...</b>\nلطفاً ۳ ثانیه صبر کنید.`,
+      { parse_mode: "HTML" }
+    );
+
+    try {
+      const report = await telegramManager.checkAccountSpamAndHealth(phone);
+      const userObj = (report as any).user;
+      const fullName = userObj ? `${userObj.firstName || ""} ${userObj.lastName || ""}`.trim() : "کاربر";
+      const username = userObj?.username || "";
+      const isPremium = Boolean(userObj?.isPremium);
+
+      const resultText =
+        `🩺 <b>نتیجه چکر سلامت شماره و تست @SpamBot تلگرام</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📱 <b>شماره اکانت:</b> <code>${this.escapeHtml(report.phone)}</code>\n` +
+        `👤 <b>نام اکانت:</b> ${this.escapeHtml(fullName || "کاربر")} ${username ? `(@${this.escapeHtml(username)})` : ""}\n` +
+        `💎 <b>تلگرام پرمیوم:</b> ${isPremium ? "بله 🌟" : "معمولی"}\n` +
+        `⚡ <b>پینگ اتصال سرور:</b> <code>${report.latencyMs} ms</code>\n` +
+        `🛡️ <b>وضعیت کلی سلامت:</b> <b>${this.escapeHtml(report.spamBotStatusLabel)}</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🤖 <b>پاسخ مستقیم ربات رسمی @SpamBot تلگرام:</b>\n` +
+        `<blockquote>${this.escapeHtml((report.spamBotRawResponse || "").slice(0, 600))}</blockquote>`;
+
+      await this.sendMessage(chatId, resultText, {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "🔄 تست مجدد سلامت شماره", callback_data: "cust_spambot_check", style: "primary" }],
+            [{ text: "🎛 بازگشت به پنل مدیریت سلف و تبچی", callback_data: "cust_manage_panel", style: "success" }],
+            [{ text: "🏠 منوی اصلی", callback_data: "main_menu" }],
+          ],
+        },
+      });
+    } catch (err: any) {
+      await this.sendMessage(
+        chatId,
+        `❌ <b>خطا در اجرای چکر سلامت شماره:</b>\n${this.escapeHtml(err.message || "خطای ارتباط با سرور")}`,
+        {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [[{ text: "🔙 بازگشت", callback_data: "cust_manage_panel" }]],
+          },
+        }
+      );
+    }
   }
 
   public async sendSupport(chatId: number | string) {
@@ -3624,6 +4566,17 @@ export class StoreBotManager {
     return this.data.settings.customButtons;
   }
 
+  public resetButtonsToDefault(): StoreCustomButton[] {
+    const defaults = defaultStoreData();
+    this.data.settings.customButtons = getDefaultStoreCustomButtons();
+    this.data.settings.buttonLabels = { ...defaults.settings.buttonLabels };
+    this.data.settings.buttonTheme = defaults.settings.buttonTheme;
+    this.data.settings.keyboardColumns = 2;
+    this.data.settings.replyKeyboardColumns = 2;
+    this.saveData();
+    return this.data.settings.customButtons;
+  }
+
   public updateMessages(messages: StoreBotMessages): StoreBotMessages {
     this.data.settings.messages = {
       ...this.data.settings.messages,
@@ -3685,6 +4638,10 @@ export class StoreBotManager {
       [
         { text: `🔒 عضویت اجباری (${forceJoinOn})`, callback_data: "admin_toggle_force" },
         { text: "🔄 همگام‌سازی نام اکانت‌ها", callback_data: "admin_sync_profiles" },
+      ],
+      [
+        { text: "🎛 تست پنل مدیریت سلف/تبچی", callback_data: "cust_manage_panel" },
+        { text: "🔄 بازنشانی دکمه‌های پیش‌فرض", callback_data: "admin_reset_buttons" },
       ],
       [
         { text: "🌐 آدرس و مشخصات وب‌پنل", callback_data: "admin_webpanel_link" },

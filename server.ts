@@ -1212,6 +1212,19 @@ async function startServer() {
     }
   });
 
+  app.post("/api/store-bot/reset-buttons", (_req, res) => {
+    try {
+      const defaults = storeBotManager.resetButtonsToDefault();
+      return res.json({
+        success: true,
+        customButtons: defaults,
+        message: "تمامی دکمه‌های ربات فروشگاهی به حالت پیش‌فرض و استاندارد بازگردانی شدند.",
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
   app.put("/api/store-bot/messages", (req, res) => {
     try {
       const { messages } = req.body;
@@ -2045,7 +2058,7 @@ async function startServer() {
   app.post("/api/accounts/:phone/tabchi/settings", (req, res) => {
     try {
       const { phone } = req.params;
-      const { message, intervalSeconds, repeatRounds, repeatInfinite, targetMode, targets } = req.body;
+      const { message, intervalSeconds, repeatRounds, repeatInfinite, targetMode, targets, sendMode } = req.body;
       const result = telegramManager.updateTabchiConfig(
         phone,
         message,
@@ -2053,9 +2066,21 @@ async function startServer() {
         Number(repeatRounds) || 3,
         Boolean(repeatInfinite),
         targetMode,
-        Array.isArray(targets) ? targets : undefined
+        Array.isArray(targets) ? targets : undefined,
+        sendMode === "simultaneous" ? "simultaneous" : sendMode === "sequential" ? "sequential" : undefined
       );
       return res.json({ success: true, tabchi: result });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  // Account Health & @SpamBot Checker
+  app.post("/api/accounts/:phone/check-health", async (req, res) => {
+    try {
+      const { phone } = req.params;
+      const report = await telegramManager.checkAccountSpamAndHealth(phone);
+      return res.json({ success: true, report });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }

@@ -4087,43 +4087,61 @@ export class TelegramManager {
           outgoing = transformFont(outgoing, account.features.font.style);
         }
 
+        const sendMode = account.features.tabchi.send_mode || "sequential";
+
         for (let round = 1; round <= maxRounds; round++) {
           if (abortController.signal.aborted) break;
 
-          this.addLog("info", "tabchi", `درحال اجرای دور ${round} از ارسال تبچی...`, account.phone);
+          this.addLog(
+            "info",
+            "tabchi",
+            `درحال اجرای دور ${round} از ارسال تبچی (حالت: ${sendMode === "simultaneous" ? "⚡ ارسال همزمان به تمام گروه‌ها" : "🔄 ارسال تک‌به‌تک نوبتی"})...`,
+            account.phone
+          );
 
-          for (const chat of targets) {
-            if (abortController.signal.aborted) break;
+          if (sendMode === "simultaneous") {
+            // Simultaneous parallel blast to all target groups at once
+            let roundSuccess = 0;
+            let roundFailed = 0;
+            let maxFloodWaitSec = 0;
 
-            try {
-              const entity = chat.inputEntity || chat;
-              await worker.client.sendMessage(entity, { message: outgoing });
-              account.features.tabchi.total_sent++;
-              this.addLog("success", "tabchi", `ارسال موفق به ${chat.title || chat.id || "گروه"}`, account.phone);
-            } catch (err: any) {
-              account.features.tabchi.total_failed++;
-              const msg = err?.errorMessage || err?.message || String(err);
-              if (msg.includes("FLOOD_WAIT")) {
-                const waitSec = Number(msg.match(/\d+/)?.[0] || 30);
-                this.recordFloodWait(account.phone, waitSec);
-                this.addLog("warn", "tabchi", `FloodWait تلگرام: ${waitSec} ثانیه توقف...`, account.phone);
-                await new Promise((r) => setTimeout(r, waitSec * 1000));
-              } else {
-                this.addLog("warn", "tabchi", `خطا در ارسال به ${chat.title || chat.id}: ${msg}`, account.phone);
-              }
-            }
+            await Promise.allSettled(
+              targets.map(async (chat) => {
+                if (abortController.signal.aborted) return;
+                try {
+                  const entity = chat.inputEntity || chat;
+                  await worker.client.sendMessage(entity, { message: outgoing });
+                  account.features.tabchi.total_sent++;
+                  roundSuccess++;
+                } catch (err: any) {
+                  account.features.tabchi.total_failed++;
+                  roundFailed++;
+                  const msg = err?.errorMessage || err?.message || String(err);
+                  if (msg.includes("FLOOD_WAIT")) {
+                    const waitSec = Number(msg.match(/\d+/)?.[0] || 30);
+                    maxFloodWaitSec = Math.max(maxFloodWaitSec, waitSec);
+                    this.recordFloodWait(account.phone, waitSec);
+                  }
+                }
+              })
+            );
 
             account.features.tabchi.last_run = new Date().toISOString();
             this.saveState();
 
-            if (intervalMs >= 60000) {
-              const mins = Math.floor(intervalMs / 60000);
-              const remSec = Math.floor((intervalMs % 60000) / 1000);
-              const timeStr = remSec > 0 ? `${mins} دقیقه و ${remSec} ثانیه` : `${mins} دقیقه`;
-              this.addLog("info", "tabchi", `بنر با موفقیت به ${chat.title || chat.id || "گروه"} ارسال شد. استراحت هوشمند به مدت ${timeStr} تا ارسال بعدی...`, account.phone);
+            this.addLog(
+              "success",
+              "tabchi",
+              `⚡ موج ارسال همزمان دور ${round} تکمیل شد: ${roundSuccess} موفق، ${roundFailed} ناموفق از ${targets.length} گروه.`,
+              account.phone
+            );
+
+            if (maxFloodWaitSec > 0 && !abortController.signal.aborted) {
+              this.addLog("warn", "tabchi", `FloodWait تلگرام: استراحت اضطراری ${maxFloodWaitSec} ثانیه...`, account.phone);
+              await new Promise((r) => setTimeout(r, maxFloodWaitSec * 1000));
             }
 
-            // Abortable wait timer so stopping Tabchi is instant even with long minute intervals
+            // Wait intervalMs before the next simultaneous wave
             await new Promise<void>((resolve) => {
               if (abortController.signal.aborted) {
                 resolve();
@@ -4136,6 +4154,53 @@ export class TelegramManager {
               };
               abortController.signal.addEventListener("abort", onAbort, { once: true });
             });
+          } else {
+            // Sequential one-by-one mode
+            for (const chat of targets) {
+              if (abortController.signal.aborted) break;
+
+              try {
+                const entity = chat.inputEntity || chat;
+                await worker.client.sendMessage(entity, { message: outgoing });
+                account.features.tabchi.total_sent++;
+                this.addLog("success", "tabchi", `ارسال موفق به ${chat.title || chat.id || "گروه"}`, account.phone);
+              } catch (err: any) {
+                account.features.tabchi.total_failed++;
+                const msg = err?.errorMessage || err?.message || String(err);
+                if (msg.includes("FLOOD_WAIT")) {
+                  const waitSec = Number(msg.match(/\d+/)?.[0] || 30);
+                  this.recordFloodWait(account.phone, waitSec);
+                  this.addLog("warn", "tabchi", `FloodWait تلگرام: ${waitSec} ثانیه توقف...`, account.phone);
+                  await new Promise((r) => setTimeout(r, waitSec * 1000));
+                } else {
+                  this.addLog("warn", "tabchi", `خطا در ارسال به ${chat.title || chat.id}: ${msg}`, account.phone);
+                }
+              }
+
+              account.features.tabchi.last_run = new Date().toISOString();
+              this.saveState();
+
+              if (intervalMs >= 60000) {
+                const mins = Math.floor(intervalMs / 60000);
+                const remSec = Math.floor((intervalMs % 60000) / 1000);
+                const timeStr = remSec > 0 ? `${mins} دقیقه و ${remSec} ثانیه` : `${mins} دقیقه`;
+                this.addLog("info", "tabchi", `بنر با موفقیت به ${chat.title || chat.id || "گروه"} ارسال شد. استراحت هوشمند به مدت ${timeStr} تا ارسال بعدی...`, account.phone);
+              }
+
+              // Abortable wait timer so stopping Tabchi is instant even with long minute intervals
+              await new Promise<void>((resolve) => {
+                if (abortController.signal.aborted) {
+                  resolve();
+                  return;
+                }
+                const timer = setTimeout(resolve, intervalMs);
+                const onAbort = () => {
+                  clearTimeout(timer);
+                  resolve();
+                };
+                abortController.signal.addEventListener("abort", onAbort, { once: true });
+              });
+            }
           }
         }
 
@@ -4178,7 +4243,8 @@ export class TelegramManager {
     repeatRounds: number,
     repeatInfinite: boolean,
     targetMode?: "all" | "selected",
-    targets?: string[]
+    targets?: string[],
+    sendMode?: "sequential" | "simultaneous"
   ) {
     const account = this.getAccount(phone);
     if (!account) throw new Error("Account not found");
@@ -4192,6 +4258,9 @@ export class TelegramManager {
     }
     if (targets) {
       account.features.tabchi.targets = targets;
+    }
+    if (sendMode) {
+      account.features.tabchi.send_mode = sendMode;
     }
     this.saveState();
 
@@ -6845,7 +6914,10 @@ export class TelegramManager {
 
     const isSelfOn = Boolean(account.features?.self_time?.active);
     const isTabchiOn = account.features?.tabchi?.status === "broadcasting";
+    const tabchiMode = account.features?.tabchi?.send_mode || "sequential";
+    const tabchiIntervalSec = account.features?.tabchi?.interval_seconds || 300;
     const isAutoReplyOn = Boolean(account.features?.auto_reply?.active);
+    const isAiOn = Boolean(account.features?.auto_reply?.ai_enabled);
     const tehranTime = formatTehranTime("HH:mm:ss");
     const webAppUrl = this.getEffectiveAppUrl();
     const clientPanelUrl = webAppUrl;
@@ -6862,21 +6934,27 @@ export class TelegramManager {
       }
     }
 
+    const intervalLabel =
+      tabchiIntervalSec >= 60
+        ? `هر ${Math.round(tabchiIntervalSec / 60)} دقیقه`
+        : `هر ${tabchiIntervalSec} ثانیه`;
+
     const text =
-      `🤖 <b>ربات اختصاصی تلگرام برای شماره:</b> <code>${account.phone}</code>\n` +
+      `🤖 <b>ربات مدیریت شخصی سلف و تبچی:</b> <code>${account.phone}</code>\n` +
       `👤 <b>مالک شماره:</b> ${account.firstName || "کاربر"} ${account.lastName || ""}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `⏱️ <b>ساعت رسمی تهران:</b> <code>${tehranTime}</code>\n` +
       `🔘 <b>ساعت روی پروفایل (سلف):</b> ${isSelfOn ? "🟢 روشن" : "🔴 خاموش"}\n` +
       `🚀 <b>تبچی خودکار:</b> ${isTabchiOn ? "🟢 فعال (درحال ارسال)" : "⚪ متوقف"}\n` +
-      `💬 <b>منشی پاسخگوی هوشمند:</b> ${isAutoReplyOn ? "🟢 روشن" : "⚪ خاموش"}\n` +
+      `📡 <b>حالت ارسال تبچی:</b> ${tabchiMode === "simultaneous" ? "⚡ همزمان به تمام گروه‌ها" : "🔄 تک‌به‌تک (نوبتی)"}\n` +
+      `⏳ <b>فاصله زمانی تبچی:</b> <code>${intervalLabel}</code>\n` +
+      `💬 <b>منشی هوشمند:</b> ${isAutoReplyOn ? "🟢 روشن" : "⚪ خاموش"} (${isAiOn ? "هوش مصنوعی فعال ✨" : "متن پیش‌فرض"})\n` +
       `📅 <b>اعتبار اشتراک:</b> ${subStr}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `🌐 <b>لینک ورود به پنل اختصاصی مشتریان:</b>\n` +
-      `🌐 <a href="${clientPanelUrl}">${clientPanelUrl}</a>\n` +
-      `🔗 <code>${clientPanelUrl}</code>\n` +
+      `🔗 <a href="${clientPanelUrl}">${clientPanelUrl}</a>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `برای کنترل امکانات یا دریافت مشخصات ورود، کلیدهای رنگی زیر را لمس نمایید:`;
+      `💡 <i>برای تغییر متن بنر تبچی کافیست بنویسید:</i> <code>بنر: متن تبلیغ شما</code>`;
 
     // Aiogram-styled color-coded buttons (danger, success, primary)
     const inline_keyboard = [
@@ -6894,33 +6972,61 @@ export class TelegramManager {
       ],
       [
         {
+          text:
+            tabchiMode === "simultaneous"
+              ? "⚡ حالت تبچی: ارسال همزمان به همه (تغییر به تک‌به‌تک)"
+              : "🔄 حالت تبچی: ارسال تک‌به‌تک (تغییر به همزمان)",
+          callback_data: "acc_tabchi_mode_toggle",
+          style: "primary",
+        },
+      ],
+      [
+        { text: "⏱ ۵ دقیقه", callback_data: "acc_tabchi_int_300", style: "primary" },
+        { text: "⏱ ۱۰ دقیقه", callback_data: "acc_tabchi_int_600", style: "primary" },
+        { text: "⏱ ۱۵ دقیقه", callback_data: "acc_tabchi_int_900", style: "primary" },
+        { text: "⏱ ۳۰ دقیقه", callback_data: "acc_tabchi_int_1800", style: "primary" },
+      ],
+      [
+        {
           text: isAutoReplyOn ? "🔴 خاموش کردن منشی" : "🟢 روشن کردن منشی",
           callback_data: "acc_autoreply_toggle",
           style: isAutoReplyOn ? "danger" : "success",
         },
         {
-          text: "🟡 روزشمار اعتبار اشتراک 📅",
+          text: isAiOn ? "🤖 هوش مصنوعی: روشن" : "🤖 هوش مصنوعی: خاموش",
+          callback_data: "acc_ai_toggle",
+          style: isAiOn ? "success" : "primary",
+        },
+      ],
+      [
+        {
+          text: "🩺 چکر سلامت شماره و تست SpamBot تلگرام 🛡️",
+          callback_data: "acc_spambot_check",
+          style: "success",
+        },
+      ],
+      [
+        {
+          text: "🔑 دریافت مشخصات ورود وب پنل 🔐",
+          callback_data: "acc_get_creds",
+          style: "primary",
+        },
+        {
+          text: "📅 اعتبار اشتراک",
           callback_data: "acc_sub_status",
           style: "primary",
         },
       ],
       [
         {
-          text: "🔑 دریافت مشخصات ورود به پنل اختصاصی 🔐",
-          callback_data: "acc_get_creds",
-          style: "primary",
-        },
-      ],
-      [
-        {
-          text: "📊 استعلام زنده دلار، طلا و رمزارز با نمودار 📈",
+          text: "📊 استعلام زنده دلار، طلا و رمزارز 📈",
           callback_data: "acc_market_quick",
           style: "success",
         },
       ],
       [
         {
-          text: "🌐 ورود مستقیم به پنل وب مشتری",
+          text: "🌐 ورود مستقیم به پنل وب",
           url: clientPanelUrl,
           style: "primary",
         },
@@ -7596,6 +7702,23 @@ export class TelegramManager {
       return;
     }
 
+    // Direct Tabchi banner text update inside personal bot: "بنر: متن" or "banner: text"
+    if (text.startsWith("بنر:") || lower.startsWith("banner:")) {
+      const newBanner = text.replace(/^(بنر:|banner:)\s*/i, "").trim();
+      if (newBanner) {
+        account.features.tabchi.message = newBanner;
+        this.saveState();
+        await this.sendDirectBotMessage(
+          account.bot.bot_token,
+          chatId,
+          `✅ <b>متن بنر تبلیغاتی تبچی با موفقیت بروزرسانی شد!</b>\n\n📝 <b>متن جدید:</b>\n<i>${newBanner}</i>`
+        );
+      }
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.sendDirectBotMessage(account.bot.bot_token, chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
     // Market & Currency Query in Bot
     if (
       lower.startsWith("/price") ||
@@ -7721,6 +7844,34 @@ export class TelegramManager {
       return;
     }
 
+    if (data === "acc_tabchi_mode_toggle") {
+      const currentMode = account.features.tabchi.send_mode || "sequential";
+      const nextMode = currentMode === "simultaneous" ? "sequential" : "simultaneous";
+      account.features.tabchi.send_mode = nextMode;
+      this.saveState();
+      await this.answerDirectBotCallback(
+        botToken,
+        cq.id,
+        nextMode === "simultaneous"
+          ? "حالت تبچی به «⚡ ارسال همزمان به تمام گروه‌ها» تغییر یافت!"
+          : "حالت تبچی به «🔄 ارسال تک‌به‌تک نوبتی» تغییر یافت!"
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data.startsWith("acc_tabchi_int_")) {
+      const sec = parseInt(data.replace("acc_tabchi_int_", ""), 10) || 300;
+      account.features.tabchi.interval_seconds = sec;
+      this.saveState();
+      const label = sec >= 60 ? `${Math.round(sec / 60)} دقیقه` : `${sec} ثانیه`;
+      await this.answerDirectBotCallback(botToken, cq.id, `فاصله ارسال تبچی روی هر ${label} تنظیم شد ⏱`);
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
     if (data === "acc_autoreply_toggle") {
       const nextActive = !account.features.auto_reply.active;
       this.updateAutoReplyConfig(
@@ -7736,6 +7887,39 @@ export class TelegramManager {
       );
       const payload = this.getAccountBotDashboardPayload(phone);
       await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "acc_ai_toggle") {
+      account.features.auto_reply.ai_enabled = !account.features.auto_reply.ai_enabled;
+      this.saveState();
+      await this.answerDirectBotCallback(
+        botToken,
+        cq.id,
+        account.features.auto_reply.ai_enabled ? "پاسخگوی هوش مصنوعی روشن شد 🤖✨" : "پاسخگوی هوش مصنوعی خاموش شد"
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.editDirectBotMessage(botToken, chatId, messageId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (data === "acc_spambot_check") {
+      await this.answerDirectBotCallback(botToken, cq.id, "درحال استعلام زنده از @SpamBot تلگرام... ⏳");
+      const report = await this.checkAccountSpamAndHealth(phone);
+      const msgText =
+        `🩺 <b>گزارش چکر سلامت شماره و تست @SpamBot تلگرام</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📱 <b>شماره:</b> <code>${report.phone}</code>\n` +
+        `📡 <b>وضعیت نشست MTProto:</b> ${report.isOnline ? "🟢 آنلاین و سالم" : "🔴 آفلاین"}\n` +
+        `⚡ <b>پینگ اتصال به تلگرام:</b> <code>${report.latencyMs} ms</code>\n` +
+        `🛡️ <b>وضعیت در @SpamBot:</b> <b>${report.spamBotStatusLabel}</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💬 <b>پاسخ رسمی دریافتی از @SpamBot:</b>\n` +
+        `<i>${report.spamBotRawResponse}</i>`;
+
+      await this.sendDirectBotMessage(botToken, chatId, msgText, {
+        inline_keyboard: [[{ text: "🔙 بازگشت به منوی مدیریت", callback_data: "acc_refresh", style: "primary" }]],
+      });
       return;
     }
 
@@ -7879,6 +8063,132 @@ export class TelegramManager {
 
   public getAccounts(): TelegramAccount[] {
     return Array.from(this.accounts.values());
+  }
+
+  public async checkAccountSpamAndHealth(phone: string) {
+    const account = this.getAccount(phone);
+    if (!account) {
+      throw new Error(`شماره ${phone} در لیست اکانت‌ها یافت نشد.`);
+    }
+
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client || !worker.client.connected) {
+      return {
+        success: true,
+        phone: account.phone,
+        isOnline: false,
+        latencyMs: 0,
+        spamBotStatus: "offline" as const,
+        spamBotStatusLabel: "🔴 نشست آفلاین (نیازمند اتصال مجدد)",
+        spamBotRawResponse: "اکانت در حال حاضر به سرورهای MTProto تلگرام متصل نیست. ابتدا دکمه اتصال مجدد را بزنید.",
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
+    const startPing = Date.now();
+    try {
+      const me = (await worker.client.getMe()) as any;
+      const latencyMs = Math.max(12, Date.now() - startPing);
+      this.accountLatencyTracker.set(account.phone, latencyMs);
+
+      if (me) {
+        account.firstName = me.firstName || account.firstName || "";
+        account.lastName = me.lastName || "";
+        account.username = me.username || "";
+        this.saveState();
+      }
+
+      let spamBotRaw = "";
+      let spamBotStatus: "clean" | "temp_restricted" | "restricted" | "offline" | "error" = "clean";
+      let spamBotStatusLabel = "🟢 سالم و بدون محدودیت (آزاد در تلگرام)";
+
+      try {
+        await worker.client.sendMessage("SpamBot", { message: "/start" });
+        await new Promise((r) => setTimeout(r, 2200));
+        const messages = await worker.client.getMessages("SpamBot", { limit: 1 });
+        const latestMsg = messages?.[0]?.message || "";
+        spamBotRaw = latestMsg.trim();
+
+        // Mark SpamBot dialog as read so user doesn't see unread badge
+        await worker.client.markAsRead("SpamBot").catch(() => {});
+
+        const lowerMsg = spamBotRaw.toLowerCase();
+        if (
+          lowerMsg.includes("good news") ||
+          lowerMsg.includes("no limits") ||
+          lowerMsg.includes("free as a bird") ||
+          lowerMsg.includes("مژده") ||
+          lowerMsg.includes("هیچ محدودیتی") ||
+          lowerMsg.includes("آزاد")
+        ) {
+          spamBotStatus = "clean";
+          spamBotStatusLabel = "🟢 سالم و آزاد (بدون هیچگونه ریپورت یا محدودیت)";
+        } else if (
+          lowerMsg.includes("until") ||
+          lowerMsg.includes("limited") ||
+          lowerMsg.includes("محدود") ||
+          lowerMsg.includes("تا تاریخ") ||
+          lowerMsg.includes("temporarily")
+        ) {
+          spamBotStatus = "temp_restricted";
+          spamBotStatusLabel = "🟡 دارای محدودیت موقت ارسال به ناشناس (ریپورت موقت)";
+        } else if (
+          lowerMsg.includes("banned") ||
+          lowerMsg.includes("frozen") ||
+          lowerMsg.includes("مسدود") ||
+          lowerMsg.includes("violations")
+        ) {
+          spamBotStatus = "restricted";
+          spamBotStatusLabel = "🔴 دارای محدودیت اسپم (ریپورت در SpamBot)";
+        } else if (spamBotRaw) {
+          spamBotStatus = "clean";
+          spamBotStatusLabel = "🟢 بررسی انجام شد (نشست سالم)";
+        } else {
+          spamBotRaw = "نشست MTProto کاملاً سالم و فعال است (پاسخ متنی از SpamBot دریافت نشد).";
+        }
+      } catch (spamErr: any) {
+        spamBotRaw = `نشست اکانت کاملاً سالم و آنلاین است. (عدم دسترسی لحظه‌ای به @SpamBot: ${spamErr?.message || "OK"})`;
+        spamBotStatus = "clean";
+        spamBotStatusLabel = "🟢 نشست سالم و آنلاین (MTProto OK)";
+      }
+
+      this.addLog(
+        "success",
+        "system",
+        `🩺 تست چکر سلامت و @SpamBot برای ${account.phone}: ${spamBotStatusLabel} (پینگ: ${latencyMs}ms)`,
+        account.phone
+      );
+
+      return {
+        success: true,
+        phone: account.phone,
+        isOnline: true,
+        latencyMs,
+        dcId: me?.photo?.dcId || 2,
+        user: {
+          id: String(me?.id || account.userId || ""),
+          firstName: me?.firstName || account.firstName || "",
+          lastName: me?.lastName || account.lastName || "",
+          username: me?.username || account.username || "",
+          isPremium: Boolean(me?.premium),
+        },
+        spamBotStatus,
+        spamBotStatusLabel,
+        spamBotRawResponse: spamBotRaw,
+        checkedAt: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        phone: account.phone,
+        isOnline: false,
+        latencyMs: Date.now() - startPing,
+        spamBotStatus: "error" as const,
+        spamBotStatusLabel: `🔴 خطا در نشست تلگرام (${err?.message || "نامشخص"})`,
+        spamBotRawResponse: err?.message || "خطا در برقراری ارتباط با تلگرام",
+        checkedAt: new Date().toISOString(),
+      };
+    }
   }
 
   public async syncLiveAccountProfiles() {

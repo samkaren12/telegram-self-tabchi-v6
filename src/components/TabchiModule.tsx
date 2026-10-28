@@ -46,7 +46,12 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
   const [repeatRounds, setRepeatRounds] = useState(3);
   const [repeatInfinite, setRepeatInfinite] = useState(false);
   const [targetMode, setTargetMode] = useState<"all" | "selected">("all");
+  const [sendMode, setSendMode] = useState<"sequential" | "simultaneous">("sequential");
   const [customTargetsText, setCustomTargetsText] = useState("");
+
+  // SpamBot & Account Health Checker state
+  const [checkingHealth, setCheckingHealth] = useState(false);
+  const [healthReport, setHealthReport] = useState<any | null>(null);
 
   // Dialog counts
   const [dialogStats, setDialogStats] = useState({
@@ -81,7 +86,9 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
     setRepeatRounds(account.features.tabchi.repeat_rounds || 3);
     setRepeatInfinite(Boolean(account.features.tabchi.repeat_infinite));
     setTargetMode(account.features.tabchi.target_mode === "selected" ? "selected" : "all");
+    setSendMode(account.features.tabchi.send_mode === "simultaneous" ? "simultaneous" : "sequential");
     setCustomTargetsText((account.features.tabchi.targets || []).join("\n"));
+    setHealthReport(null);
 
     if (account?.phone) {
       fetchDialogs();
@@ -161,6 +168,30 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
 
   const currentMinutes = Math.max(1, Math.round(intervalSeconds / 60));
 
+  const handleRunHealthCheck = async () => {
+    if (!account) return;
+    setCheckingHealth(true);
+    setFeedback(null);
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/check-health`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "خطا در اجرای چکر سلامت شماره");
+      }
+      setHealthReport(data.report);
+      setFeedback({
+        type: "success",
+        text: "تست سلامت شماره و استعلام از ربات رسمی @SpamBot با موفقیت انجام شد.",
+      });
+    } catch (err: any) {
+      setFeedback({ type: "error", text: err.message });
+    } finally {
+      setCheckingHealth(false);
+    }
+  };
+
   // Save Settings
   const handleSaveSettings = async () => {
     setActionLoading(true);
@@ -177,6 +208,7 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
           repeatInfinite,
           targetMode,
           targets,
+          sendMode,
         }),
       });
       const data = await res.json();
@@ -187,7 +219,7 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
       onUpdateAccount({ ...account });
       setFeedback({
         type: "success",
-        text: lang === "fa" ? "تنظیمات تبچی با موفقیت ذخیره شد." : "Settings saved successfully.",
+        text: lang === "fa" ? "تنظیمات تبچی و حالت ارسال بنر با موفقیت ذخیره شد." : "Settings saved successfully.",
       });
       setTimeout(() => setFeedback(null), 3000);
     } catch (err: any) {
@@ -222,6 +254,7 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
           repeatInfinite,
           targetMode,
           targets,
+          sendMode,
         }),
       });
 
@@ -434,7 +467,7 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
               <button
                 type="button"
                 onClick={() => setTargetMode("all")}
-                className={`p-3 rounded-xl border text-xs text-right transition-all flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-xs text-right transition-all flex items-start gap-2.5 cursor-pointer ${
                   targetMode === "all"
                     ? "bg-cyan-500/15 border-cyan-500 text-cyan-300 font-bold"
                     : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
@@ -450,7 +483,7 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
               <button
                 type="button"
                 onClick={() => setTargetMode("selected")}
-                className={`p-3 rounded-xl border text-xs text-right transition-all flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-xs text-right transition-all flex items-start gap-2.5 cursor-pointer ${
                   targetMode === "selected"
                     ? "bg-cyan-500/15 border-cyan-500 text-cyan-300 font-bold"
                     : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
@@ -477,6 +510,125 @@ export const TabchiModule: React.FC<TabchiModuleProps> = ({
                   dir="ltr"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                 />
+              </div>
+            )}
+          </div>
+
+          {/* BROADCAST DISPATCH MODE: SEQUENTIAL (ONE BY ONE) VS SIMULTANEOUS (ALL AT ONCE) */}
+          <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-emerald-400" />
+                <span>شیوه ارسال بنر به گروه‌ها (تک‌به‌تک یا همزمان)</span>
+              </div>
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                {sendMode === "simultaneous" ? "⚡ ارسال همزمان فعال" : "🔄 ارسال تک‌به‌تک نوبتی فعال"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setSendMode("sequential")}
+                className={`p-3.5 rounded-xl border text-xs text-right transition-all flex items-start gap-2.5 cursor-pointer ${
+                  sendMode === "sequential"
+                    ? "bg-emerald-500/15 border-emerald-500 text-emerald-200 font-bold shadow-[0_0_15px_rgba(16,185,129,0.15)]"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <div className={`w-3.5 h-3.5 rounded-full mt-0.5 border flex-shrink-0 ${sendMode === "sequential" ? "bg-emerald-400 border-emerald-400" : "border-slate-600"}`}></div>
+                <div>
+                  <div className="text-xs sm:text-sm">🔄 ارسال تک‌به‌تک به گروه‌ها (نوبتی و ضد اسپم)</div>
+                  <div className="text-[10px] opacity-80 font-normal mt-0.5 leading-relaxed">
+                    بنر به صورت یکی‌یکی و با رعایت فاصله زمانی تعیین‌شده بین هر گروه ارسال می‌شود تا امنیت اکانت در بالاترین سطح بماند.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSendMode("simultaneous")}
+                className={`p-3.5 rounded-xl border text-xs text-right transition-all flex items-start gap-2.5 cursor-pointer ${
+                  sendMode === "simultaneous"
+                    ? "bg-amber-500/15 border-amber-500 text-amber-200 font-bold shadow-[0_0_15px_rgba(245,158,11,0.15)]"
+                    : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <div className={`w-3.5 h-3.5 rounded-full mt-0.5 border flex-shrink-0 ${sendMode === "simultaneous" ? "bg-amber-400 border-amber-400" : "border-slate-600"}`}></div>
+                <div>
+                  <div className="text-xs sm:text-sm">⚡ ارسال همزمان به تمامی گروه‌ها (پخش آنی)</div>
+                  <div className="text-[10px] opacity-80 font-normal mt-0.5 leading-relaxed">
+                    بنر در یک لحظه به صورت موازی به تمام گروه‌های هدف ارسال می‌شود و سپس تا دور بعدی (مثلاً ۵ یا ۱۰ دقیقه بعد) صبر می‌کند.
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* ACCOUNT HEALTH & @SPAMBOT CHECKER */}
+          <div className="p-4 bg-slate-950 border border-cyan-500/30 rounded-2xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-100">
+                    🩺 چکر سلامت شماره و تست رسمی @SpamBot تلگرام
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    بررسی زنده سالم بودن نشست شماره، پینگ اتصال و استعلام مستقیم محدودیت یا ریپورت از ربات رسمی SpamBot تلگرام
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRunHealthCheck}
+                disabled={checkingHealth}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold shadow-lg shadow-cyan-500/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+              >
+                {checkingHealth ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4" />
+                )}
+                <span>
+                  {checkingHealth ? "در حال استعلام از @SpamBot..." : "🩺 اجرای تست سلامت و SpamBot"}
+                </span>
+              </button>
+            </div>
+
+            {healthReport && (
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5 text-xs animate-in fade-in duration-200">
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-200">وضعیت سلامت اکانت:</span>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                        healthReport.spamBotStatus === "clean"
+                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                          : healthReport.spamBotStatus === "temp_restricted"
+                          ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+                          : "bg-rose-500/15 text-rose-300 border-rose-500/40"
+                      }`}
+                    >
+                      {healthReport.spamBotStatusLabel}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[11px] text-cyan-400">
+                    ⚡ پینگ سرور: {healthReport.latencyMs}ms
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-[11px] text-slate-400 font-semibold">
+                    🤖 پاسخ مستقیم ربات رسمی @SpamBot تلگرام:
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/90 text-slate-200 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+                    {healthReport.spamBotRawResponse}
+                  </div>
+                </div>
               </div>
             )}
           </div>
