@@ -207,6 +207,7 @@ interface AccountWorker {
   timeTimer?: NodeJS.Timeout;
   bioTimer?: NodeJS.Timeout;
   nameTimer?: NodeJS.Timeout;
+  actionTimer?: NodeJS.Timeout;
   tabchiAbortController?: AbortController;
   pmBroadcastAbortController?: AbortController;
   batchCreationAbortController?: AbortController;
@@ -1517,6 +1518,20 @@ export class TelegramManager {
     // Setup Self-Time loop
     this.setupSelfTimeLoop(phone, worker);
 
+    // Setup Samkaren Pro (Cosmic) background loops if enabled
+    const cosmic = account.features.cosmic;
+    if (cosmic) {
+      if (cosmic.rotating_bio?.active && Array.isArray(cosmic.rotating_bio.items) && cosmic.rotating_bio.items.length > 0) {
+        this.configureBioRotator(phone, true, cosmic.rotating_bio.items, cosmic.rotating_bio.interval_minutes || 5).catch(() => {});
+      }
+      if (cosmic.rotating_name?.active && cosmic.rotating_name.base_name) {
+        this.configureNameRotator(phone, true, cosmic.rotating_name.base_name, cosmic.rotating_name.font_style || "bold").catch(() => {});
+      }
+      if (cosmic.chat_action?.active) {
+        this.configureChatActionLoop(phone, true, cosmic.chat_action.target_chat || "me", cosmic.chat_action.action || "typing").catch(() => {});
+      }
+    }
+
     this.addLog("info", "system", `Background worker running for ${phone}. Self & Tabchi ready.`, phone);
   }
 
@@ -1592,6 +1607,9 @@ export class TelegramManager {
       }
       if (worker.nameTimer) {
         clearInterval(worker.nameTimer);
+      }
+      if (worker.actionTimer) {
+        clearInterval(worker.actionTimer);
       }
       if (worker.tabchiAbortController) {
         worker.tabchiAbortController.abort();
@@ -1971,7 +1989,53 @@ export class TelegramManager {
         this.saveState();
       }
 
+      // ==============================================================
+      // 0. GROUP CHAT GUARD (نگهبان چت و گروه: ضد فحش و ضد لینک/اسپم)
+      // ==============================================================
+      if (!isPrivate && account.features.cosmic?.chat_guard?.active && incomingText) {
+        const guard = account.features.cosmic.chat_guard;
+        const senderName = `${(sender as any).firstName || ""} ${(sender as any).lastName || ""}`.trim() || senderId;
+        const curseRegex = /(کص|کیر|کون|جنده|مادرجنده|پدرسگ|حرومزاده|خارکصه|گایید|بگا|fuck|bitch|asshole|dick)/i;
+        const spamLinkRegex = /(https?:\/\/t\.me\/joinchat|https?:\/\/t\.me\/\+|[a-zA-Z0-9]+\.ir\/)/i;
+
+        const isCurse = Boolean(guard.anti_curse && curseRegex.test(incomingText));
+        const isSpam = Boolean(guard.anti_spam !== false && spamLinkRegex.test(incomingText));
+
+        if (isCurse || isSpam) {
+          try {
+            await client.deleteMessages(message.chatId!, [message.id], { revoke: true });
+            const muteSec = Math.max(30, Number(guard.auto_mute_seconds) || 60);
+            const untilDate = Math.floor(Date.now() / 1000) + muteSec;
+            try {
+              await client.invoke(
+                new Api.channels.EditBanned({
+                  channel: message.chatId!,
+                  participant: sender.id,
+                  bannedRights: new Api.ChatBannedRights({
+                    untilDate,
+                    sendMessages: true,
+                  }),
+                })
+              );
+            } catch (_) {}
+            this.addLog(
+              "warn",
+              "cosmic",
+              `🛡️ نگهبان گروه: پیام ${isCurse ? "حاوی کلمات نامناسب" : "اسپم/لینک"} از [${senderName}] حذف و برای ${muteSec} ثانیه سکوت شد.`,
+              phone
+            );
+            return;
+          } catch (_) {}
+        }
+      }
+
       if (!isPrivate) return;
+
+      // Auto-trigger configured Chat Action on incoming PV message if active
+      if (account.features.cosmic?.chat_action?.active) {
+        const actType = account.features.cosmic.chat_action.action || "typing";
+        this.triggerChatAction(phone, String(message.chatId), actType).catch(() => {});
+      }
 
       // ==============================================================
       // 1A. AUTOMATIC MEDIA SAVER (ذخیره‌ساز عکس، ویدیو، ویس و عکس‌های تایم‌دار)
@@ -2106,6 +2170,10 @@ export class TelegramManager {
                 });
                 this.addLog("info", "cosmic", `پاسخ دشمن به کاربر ${senderName} ارسال شد.`, phone);
                 return;
+              } else if (fe.enemy_reply_mode === "mute") {
+                await client.deleteMessages(message.chatId!, [message.id], { revoke: true });
+                this.addLog("info", "cosmic", `پیام کاربر دشمن [${senderName}] در حالت سکوت کامل (Mute) درجا حذف شد.`, phone);
+                return;
               }
             } catch (enemyErr: any) {
               this.addLog("warn", "cosmic", `خطا در پردازش لیست دشمن: ${enemyErr?.message}`, phone);
@@ -2116,21 +2184,32 @@ export class TelegramManager {
             f && (f === senderId || (senderUsername && f === senderUsername) || f === `@${senderId}`)
           );
 
-          if (isFriend && fe.friend_reply_mode === "loving") {
-            try {
-              const friendPhrases = [
-                "سلام رفیق قدیمی و با معرفت! همیشه به یادت هستم ❤️",
-                "درود بر دوست گرامی! امری داشتی در خدمتم 🌟",
-                "سلام عزیزم، پیامتو دریافت کردم و به زودی پاسخ میدم 😊",
-                "بهترین‌ها برای تو رفیق شفیق! خوشحالم پیام دادی 💫",
-              ];
-              const lovingMsg = friendPhrases[Math.floor(Math.random() * friendPhrases.length)];
-              await client.sendMessage(message.chatId!, {
-                message: lovingMsg,
-                replyTo: message.id,
-              });
-              this.addLog("success", "cosmic", `پاسخ محبت‌آمیز رفاقتی به دوست VIP [${senderName}] ارسال شد ❤️`, phone);
-            } catch (_) {}
+          if (isFriend) {
+            if (fe.friend_reply_mode === "loving") {
+              try {
+                const friendPhrases = [
+                  "سلام رفیق قدیمی و با معرفت! همیشه به یادت هستم ❤️",
+                  "درود بر دوست گرامی! امری داشتی در خدمتم 🌟",
+                  "سلام عزیزم، پیامتو دریافت کردم و به زودی پاسخ میدم 😊",
+                  "بهترین‌ها برای تو رفیق شفیق! خوشحالم پیام دادی 💫",
+                ];
+                const lovingMsg = friendPhrases[Math.floor(Math.random() * friendPhrases.length)];
+                await client.sendMessage(message.chatId!, {
+                  message: lovingMsg,
+                  replyTo: message.id,
+                });
+                this.addLog("success", "cosmic", `پاسخ محبت‌آمیز رفاقتی به دوست VIP [${senderName}] ارسال شد ❤️`, phone);
+              } catch (_) {}
+            } else if (fe.friend_reply_mode === "vip") {
+              try {
+                await client.markAsRead(message.chatId!).catch(() => {});
+                await client.forwardMessages("me", {
+                  messages: [message.id],
+                  fromPeer: message.chatId!,
+                }).catch(() => {});
+                this.addLog("success", "cosmic", `پیام دوست VIP [${senderName}] به صورت آنی سین و به Saved Messages فوروارد شد ⚡`, phone);
+              } catch (_) {}
+            }
           }
         }
 
@@ -3135,10 +3214,196 @@ export class TelegramManager {
       } catch (_) {}
     }
 
-    // 18. WHISPER / DL
+    // 18. WHISPER / DL / STICKER / TELESCOPE / VOICE / MUSIC / FRIEND & ENEMY
     if (mainCmd === "whisper" || mainCmd === "نجوا") {
       const whisperContent = fullArgs && !fullArgs.includes("[متن]") ? fullArgs : "پیام محرمانه و خصوصی";
       await respond(`🤫 <b>پیام نجوا (Whisper):</b>\n\n🔒 <i>«${whisperContent}»</i>\n\n👁 این پیام به صورت اختصاصی رمزگذاری شده است.`);
+      return true;
+    }
+
+    // 18A-1. ADD/REMOVE FRIEND OR ENEMY (.addfriend, .addenemy, .delfriend, .delenemy)
+    if (
+      mainCmd === "addfriend" ||
+      mainCmd === "delfriend" ||
+      mainCmd === "addenemy" ||
+      mainCmd === "delenemy" ||
+      mainCmd === "دوست" ||
+      mainCmd === "دشمن"
+    ) {
+      let targetIdentifier = arg1 ? arg1.trim() : "";
+      if (!targetIdentifier && message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+          if (replied?.[0]?.senderId) {
+            const ent = (await client.getEntity(replied[0].senderId).catch(() => null)) as any;
+            targetIdentifier = ent?.username ? `@${ent.username}` : String(replied[0].senderId);
+          }
+        } catch (_) {}
+      }
+      if (!targetIdentifier) {
+        await respond("⚠️ لطفاً روی پیام کاربر ریپلای کنید یا یوزرنیم/آیدی او را بنویسید (مثال: <code>.addfriend @user</code>).");
+        return true;
+      }
+      if (!account.features.cosmic) account.features.cosmic = defaultFeatures().cosmic;
+      if (!account.features.cosmic!.friend_enemy) {
+        account.features.cosmic!.friend_enemy = {
+          active: true,
+          friends: [],
+          enemies: [],
+          friend_reply_mode: "loving",
+          enemy_reply_mode: "insult",
+        };
+      }
+      const fe = account.features.cosmic!.friend_enemy!;
+      fe.active = true;
+      if (mainCmd === "addfriend" || mainCmd === "دوست") {
+        if (!fe.friends.includes(targetIdentifier)) fe.friends.push(targetIdentifier);
+        fe.enemies = fe.enemies.filter((x) => x !== targetIdentifier);
+        this.saveState();
+        await respond(`❤️ کاربر <code>${targetIdentifier}</code> به <b>لیست دوستان VIP</b> اضافه شد!`);
+      } else if (mainCmd === "delfriend") {
+        fe.friends = fe.friends.filter((x) => x !== targetIdentifier);
+        this.saveState();
+        await respond(`✅ کاربر <code>${targetIdentifier}</code> از لیست دوستان حذف شد.`);
+      } else if (mainCmd === "addenemy" || mainCmd === "دشمن") {
+        if (!fe.enemies.includes(targetIdentifier)) fe.enemies.push(targetIdentifier);
+        fe.friends = fe.friends.filter((x) => x !== targetIdentifier);
+        this.saveState();
+        await respond(`⚔️ کاربر <code>${targetIdentifier}</code> به <b>لیست دشمنان</b> اضافه شد!`);
+      } else if (mainCmd === "delenemy") {
+        fe.enemies = fe.enemies.filter((x) => x !== targetIdentifier);
+        this.saveState();
+        await respond(`✅ کاربر <code>${targetIdentifier}</code> از لیست دشمنان حذف شد.`);
+      }
+      return true;
+    }
+
+    // 18A-2. VOICE / TTS COMMAND (.voice سلام چطوری | .ویس متن)
+    if (mainCmd === "voice" || mainCmd === "tts" || mainCmd === "ویس") {
+      let textForTts = fullArgs.trim();
+      if (!textForTts && message.replyToMsgId) {
+        try {
+          const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+          textForTts = replied?.[0]?.message || "";
+        } catch (_) {}
+      }
+      if (!textForTts) {
+        await respond("🎙️ لطفاً متنی برای تبدیل به ویس بنویسید یا روی یک پیام متنی ریپلای کنید: <code>.voice سلام دوست عزیز</code>");
+        return true;
+      }
+      await respond(`🎙️ <b>در حال تبدیل متن به پیام صوتی (Voice Note)...</b>`);
+      try {
+        await this.sendTtsVoiceToTelegram(phone, textForTts, "fa", String(message.chatId));
+        await message.delete({ revoke: true }).catch(() => {});
+      } catch (vErr: any) {
+        await respond(`⚠️ خطا در ساخت ویس: ${vErr?.message || "نامشخص"}`);
+      }
+      return true;
+    }
+
+    // 18A-3. MUSIC SEARCH & SEND COMMAND (.music شادمهر | .اهنگ معین)
+    if (mainCmd === "music" || mainCmd === "song" || mainCmd === "اهنگ" || mainCmd === "آهنگ") {
+      const songQuery = fullArgs.trim();
+      if (!songQuery) {
+        await respond("🎵 لطفاً نام آهنگ یا خواننده را بنویسید: <code>.music شادمهر</code>");
+        return true;
+      }
+      await respond(`🎵 <b>در حال جستجو و ارسال موزیک «${songQuery}»...</b>`);
+      try {
+        const searchRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(songQuery)}&entity=song&limit=1`);
+        const data = (await searchRes.json()) as any;
+        const firstTrack = data?.results?.[0];
+        if (!firstTrack || !firstTrack.previewUrl) {
+          await respond(`⚠️ آهنگی با عبارت «${songQuery}» یافت نشد.`);
+          return true;
+        }
+        await this.sendMusicTrackToTelegram(
+          phone,
+          {
+            title: firstTrack.trackName,
+            artist: firstTrack.artistName,
+            album: firstTrack.collectionName,
+            previewUrl: firstTrack.previewUrl,
+            artwork: firstTrack.artworkUrl100 ? firstTrack.artworkUrl100.replace("100x100bb", "400x400bb") : null,
+            durationSeconds: Math.round((firstTrack.trackTimeMillis || 30000) / 1000),
+          },
+          String(message.chatId)
+        );
+        await message.delete({ revoke: true }).catch(() => {});
+      } catch (mErr: any) {
+        await respond(`⚠️ خطا در ارسال موزیک: ${mErr?.message || "نامشخص"}`);
+      }
+      return true;
+    }
+
+    // 18A-4. PHOTO TO STICKER (.sticker | .استیکر)
+    if (mainCmd === "sticker" || mainCmd === "استیکر") {
+      if (!message.replyToMsgId) {
+        await respond("🖼️ لطفاً روی یک عکس ریپلای کنید و دستور <code>.sticker</code> را بفرستید.");
+        return true;
+      }
+      try {
+        const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+        if (!replied?.[0]?.media) {
+          await respond("⚠️ پیام ریپلای شده حاوی عکس نیست.");
+          return true;
+        }
+        await respond("✨ <b>در حال تبدیل تصویر به استیکر تلگرام...</b>");
+        const buf = await client.downloadMedia(replied[0]);
+        if (buf) {
+          const tmpSticker = path.join("/tmp", `sticker_${Date.now()}.webp`);
+          fs.writeFileSync(tmpSticker, buf as Buffer);
+          await client.sendFile(message.chatId!, {
+            file: tmpSticker,
+            forceDocument: false,
+            replyTo: message.replyToMsgId,
+          });
+          fs.unlinkSync(tmpSticker);
+          await message.delete({ revoke: true }).catch(() => {});
+        }
+      } catch (sErr: any) {
+        await respond(`⚠️ خطا در تبدیل استیکر: ${sErr?.message}`);
+      }
+      return true;
+    }
+
+    // 18A-5. VIDEO TO ROUND TELESCOPE (.telescope | .گرد)
+    if (mainCmd === "telescope" || mainCmd === "round" || mainCmd === "گرد") {
+      if (!message.replyToMsgId) {
+        await respond("🎬 لطفاً روی یک ویدیو ریپلای کنید و دستور <code>.telescope</code> را بفرستید.");
+        return true;
+      }
+      try {
+        const replied = await client.getMessages(message.chatId, { ids: [message.replyToMsgId] });
+        if (!replied?.[0]?.media) {
+          await respond("⚠️ پیام ریپلای شده حاوی ویدیو نیست.");
+          return true;
+        }
+        await respond("🔄 <b>در حال تبدیل به ویدیو مسیج دایره‌ای (Telescope)...</b>");
+        const buf = await client.downloadMedia(replied[0]);
+        if (buf) {
+          const tmpVid = path.join("/tmp", `round_${Date.now()}.mp4`);
+          fs.writeFileSync(tmpVid, buf as Buffer);
+          await client.sendFile(message.chatId!, {
+            file: tmpVid,
+            videoNote: true,
+            attributes: [
+              new Api.DocumentAttributeVideo({
+                duration: 15,
+                w: 360,
+                h: 360,
+                roundMessage: true,
+                supportsStreaming: true,
+              }),
+            ],
+            replyTo: message.replyToMsgId,
+          });
+          fs.unlinkSync(tmpVid);
+          await message.delete({ revoke: true }).catch(() => {});
+        }
+      } catch (tErr: any) {
+        await respond(`⚠️ خطا در تبدیل ویدیو مسیج گرد: ${tErr?.message}`);
+      }
       return true;
     }
 
@@ -7216,20 +7481,89 @@ export class TelegramManager {
   }
 
   public updateCosmicConfig(phone: string, cosmicConfig: any) {
-    const account = this.accounts.get(phone);
+    const account = this.getAccount(phone);
     if (!account) throw new Error("اکانت مورد نظر یافت نشد.");
     account.features.cosmic = {
       ...(account.features.cosmic || {}),
       ...cosmicConfig,
     };
     this.saveState();
-    this.addLog("info", "self", "تنظیمات سلف ساز کازمیک ذخیره شد.", phone);
+
+    // Sync live Chat Action loop if included in update
+    if (cosmicConfig.chat_action !== undefined) {
+      const ca = account.features.cosmic?.chat_action;
+      this.configureChatActionLoop(
+        account.phone,
+        Boolean(ca?.active),
+        ca?.target_chat || "me",
+        ca?.action || "typing"
+      ).catch(() => {});
+    }
+
+    this.addLog("info", "cosmic", "تنظیمات سلف ساز سام‌کارن پرو ذخیره و فعال شد.", account.phone);
     return account.features.cosmic;
   }
 
   public async triggerChatAction(phone: string, targetChat: string, action: string) {
-    this.addLog("success", "self", `فعال‌سازی اکشن ${action} برای چت ${targetChat}`, phone);
-    return { success: true, action, targetChat };
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client || !worker.client.connected) {
+      throw new Error("اکانت در حال حاضر آفلاین است. ابتدا اکانت را روشن کنید.");
+    }
+
+    let apiAction: any = new Api.SendMessageTypingAction();
+    if (action === "record-audio") {
+      apiAction = new Api.SendMessageRecordAudioAction();
+    } else if (action === "upload-photo") {
+      apiAction = new Api.SendMessageUploadPhotoAction({ progress: 65 });
+    } else if (action === "upload-video") {
+      apiAction = new Api.SendMessageRecordRoundAction();
+    } else if (action === "play-game") {
+      apiAction = new Api.SendMessageGamePlayAction();
+    }
+
+    const peerTarget = (targetChat || "me").trim() || "me";
+    const resolvedPeer = peerTarget.toLowerCase() === "me" ? "me" : await worker.client.getInputEntity(peerTarget);
+
+    await worker.client.invoke(
+      new Api.messages.SetTyping({
+        peer: resolvedPeer,
+        action: apiAction,
+      })
+    );
+
+    this.addLog("success", "cosmic", `اکشن زنده «${action}» در چت (${peerTarget}) روی تلگرام اجرا شد.`, account.phone);
+    return { success: true, action, targetChat: peerTarget };
+  }
+
+  public async configureChatActionLoop(phone: string, active: boolean, targetChat: string, action: string) {
+    const account = this.getAccount(phone);
+    if (!account) return { active: false };
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (worker?.actionTimer) {
+      clearInterval(worker.actionTimer);
+      worker.actionTimer = undefined;
+    }
+    if (!active) {
+      return { active: false };
+    }
+    if (worker && worker.client && worker.client.connected) {
+      this.triggerChatAction(account.phone, targetChat || "me", action || "typing").catch(() => {});
+      worker.actionTimer = setInterval(() => {
+        const accNow = this.getAccount(account.phone);
+        if (!accNow?.features?.cosmic?.chat_action?.active) {
+          if (worker.actionTimer) clearInterval(worker.actionTimer);
+          return;
+        }
+        this.triggerChatAction(
+          account.phone,
+          accNow.features.cosmic.chat_action.target_chat || "me",
+          accNow.features.cosmic.chat_action.action || "typing"
+        ).catch(() => {});
+      }, 5000);
+    }
+    return { active: true, targetChat, action };
   }
 
   public async sendMediaFileToChat(
@@ -7630,24 +7964,294 @@ export class TelegramManager {
       worker.nameTimer = undefined;
     }
 
+    if (!account.features.cosmic) account.features.cosmic = defaultFeatures().cosmic;
+    account.features.cosmic!.rotating_name = {
+      active: Boolean(active),
+      base_name: baseName || account.firstName || "User",
+      with_time: true,
+      font_style: fontStyle || "bold",
+    };
+    this.saveState();
+
     if (!active || !baseName) {
-      this.addLog("info", "cosmic", "اسم چرخشی متوقف شد.", phone);
+      this.addLog("info", "cosmic", "اسم چرخشی متوقف شد.", account.phone);
       return { active: false };
     }
 
     if (!worker || !worker.client.connected) {
-      return { active: true, warning: "اکانت آفلاین است." };
+      return { active: true, warning: "اکانت آفلاین است. پس از اتصال، چرخش نام فعال می‌شود." };
     }
 
-    const styledName = transformFont(baseName, fontStyle as any);
+    const badges = ["⚡", "🔥", "💎", "👑", "✨"];
+    let tick = 0;
+
+    const updateNameNow = async () => {
+      try {
+        const cleanBase = baseName.trim() || account.firstName || "User";
+        const styledBase = transformFont(cleanBase, (fontStyle || "bold") as any);
+        const badge = badges[tick % badges.length];
+        tick++;
+        const newFirstName = `${styledBase} ${badge}`.slice(0, 64);
+        await worker.client.invoke(new Api.account.UpdateProfile({ firstName: newFirstName }));
+        account.firstName = newFirstName;
+        this.saveState();
+      } catch (err: any) {
+        if (!String(err).includes("FLOOD_WAIT")) {
+          this.addLog("warn", "cosmic", `خطای تغییر نام چرخشی: ${err?.message}`, account.phone);
+        }
+      }
+    };
+
+    await updateNameNow();
+    worker.nameTimer = setInterval(updateNameNow, 60 * 1000);
+    this.addLog("success", "cosmic", `اسم چرخشی با استایل «${fontStyle}» برای ${account.phone} فعال شد.`, account.phone);
+
+    return { active: true, styledName: transformFont(baseName, fontStyle as any) };
+  }
+
+  public async cloneUserProfile(phone: string, targetQuery: string) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت آفلاین است. ابتدا اکانت را روشن کنید.");
+    }
+
+    const cleanTarget = (targetQuery || "").trim().replace(/^https?:\/\/t\.me\//i, "");
+    if (!cleanTarget) throw new Error("یوزرنیم یا آیدی عددی کاربر هدف الزامی است.");
+
+    const entity = (await worker.client.getEntity(cleanTarget)) as any;
+    if (!entity) throw new Error("کاربر مورد نظر در تلگرام یافت نشد.");
+
+    let targetBio = "";
     try {
-      await worker.client.invoke(new Api.account.UpdateProfile({ firstName: styledName }));
-      this.addLog("success", "cosmic", `نام اکانت با استایل «${fontStyle}» به ${styledName} تغییر یافت.`, phone);
-    } catch (err: any) {
-      this.addLog("warn", "cosmic", `خطای تغییر نام: ${err?.message}`, phone);
+      const fullUser = (await worker.client.invoke(
+        new Api.users.GetFullUser({ id: await worker.client.getInputEntity(cleanTarget) })
+      )) as any;
+      targetBio = fullUser?.fullUser?.about || "";
+    } catch (_) {}
+
+    // Save original profile info if not saved yet
+    const me = (await worker.client.getMe()) as any;
+    if (account.features.self_time.original_last_name === null) {
+      account.features.self_time.original_last_name = me?.lastName || "";
+    }
+    (account.features as any).original_first_name = (account.features as any).original_first_name || me?.firstName || account.firstName || "";
+
+    const newFirst = entity.firstName || entity.title || "User";
+    const newLast = entity.lastName || "";
+
+    await worker.client.invoke(
+      new Api.account.UpdateProfile({
+        firstName: newFirst,
+        lastName: newLast,
+        ...(targetBio ? { about: targetBio.slice(0, 70) } : {}),
+      })
+    );
+
+    account.firstName = newFirst;
+    account.lastName = newLast;
+    this.saveState();
+    this.addLog("success", "cosmic", `👥 پروفایل شما به نام «${newFirst} ${newLast}» کلون شد.`, account.phone);
+
+    return {
+      success: true,
+      clonedName: `${newFirst} ${newLast}`.trim(),
+      clonedBio: targetBio,
+      message: `پروفایل شما با موفقیت به «${newFirst} ${newLast}» کلون شد!`,
+    };
+  }
+
+  public async revertUserProfile(phone: string) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت آفلاین است.");
     }
 
-    return { active: true, styledName };
+    const origFirst = (account.features as any).original_first_name || account.firstName || "User";
+    const origLast = account.features.self_time.original_last_name || "";
+
+    await worker.client.invoke(
+      new Api.account.UpdateProfile({
+        firstName: origFirst,
+        lastName: origLast,
+      })
+    );
+
+    account.firstName = origFirst;
+    account.lastName = origLast;
+    this.saveState();
+    this.addLog("success", "cosmic", `↩️ پروفایل اکانت به حالت اصلی (${origFirst}) بازگردانی شد.`, account.phone);
+    return {
+      success: true,
+      message: `نام پروفایل به «${origFirst} ${origLast}» بازگردانی شد.`,
+    };
+  }
+
+  public async sendCustomMessageToChat(phone: string, targetChat: string, text: string) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت در حال حاضر آفلاین است.");
+    }
+
+    const peer = (targetChat || "me").trim() || "me";
+    const cleanText = (text || "").trim();
+    if (!cleanText) throw new Error("متن پیام خالی است.");
+
+    const sent = await worker.client.sendMessage(peer, {
+      message: cleanText,
+    });
+
+    // If the user triggered a self-bot command (like .ping, .fal, .id, etc.) from the Quick Console, run handleSelfBotCommand on it!
+    if (cleanText.startsWith(".") || cleanText.startsWith("/")) {
+      try {
+        await this.handleSelfBotCommand(account.phone, worker, sent, cleanText);
+      } catch (_) {}
+    }
+
+    this.addLog("success", "cosmic", `پیام/دستور به چت (${peer}) در تلگرام ارسال شد.`, account.phone);
+    return {
+      success: true,
+      message: `با موفقیت به ${peer === "me" ? "پیام‌های ذخیره‌شده (Saved Messages)" : peer} در تلگرام ارسال و اجرا شد ✅`,
+    };
+  }
+
+  public async sendMusicTrackToTelegram(
+    phone: string,
+    track: {
+      title: string;
+      artist: string;
+      album?: string;
+      previewUrl: string;
+      artwork?: string | null;
+      durationSeconds?: number;
+    },
+    targetChat: string = "me"
+  ) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت تلگرام آفلاین است.");
+    }
+    if (!track?.previewUrl) {
+      throw new Error("لینک فایل صوتی این آهنگ در دسترس نیست.");
+    }
+
+    const audioRes = await fetch(track.previewUrl);
+    if (!audioRes.ok) throw new Error("خطا در دانلود فایل صوتی آهنگ.");
+    const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
+    const tmpAudioPath = path.join("/tmp", `song_${Date.now()}.m4a`);
+    fs.writeFileSync(tmpAudioPath, audioBuffer);
+
+    let tmpThumbPath: string | undefined;
+    if (track.artwork) {
+      try {
+        const imgRes = await fetch(track.artwork);
+        if (imgRes.ok) {
+          const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+          tmpThumbPath = path.join("/tmp", `cover_${Date.now()}.jpg`);
+          fs.writeFileSync(tmpThumbPath, imgBuf);
+        }
+      } catch (_) {}
+    }
+
+    const caption =
+      `🎵 <b>${track.title || "موزیک"}</b>\n` +
+      `🎤 <b>خواننده:</b> ${track.artist || "ناشناس"}\n` +
+      (track.album ? `💿 <b>آلبوم:</b> ${track.album}\n` : "") +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🚀 <i>Sent via Samkaren Pro Music Engine</i>`;
+
+    try {
+      await worker.client.sendFile(targetChat || "me", {
+        file: tmpAudioPath,
+        thumb: tmpThumbPath,
+        forceDocument: false,
+        attributes: [
+          new Api.DocumentAttributeAudio({
+            duration: Number(track.durationSeconds) || 30,
+            title: track.title || "Track",
+            performer: track.artist || "Artist",
+            voice: false,
+          }),
+          new Api.DocumentAttributeFilename({
+            fileName: `${(track.artist || "Artist").replace(/[^\w\u0600-\u06FF\s-]/g, "")} - ${(track.title || "Song").replace(/[^\w\u0600-\u06FF\s-]/g, "")}.m4a`,
+          }),
+        ],
+        caption,
+        parseMode: "html",
+      });
+    } finally {
+      try { if (fs.existsSync(tmpAudioPath)) fs.unlinkSync(tmpAudioPath); } catch (_) {}
+      try { if (tmpThumbPath && fs.existsSync(tmpThumbPath)) fs.unlinkSync(tmpThumbPath); } catch (_) {}
+    }
+
+    this.addLog("success", "cosmic", `🎵 موزیک «${track.title} - ${track.artist}» به تلگرام ارسال شد.`, account.phone);
+    return {
+      success: true,
+      message: `موزیک «${track.title}» با کاور به ${targetChat === "me" ? "Saved Messages" : targetChat} در تلگرام ارسال شد 🎵`,
+    };
+  }
+
+  public async sendTtsVoiceToTelegram(
+    phone: string,
+    text: string,
+    lang: string = "fa",
+    targetChat: string = "me"
+  ) {
+    const account = this.getAccount(phone);
+    if (!account) throw new Error("اکانت یافت نشد.");
+    const worker = this.workers.get(account.phone) || this.workers.get(phone);
+    if (!worker || !worker.client.connected) {
+      throw new Error("اکانت تلگرام آفلاین است.");
+    }
+
+    const cleanText = (text || "").trim().slice(0, 200);
+    if (!cleanText) throw new Error("متن ویس خالی است.");
+
+    const ttsLang = lang || (/[آ-ی]/.test(cleanText) ? "fa" : "en");
+    const ttsUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=${encodeURIComponent(ttsLang)}&client=tw-ob`;
+
+    const res = await fetch(ttsUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      },
+    });
+    if (!res.ok) {
+      throw new Error("خطا در تولید صوت از سرور TTS.");
+    }
+
+    const audioBuf = Buffer.from(await res.arrayBuffer());
+    const tmpVoicePath = path.join("/tmp", `voice_${Date.now()}.ogg`);
+    fs.writeFileSync(tmpVoicePath, audioBuf);
+
+    try {
+      await worker.client.sendFile(targetChat || "me", {
+        file: tmpVoicePath,
+        voiceNote: true,
+        attributes: [
+          new Api.DocumentAttributeAudio({
+            duration: Math.max(2, Math.ceil(cleanText.length / 10)),
+            voice: true,
+          }),
+        ],
+        caption: `🎙️ <b>ویس هوشمند سام‌کارن پرو:</b>\n<i>«${cleanText}»</i>`,
+        parseMode: "html",
+      });
+    } finally {
+      try { if (fs.existsSync(tmpVoicePath)) fs.unlinkSync(tmpVoicePath); } catch (_) {}
+    }
+
+    this.addLog("success", "cosmic", `🎙️ پیام صوتی (Voice Note) به ${targetChat || "Saved Messages"} ارسال شد.`, account.phone);
+    return {
+      success: true,
+      message: `ویس صوتی با موفقیت به ${targetChat === "me" ? "Saved Messages" : targetChat} در تلگرام ارسال شد 🎙️`,
+    };
   }
 
   private async handleAccountBotMessage(phone: string, msg: any) {
@@ -7719,8 +8323,111 @@ export class TelegramManager {
       return;
     }
 
+    if (text === "⏰ روشن/خاموش ساعت سلف") {
+      const nextActive = !account.features.self_time.active;
+      await this.updateSelfTimeConfig(
+        phone,
+        nextActive,
+        account.features.self_time.format || "HH:mm",
+        account.features.self_time.font_style || "bold"
+      );
+      await this.sendDirectBotMessage(
+        account.bot.bot_token,
+        chatId,
+        nextActive ? "🟢 <b>ساعت زنده پروفایل (سلف) روشن شد!</b>" : "🔴 <b>ساعت زنده پروفایل (سلف) خاموش شد.</b>",
+        this.getAccountBotReplyKeyboard(phone)
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.sendDirectBotMessage(account.bot.bot_token, chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🚀 روشن/خاموش تبچی") {
+      const isBroadcasting = account.features.tabchi.status === "broadcasting";
+      if (isBroadcasting) {
+        this.stopBroadcast(phone);
+      } else {
+        this.startBroadcast(phone).catch(() => {});
+      }
+      await this.sendDirectBotMessage(
+        account.bot.bot_token,
+        chatId,
+        isBroadcasting ? "🔴 <b>ارسال تبچی متوقف شد.</b>" : "🟢 <b>ارسال تبچی آغاز شد!</b>",
+        this.getAccountBotReplyKeyboard(phone)
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.sendDirectBotMessage(account.bot.bot_token, chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "⚡ تغییر حالت ارسال تبچی") {
+      const currentMode = account.features?.tabchi?.send_mode || "sequential";
+      const nextMode = currentMode === "simultaneous" ? "sequential" : "simultaneous";
+      account.features.tabchi.send_mode = nextMode;
+      this.saveState();
+      await this.sendDirectBotMessage(
+        account.bot.bot_token,
+        chatId,
+        nextMode === "simultaneous"
+          ? "⚡ <b>حالت تبچی روی «ارسال همزمان به تمام گروه‌ها» قرار گرفت!</b>"
+          : "🔄 <b>حالت تبچی روی «ارسال تک‌به‌تک نوبتی» قرار گرفت!</b>",
+        this.getAccountBotReplyKeyboard(phone)
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.sendDirectBotMessage(account.bot.bot_token, chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "💬 روشن/خاموش منشی") {
+      const nextActive = !account.features.auto_reply.active;
+      this.updateAutoReplyConfig(
+        phone,
+        nextActive,
+        account.features.auto_reply.messages,
+        account.features.auto_reply.delay_seconds,
+        account.features.auto_reply.ai_enabled
+      );
+      await this.sendDirectBotMessage(
+        account.bot.bot_token,
+        chatId,
+        nextActive ? "🟢 <b>منشی هوشمند پیوی فعال شد!</b>" : "🔴 <b>منشی هوشمند پیوی غیرفعال شد.</b>",
+        this.getAccountBotReplyKeyboard(phone)
+      );
+      const payload = this.getAccountBotDashboardPayload(phone);
+      await this.sendDirectBotMessage(account.bot.bot_token, chatId, payload.text, payload.reply_markup);
+      return;
+    }
+
+    if (text === "🩺 چکر سلامت شماره (SpamBot)") {
+      await this.sendDirectBotMessage(
+        account.bot.bot_token,
+        chatId,
+        `🩺 <b>در حال استعلام زنده سلامت شماره</b> <code>${account.phone}</code> <b>از @SpamBot تلگرام...</b>`,
+        this.getAccountBotReplyKeyboard(phone)
+      );
+      try {
+        const res = await this.checkAccountSpamAndHealth(phone);
+        const checkMsg =
+          `🩺 <b>نتیجه چکر سلامت شماره و تست @SpamBot تلگرام</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📱 <b>شماره اکانت:</b> <code>${account.phone}</code>\n` +
+          `⚡ <b>پینگ سرور:</b> <code>${res.latencyMs}ms</code>\n` +
+          `🛡️ <b>وضعیت کلی:</b> <b>${res.spamBotStatusLabel}</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `🤖 <b>پاسخ رسمی ربات @SpamBot تلگرام:</b>\n` +
+          `<blockquote>${(res.spamBotRawResponse || "").slice(0, 700)}</blockquote>`;
+        await this.sendDirectBotMessage(account.bot.bot_token, chatId, checkMsg, {
+          inline_keyboard: [[{ text: "🔙 بازگشت به پنل مدیریت", callback_data: "acc_refresh", style: "primary" }]],
+        });
+      } catch (err: any) {
+        await this.sendDirectBotMessage(account.bot.bot_token, chatId, `❌ خطا در تست سلامت: ${err?.message || "نامشخص"}`);
+      }
+      return;
+    }
+
     // Market & Currency Query in Bot
     if (
+      text === "📊 قیمت ارز و طلا" ||
       lower.startsWith("/price") ||
       lower.startsWith(".price") ||
       lower.startsWith("قیمت") ||
@@ -7732,9 +8439,12 @@ export class TelegramManager {
       lower === "سکه" ||
       lower === "تتر"
     ) {
-      const clean = lower
-        .replace(/^(\/price|\.price|قیمت|\/dollar|\/crypto|\/gold)\s*/, "")
-        .trim() || "usd";
+      const clean =
+        text === "📊 قیمت ارز و طلا"
+          ? "usd"
+          : lower
+              .replace(/^(\/price|\.price|قیمت|\/dollar|\/crypto|\/gold)\s*/, "")
+              .trim() || "usd";
 
       try {
         const quote = await getMarketQuote(clean);
@@ -7742,14 +8452,14 @@ export class TelegramManager {
         const kb = {
           inline_keyboard: [
             [
-              { text: "💵 دلار", callback_data: "acc_market_usd" },
-              { text: "🪙 طلا ۱۸", callback_data: "acc_market_gold18" },
-              { text: "🪙 سکه امامی", callback_data: "acc_market_emami" },
+              { text: "💵 دلار", callback_data: "acc_market_usd", style: "success" },
+              { text: "🪙 طلا ۱۸", callback_data: "acc_market_gold18", style: "primary" },
+              { text: "🪙 سکه امامی", callback_data: "acc_market_emami", style: "danger" },
             ],
             [
-              { text: "💎 بیت‌کوین", callback_data: "acc_market_btc" },
-              { text: "⚡ تتر", callback_data: "acc_market_usdt" },
-              { text: "🔙 منوی اصلی", callback_data: "acc_refresh" },
+              { text: "💎 بیت‌کوین", callback_data: "acc_market_btc", style: "primary" },
+              { text: "⚡ تتر", callback_data: "acc_market_usdt", style: "success" },
+              { text: "🔙 منوی اصلی", callback_data: "acc_refresh", style: "primary" },
             ],
           ],
         };
@@ -7763,8 +8473,69 @@ export class TelegramManager {
       } catch (_) {}
     }
 
+    // Send colored ReplyKeyboardMarkup first, then InlineKeyboardMarkup dashboard
+    await this.sendDirectBotMessage(
+      account.bot.bot_token,
+      chatId,
+      "⌨️ <b>کیبورد رنگی مدیریت سریع سلف و تبچی فعال شد:</b>",
+      this.getAccountBotReplyKeyboard(phone)
+    );
     const payload = this.getAccountBotDashboardPayload(phone);
     await this.sendDirectBotMessage(account.bot.bot_token, chatId, payload.text, payload.reply_markup);
+  }
+
+  private getAccountBotReplyKeyboard(phone: string) {
+    const account = this.getAccount(phone);
+    const isSelfOn = Boolean(account?.features?.self_time?.active);
+    const isTabchiOn = account?.features?.tabchi?.status === "broadcasting";
+    const isAutoReplyOn = Boolean(account?.features?.auto_reply?.active);
+
+    return {
+      keyboard: [
+        [
+          {
+            text: "⏰ روشن/خاموش ساعت سلف",
+            style: isSelfOn ? "success" : "danger",
+          },
+          {
+            text: "🚀 روشن/خاموش تبچی",
+            style: isTabchiOn ? "success" : "danger",
+          },
+        ],
+        [
+          {
+            text: "⚡ تغییر حالت ارسال تبچی",
+            style: "primary",
+          },
+          {
+            text: "💬 روشن/خاموش منشی",
+            style: isAutoReplyOn ? "success" : "danger",
+          },
+        ],
+        [
+          {
+            text: "🩺 چکر سلامت شماره (SpamBot)",
+            style: "danger",
+          },
+          {
+            text: "🔑 ورود به پنل",
+            style: "primary",
+          },
+        ],
+        [
+          {
+            text: "📊 قیمت ارز و طلا",
+            style: "success",
+          },
+          {
+            text: "🔄 وضعیت و پنل مدیریت",
+            style: "primary",
+          },
+        ],
+      ],
+      resize_keyboard: true,
+      is_persistent: true,
+    };
   }
 
   private async handleAccountBotCallbackQuery(phone: string, cq: any) {

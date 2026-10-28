@@ -111,7 +111,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       id: "btn-spambot-checker",
       text: "🩺 چکر سلامت شماره و تست SpamBot",
       action: "spambot_checker",
-      style: "warning",
+      style: "danger",
       rowIndex: 4,
       columnIndex: 0,
       isActive: true,
@@ -399,7 +399,7 @@ export function defaultStoreData(): StoreData {
     forceJoinChannel: false,
     enabled: false,
     status: "stopped",
-    keyboardMode: "inline", // "inline" | "reply" | "hybrid"
+    keyboardMode: "hybrid", // "inline" | "reply" | "hybrid"
     allowCustomerKeyboardSwitch: true,
     buttonTheme: "aiogram_colored", // "aiogram_colored" | "cyber_neon" | "galaxy_purple" | "luxury_gold" | "crypto_cyan"
     buttonAiogramStyle: "primary",
@@ -621,10 +621,41 @@ export class StoreBotManager {
         const raw = fs.readFileSync(STORE_DATA_FILE, "utf-8");
         const parsed = JSON.parse(raw);
         const defaults = defaultStoreData();
+        const rawCustomBtns: StoreCustomButton[] =
+          Array.isArray(parsed.settings?.customButtons) && parsed.settings.customButtons.length > 0
+            ? parsed.settings.customButtons.map((b: StoreCustomButton) => ({
+                ...b,
+                style:
+                  b.style === "success" || b.style === "danger" || b.style === "primary"
+                    ? b.style
+                    : b.style === "warning"
+                    ? "danger"
+                    : b.action === "my_account" || b.action === "manage_self_tabchi" || b.action === "discount_coupon"
+                    ? "success"
+                    : b.action === "support" || b.action === "spambot_checker"
+                    ? "danger"
+                    : "primary",
+              }))
+            : defaults.settings.customButtons || [];
+
+        // Ensure newly added default actions (manage_self_tabchi, setup_personal_bot, spambot_checker) exist
+        const defaultBtns = getDefaultStoreCustomButtons();
+        for (const defBtn of defaultBtns) {
+          if (
+            (defBtn.action === "manage_self_tabchi" ||
+              defBtn.action === "setup_personal_bot" ||
+              defBtn.action === "spambot_checker") &&
+            !rawCustomBtns.some((b) => b.action === defBtn.action)
+          ) {
+            rawCustomBtns.push(defBtn);
+          }
+        }
+
         return {
           settings: {
             ...defaults.settings,
             ...(parsed.settings || {}),
+            keyboardMode: parsed.settings?.keyboardMode || "hybrid",
             allowCustomerKeyboardSwitch:
               parsed.settings?.allowCustomerKeyboardSwitch !== undefined
                 ? Boolean(parsed.settings.allowCustomerKeyboardSwitch)
@@ -638,10 +669,7 @@ export class StoreBotManager {
             mandatoryChannels: Array.isArray(parsed.settings?.mandatoryChannels)
               ? parsed.settings.mandatoryChannels
               : defaults.settings.mandatoryChannels || [],
-            customButtons:
-              Array.isArray(parsed.settings?.customButtons) && parsed.settings.customButtons.length > 0
-                ? parsed.settings.customButtons
-                : defaults.settings.customButtons || [],
+            customButtons: rawCustomBtns,
             messages: {
               ...defaults.settings.messages,
               ...(parsed.settings?.messages || {}),
@@ -743,6 +771,151 @@ export class StoreBotManager {
   // TELEGRAM BOT API CALLS
   // =============================================================
 
+  private normalizeTelegramButtonStyle(
+    style?: string,
+    fallback: "primary" | "success" | "danger" = "primary"
+  ): "primary" | "success" | "danger" {
+    if (style === "success" || style === "danger" || style === "primary") {
+      return style;
+    }
+    if (style === "warning") {
+      return "danger";
+    }
+    return fallback;
+  }
+
+  private inferButtonStyleFromTextOrData(btn: any): "primary" | "success" | "danger" {
+    const rawStyle = btn?.style;
+    if (rawStyle === "success" || rawStyle === "danger" || rawStyle === "primary") {
+      return rawStyle;
+    }
+    if (rawStyle === "warning") {
+      return "danger";
+    }
+    const text = String(btn?.text || "");
+    const cb = String(btn?.callback_data || "");
+    if (
+      text.includes("تأیید") ||
+      text.includes("تایید") ||
+      text.includes("خرید") ||
+      text.includes("سلف") ||
+      text.includes("مدیریت") ||
+      text.includes("روشن") ||
+      text.includes("فعال") ||
+      text.includes("تخفیف") ||
+      text.includes("مشخصات") ||
+      cb.includes("approve") ||
+      cb.includes("self") ||
+      cb.includes("manage")
+    ) {
+      return "success";
+    }
+    if (
+      text.includes("رد ") ||
+      text.includes("حذف") ||
+      text.includes("انصراف") ||
+      text.includes("لغو") ||
+      text.includes("خاموش") ||
+      text.includes("متوقف") ||
+      text.includes("پشتیبانی") ||
+      text.includes("VIP") ||
+      text.includes("پنل مدیریت") ||
+      text.includes("چکر") ||
+      cb.includes("reject") ||
+      cb.includes("delete") ||
+      cb.includes("cancel")
+    ) {
+      return "danger";
+    }
+    return "primary";
+  }
+
+  private sanitizeReplyMarkupForTelegram(replyMarkup: any): any {
+    if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
+    const copy = JSON.parse(JSON.stringify(replyMarkup));
+
+    if (Array.isArray(copy.inline_keyboard)) {
+      copy.inline_keyboard = copy.inline_keyboard.map((row: any[]) =>
+        Array.isArray(row)
+          ? row.map((btn: any) => {
+              if (!btn || typeof btn !== "object") return btn;
+              const cleaned: any = { ...btn };
+              cleaned.style = this.inferButtonStyleFromTextOrData(cleaned);
+              if (cleaned.icon_custom_emoji_id) {
+                const emojiId = String(cleaned.icon_custom_emoji_id).trim();
+                if (/^\d{15,22}$/.test(emojiId)) {
+                  cleaned.icon_custom_emoji_id = emojiId;
+                } else {
+                  delete cleaned.icon_custom_emoji_id;
+                }
+              }
+              return cleaned;
+            })
+          : row
+      );
+    }
+
+    if (Array.isArray(copy.keyboard)) {
+      if ("persistent" in copy) {
+        copy.is_persistent = Boolean(copy.persistent);
+        delete copy.persistent;
+      } else if (copy.is_persistent === undefined) {
+        copy.is_persistent = true;
+      }
+      if (copy.resize_keyboard === undefined) {
+        copy.resize_keyboard = true;
+      }
+      copy.keyboard = copy.keyboard.map((row: any[]) =>
+        Array.isArray(row)
+          ? row.map((btn: any) => {
+              const btnObj = typeof btn === "string" ? { text: btn } : { ...(btn || {}) };
+              btnObj.style = this.inferButtonStyleFromTextOrData(btnObj);
+              if (btnObj.icon_custom_emoji_id) {
+                const emojiId = String(btnObj.icon_custom_emoji_id).trim();
+                if (/^\d{15,22}$/.test(emojiId)) {
+                  btnObj.icon_custom_emoji_id = emojiId;
+                } else {
+                  delete btnObj.icon_custom_emoji_id;
+                }
+              }
+              return btnObj;
+            })
+          : row
+      );
+    }
+
+    return copy;
+  }
+
+  private stripCustomEmojiOnly(replyMarkup: any): any {
+    if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
+    const copy = JSON.parse(JSON.stringify(replyMarkup));
+    if (Array.isArray(copy.inline_keyboard)) {
+      copy.inline_keyboard = copy.inline_keyboard.map((row: any[]) =>
+        Array.isArray(row)
+          ? row.map((btn: any) => {
+              const { icon_custom_emoji_id, ...rest } = btn || {};
+              return rest;
+            })
+          : row
+      );
+    }
+    if (Array.isArray(copy.keyboard)) {
+      copy.keyboard = copy.keyboard.map((row: any[]) =>
+        Array.isArray(row)
+          ? row.map((btn: any) => {
+              if (typeof btn === "object" && btn !== null) {
+                const { icon_custom_emoji_id, ...rest } = btn;
+                return rest;
+              }
+              return btn;
+            })
+          : row
+      );
+    }
+    return copy;
+  }
+
   private stripExtendedButtonFields(replyMarkup: any): any {
     if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
     const copy = JSON.parse(JSON.stringify(replyMarkup));
@@ -776,22 +949,55 @@ export class StoreBotManager {
     const token = this.data.settings.botToken;
     if (!token) throw new Error("توکن ربات تلگرام تنظیم نشده است.");
 
+    const preparedBody = body ? { ...body } : undefined;
+    if (preparedBody?.reply_markup) {
+      preparedBody.reply_markup = this.sanitizeReplyMarkupForTelegram(preparedBody.reply_markup);
+    }
+
     const url = `https://api.telegram.org/bot${token}/${method}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
+      body: preparedBody ? JSON.stringify(preparedBody) : undefined,
     });
 
     const json: any = await res.json();
     if (!json.ok) {
       const desc = String(json.description || "");
-      // Automatic fallback if parse_mode fails or extended button fields are rejected
-      if (body && (desc.includes("can't parse entities") || desc.includes("style") || desc.includes("custom_emoji") || desc.includes("reply_markup"))) {
-        const fallbackBody = { ...body };
-        if (desc.includes("can't parse entities")) {
-          delete fallbackBody.parse_mode;
-        }
+      console.warn(`[STORE BOT API] ${method} warning:`, desc);
+
+      // Step 1: If parse_mode failed, ONLY strip parse_mode and keep colored button styles intact!
+      if (preparedBody && desc.includes("can't parse entities")) {
+        const retryBody = { ...preparedBody };
+        delete retryBody.parse_mode;
+        const retryRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(retryBody),
+        });
+        const retryJson: any = await retryRes.json();
+        if (retryJson.ok) return retryJson.result;
+      }
+
+      // Step 2: If custom_emoji failed, ONLY strip icon_custom_emoji_id and keep colored button styles intact!
+      if (preparedBody?.reply_markup && (desc.includes("custom_emoji") || desc.includes("DOCUMENT_INVALID"))) {
+        const retryBody = {
+          ...preparedBody,
+          reply_markup: this.stripCustomEmojiOnly(preparedBody.reply_markup),
+        };
+        const retryRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(retryBody),
+        });
+        const retryJson: any = await retryRes.json();
+        if (retryJson.ok) return retryJson.result;
+      }
+
+      // Step 3: Last resort fallback
+      if (preparedBody && (desc.includes("style") || desc.includes("BUTTON_STYLE") || desc.includes("reply_markup"))) {
+        const fallbackBody = { ...preparedBody };
+        delete fallbackBody.parse_mode;
         if (fallbackBody.reply_markup) {
           fallbackBody.reply_markup = this.stripExtendedButtonFields(fallbackBody.reply_markup);
         }
@@ -803,6 +1009,7 @@ export class StoreBotManager {
         const retryJson: any = await retryRes.json();
         if (retryJson.ok) return retryJson.result;
       }
+
       throw new Error(json.description || `خطای API تلگرام: ${json.error_code}`);
     }
     return json.result;
@@ -867,7 +1074,35 @@ export class StoreBotManager {
       this.stopPolling();
     }
 
+    if (
+      settings.customButtons !== undefined ||
+      settings.keyboardMode !== undefined ||
+      settings.buttonTheme !== undefined ||
+      settings.buttonAiogramStyle !== undefined ||
+      settings.buttonLabels !== undefined
+    ) {
+      this.broadcastUpdatedKeyboardToActiveUsers().catch(() => {});
+    }
+
     return this.data.settings;
+  }
+
+  public async broadcastUpdatedKeyboardToActiveUsers() {
+    if (!this.data.settings.botToken) return;
+    const chatIds = new Set<string>();
+    if (this.data.settings.ownerTelegramId) {
+      chatIds.add(String(this.data.settings.ownerTelegramId).trim());
+    }
+    for (const ord of this.data.orders.slice(0, 15)) {
+      if (ord.userId) chatIds.add(String(ord.userId));
+    }
+    for (const [cid] of this.userSessions.entries()) {
+      chatIds.add(String(cid));
+    }
+    for (const cid of chatIds) {
+      if (!cid || cid === "0") continue;
+      await this.sendMainMenu(cid).catch(() => {});
+    }
   }
 
   public startPolling() {
@@ -1062,7 +1297,6 @@ export class StoreBotManager {
   public getReplyKeyboardMarkup(userId?: number | string) {
     const labels = this.data.settings.buttonLabels;
     const theme = this.getThemePrefix(this.data.settings.buttonTheme);
-    const isAiogram = this.data.settings.buttonTheme === "aiogram_colored";
     const cols = Number(this.data.settings.replyKeyboardColumns || this.data.settings.keyboardColumns || 2);
 
     const categories = this.getCategories().filter((c) => c.isActive);
@@ -1074,22 +1308,21 @@ export class StoreBotManager {
       const rowsMap: Map<number, any[]> = new Map();
 
       for (const btn of sorted) {
-        const colorDot =
-          isAiogram || (btn.style && btn.style !== "default")
-            ? this.getAiogramStyleColorPrefix(btn.style)
-            : "";
-        const hasColorDotAlready =
-          btn.text.startsWith("🟢") ||
-          btn.text.startsWith("🔴") ||
-          btn.text.startsWith("🔵") ||
-          btn.text.startsWith("🟡");
-
-        const displayText = colorDot && !hasColorDotAlready ? `${colorDot}${btn.text}` : btn.text;
+        const validStyle = this.normalizeTelegramButtonStyle(
+          btn.style,
+          btn.action === "my_account" || btn.action === "manage_self_tabchi" || btn.action === "discount_coupon"
+            ? "success"
+            : btn.action === "support" || btn.action === "spambot_checker"
+            ? "danger"
+            : "primary"
+        );
 
         const btnObj: any = {
-          text: displayText,
-          ...(btn.style && btn.style !== "default" ? { style: btn.style } : {}),
-          ...(btn.customEmojiId ? { icon_custom_emoji_id: btn.customEmojiId } : {}),
+          text: btn.text,
+          style: validStyle,
+          ...(btn.customEmojiId && /^\d{15,22}$/.test(btn.customEmojiId.trim())
+            ? { icon_custom_emoji_id: btn.customEmojiId.trim() }
+            : {}),
         };
 
         const rIndex = btn.rowIndex || 0;
@@ -1104,17 +1337,17 @@ export class StoreBotManager {
       }
 
       if (userId && this.isUserAdmin(userId)) {
-        keyboardRows.push([{ text: "👑 پنل مدیریت", ...(isAiogram ? { style: "danger" } : {}) }]);
+        keyboardRows.push([{ text: "👑 پنل مدیریت", style: "danger" }]);
       }
 
       if (this.data.settings.allowCustomerKeyboardSwitch) {
-        keyboardRows.push([{ text: "🪟 تغییر به دکمه‌های شیشه‌ای (Inline)", ...(isAiogram ? { style: "primary" } : {}) }]);
+        keyboardRows.push([{ text: "🪟 تغییر به دکمه‌های شیشه‌ای (Inline)", style: "primary" }]);
       }
 
       return {
         keyboard: keyboardRows,
         resize_keyboard: true,
-        persistent: true,
+        is_persistent: true,
       };
     }
 
@@ -1126,25 +1359,25 @@ export class StoreBotManager {
         const style = cat.id === "self" ? "success" : cat.id === "tabchi" ? "primary" : "danger";
         allButtons.push({
           text: `${cat.icon || "💎"} ${cat.title}`,
-          ...(isAiogram ? { style } : {}),
+          style,
         });
       }
     } else {
-      allButtons.push({ text: `${theme.self} ${labels.buySelf}`, ...(isAiogram ? { style: "success" } : {}) });
-      allButtons.push({ text: `${theme.tabchi} ${labels.buyTabchi}`, ...(isAiogram ? { style: "primary" } : {}) });
-      allButtons.push({ text: `${theme.combo} ${labels.buyCombo}`, ...(isAiogram ? { style: "danger" } : {}) });
+      allButtons.push({ text: `${theme.self} ${labels.buySelf}`, style: "success" });
+      allButtons.push({ text: `${theme.tabchi} ${labels.buyTabchi}`, style: "primary" });
+      allButtons.push({ text: `${theme.combo} ${labels.buyCombo}`, style: "danger" });
     }
 
     // Common system buttons
-    allButtons.push({ text: `${theme.catalog} ${labels.plansCatalog}`, ...(isAiogram ? { style: "primary" } : {}) });
-    allButtons.push({ text: `${theme.account} ${labels.myAccount}`, ...(isAiogram ? { style: "primary" } : {}) });
-    allButtons.push({ text: `${theme.orders} ${labels.myOrders}`, ...(isAiogram ? { style: "success" } : {}) });
-    allButtons.push({ text: `🎛 مدیریت سلف و تبچی`, ...(isAiogram ? { style: "success" } : {}) });
-    allButtons.push({ text: `🤖 ربات اختصاصی من (BotFather)`, ...(isAiogram ? { style: "primary" } : {}) });
-    allButtons.push({ text: `🩺 چکر سلامت شماره (SpamBot)`, ...(isAiogram ? { style: "warning" } : {}) });
-    allButtons.push({ text: `${theme.discount} ${labels.applyDiscount}`, ...(isAiogram ? { style: "success" } : {}) });
-    allButtons.push({ text: `${theme.support} ${labels.support}`, ...(isAiogram ? { style: "danger" } : {}) });
-    allButtons.push({ text: `${theme.guide} ${labels.helpGuide}`, ...(isAiogram ? { style: "primary" } : {}) });
+    allButtons.push({ text: `${theme.catalog} ${labels.plansCatalog}`, style: "primary" });
+    allButtons.push({ text: `${theme.account} ${labels.myAccount}`, style: "success" });
+    allButtons.push({ text: `${theme.orders} ${labels.myOrders}`, style: "primary" });
+    allButtons.push({ text: `🎛 مدیریت سلف و تبچی`, style: "success" });
+    allButtons.push({ text: `🤖 ربات اختصاصی من (BotFather)`, style: "primary" });
+    allButtons.push({ text: `🩺 چکر سلامت شماره (SpamBot)`, style: "danger" });
+    allButtons.push({ text: `${theme.discount} ${labels.applyDiscount}`, style: "success" });
+    allButtons.push({ text: `${theme.support} ${labels.support}`, style: "danger" });
+    allButtons.push({ text: `${theme.guide} ${labels.helpGuide}`, style: "primary" });
 
     // Chunk buttons into rows based on chosen columns (1, 2, or 3)
     const keyboardRows: any[][] = [];
@@ -1153,24 +1386,23 @@ export class StoreBotManager {
     }
 
     if (userId && this.isUserAdmin(userId)) {
-      keyboardRows.push([{ text: "👑 پنل مدیریت" }]);
+      keyboardRows.push([{ text: "👑 پنل مدیریت", style: "danger" }]);
     }
 
     if (this.data.settings.allowCustomerKeyboardSwitch) {
-      keyboardRows.push([{ text: "🪟 تغییر به دکمه‌های شیشه‌ای (Inline)" }]);
+      keyboardRows.push([{ text: "🪟 تغییر به دکمه‌های شیشه‌ای (Inline)", style: "primary" }]);
     }
 
     return {
       keyboard: keyboardRows,
       resize_keyboard: true,
-      persistent: true,
+      is_persistent: true,
     };
   }
 
   public getInlineKeyboardMenu(userId?: number | string) {
     const labels = this.data.settings.buttonLabels;
     const theme = this.getThemePrefix(this.data.settings.buttonTheme);
-    const isAiogram = this.data.settings.buttonTheme === "aiogram_colored";
     const cols = Number(this.data.settings.keyboardColumns || 2);
 
     const categories = this.getCategories().filter((c) => c.isActive);
@@ -1197,11 +1429,22 @@ export class StoreBotManager {
         else if (btn.action === "help") callbackData = "cat_all";
         else if (btn.action === "rules") callbackData = "menu_guide";
 
+        const validStyle = this.normalizeTelegramButtonStyle(
+          btn.style,
+          btn.action === "my_account" || btn.action === "manage_self_tabchi" || btn.action === "discount_coupon"
+            ? "success"
+            : btn.action === "support" || btn.action === "spambot_checker"
+            ? "danger"
+            : "primary"
+        );
+
         const btnObj: any = {
           text: btn.text,
           ...(btn.url && btn.action === "custom_url" ? { url: btn.url } : { callback_data: callbackData }),
-          ...(isAiogram || (btn.style && btn.style !== "default") ? { style: btn.style || "primary" } : {}),
-          ...(btn.customEmojiId ? { icon_custom_emoji_id: btn.customEmojiId } : {}),
+          style: validStyle,
+          ...(btn.customEmojiId && /^\d{15,22}$/.test(btn.customEmojiId.trim())
+            ? { icon_custom_emoji_id: btn.customEmojiId.trim() }
+            : {}),
         };
 
         const rIndex = btn.rowIndex || 0;
@@ -1220,7 +1463,7 @@ export class StoreBotManager {
           {
             text: "👑 ورود به پنل مدیریت ربات (/admin)",
             callback_data: "admin_menu",
-            ...(isAiogram ? { style: "danger" } : {}),
+            style: "danger",
           },
         ]);
       }
@@ -1230,7 +1473,7 @@ export class StoreBotManager {
           {
             text: labels.switchKeyboard || "⌨️ تغییر به کیبورد باتن (پایین صفحه)",
             callback_data: "switch_to_reply",
-            ...(isAiogram ? { style: "primary" } : {}),
+            style: "primary",
           },
         ]);
       }
@@ -1245,71 +1488,71 @@ export class StoreBotManager {
         allButtons.push({
           text: `${cat.icon || "💎"} ${cat.title}`,
           callback_data: `cat_${cat.id}`,
-          ...(isAiogram ? { style } : {}),
+          style,
         });
       }
     } else {
       allButtons.push({
         text: `${theme.self} ${labels.buySelf}`,
         callback_data: "cat_self",
-        ...(isAiogram ? { style: "success" } : {}),
+        style: "success",
       });
       allButtons.push({
         text: `${theme.tabchi} ${labels.buyTabchi}`,
         callback_data: "cat_tabchi",
-        ...(isAiogram ? { style: "primary" } : {}),
+        style: "primary",
       });
       allButtons.push({
         text: `${theme.combo} ${labels.buyCombo}`,
         callback_data: "cat_combo",
-        ...(isAiogram ? { style: "danger" } : {}),
+        style: "danger",
       });
     }
 
     allButtons.push({
       text: `${theme.catalog} ${labels.plansCatalog}`,
       callback_data: "cat_all",
-      ...(isAiogram ? { style: "primary" } : {}),
+      style: "primary",
     });
     allButtons.push({
       text: `${theme.account} ${labels.myAccount}`,
       callback_data: "menu_account",
-      ...(isAiogram ? { style: "primary" } : {}),
+      style: "success",
     });
     allButtons.push({
       text: `${theme.orders} ${labels.myOrders}`,
       callback_data: "menu_orders",
-      ...(isAiogram ? { style: "success" } : {}),
+      style: "primary",
     });
     allButtons.push({
       text: "🎛 مدیریت سلف و تبچی",
       callback_data: "cust_manage_panel",
-      ...(isAiogram ? { style: "success" } : {}),
+      style: "success",
     });
     allButtons.push({
       text: "🤖 ربات اختصاصی من (BotFather)",
       callback_data: "cust_setup_bot",
-      ...(isAiogram ? { style: "primary" } : {}),
+      style: "primary",
     });
     allButtons.push({
       text: "🩺 چکر سلامت شماره (SpamBot)",
       callback_data: "cust_spambot_check",
-      ...(isAiogram ? { style: "warning" } : {}),
+      style: "danger",
     });
     allButtons.push({
       text: `${theme.discount} ${labels.applyDiscount}`,
       callback_data: "menu_discount",
-      ...(isAiogram ? { style: "success" } : {}),
+      style: "success",
     });
     allButtons.push({
       text: `${theme.support} ${labels.support}`,
       callback_data: "menu_support",
-      ...(isAiogram ? { style: "danger" } : {}),
+      style: "danger",
     });
     allButtons.push({
       text: `${theme.guide} ${labels.helpGuide}`,
       callback_data: "menu_guide",
-      ...(isAiogram ? { style: "primary" } : {}),
+      style: "primary",
     });
 
     // Chunk buttons into rows according to column setting (1, 2, or 3)
@@ -1323,7 +1566,7 @@ export class StoreBotManager {
         {
           text: "👑 ورود به پنل مدیریت ربات (/admin)",
           callback_data: "admin_menu",
-          ...(isAiogram ? { style: "danger" } : {}),
+          style: "danger",
         },
       ]);
     }
@@ -1333,7 +1576,7 @@ export class StoreBotManager {
         {
           text: labels.switchKeyboard || "⌨️ تغییر به کیبورد باتن (پایین صفحه)",
           callback_data: "switch_to_reply",
-          ...(isAiogram ? { style: "primary" } : {}),
+          style: "primary",
         },
       ]);
     }
@@ -2391,30 +2634,35 @@ export class StoreBotManager {
   }
 
   public async sendMainMenu(chatId: number | string) {
-    const welcome = (this.data.settings.messages as any)?.welcomeHeader || this.data.settings.welcomeText;
+    const welcome =
+      this.data.settings.messages?.welcome ||
+      (this.data.settings.messages as any)?.welcomeHeader ||
+      this.data.settings.welcomeText;
     const customer = this.data.customers.find((c) => String(c.userId) === String(chatId));
-    let mode = this.data.settings.keyboardMode;
+    let mode = this.data.settings.keyboardMode || "hybrid";
 
-    if (this.data.settings.allowCustomerKeyboardSwitch && customer?.preferredKeyboardMode) {
-      mode = customer.preferredKeyboardMode;
+    if (this.data.settings.allowCustomerKeyboardSwitch && customer?.preferredKeyboardMode === "reply") {
+      mode = "reply";
     }
 
-    let replyMarkup: any;
     if (mode === "reply") {
-      replyMarkup = this.getReplyKeyboardMarkup(chatId);
-    } else if (mode === "hybrid") {
-      // In hybrid mode, send reply keyboard to keep bottom bar active, AND inline buttons in text
-      replyMarkup = this.getInlineKeyboardMenu(chatId);
-      await this.sendMessage(chatId, "👇 منوی سریع کیبورد فعال شد:", {
+      await this.sendMessage(chatId, welcome, {
         reply_markup: this.getReplyKeyboardMarkup(chatId),
-      }).catch(() => {});
-    } else {
-      replyMarkup = this.getInlineKeyboardMenu(chatId);
+        parse_mode: "HTML",
+      });
+      return;
     }
+
+    // Always send/refresh the colored ReplyKeyboardMarkup (bottom KeyboardButtons with Aiogram styles)
+    // AND send the colored InlineKeyboardMarkup so both keyboards are colored!
+    await this.sendMessage(chatId, "⌨️ <b>منوی دکمه‌های رنگی ربات (Aiogram) بروزرسانی و فعال شد:</b>", {
+      reply_markup: this.getReplyKeyboardMarkup(chatId),
+      parse_mode: "HTML",
+    }).catch(() => {});
 
     await this.sendMessage(chatId, welcome, {
-      reply_markup: replyMarkup,
-      parse_mode: "Markdown",
+      reply_markup: this.getInlineKeyboardMenu(chatId),
+      parse_mode: "HTML",
     });
   }
 
@@ -4561,8 +4809,14 @@ export class StoreBotManager {
   // =============================================================
 
   public updateCustomButtons(buttons: StoreCustomButton[]): StoreCustomButton[] {
-    this.data.settings.customButtons = Array.isArray(buttons) ? buttons : [];
+    this.data.settings.customButtons = Array.isArray(buttons)
+      ? buttons.map((b) => ({
+          ...b,
+          style: this.normalizeTelegramButtonStyle(b.style, "primary"),
+        }))
+      : [];
     this.saveData();
+    this.broadcastUpdatedKeyboardToActiveUsers().catch(() => {});
     return this.data.settings.customButtons;
   }
 
@@ -4570,10 +4824,12 @@ export class StoreBotManager {
     const defaults = defaultStoreData();
     this.data.settings.customButtons = getDefaultStoreCustomButtons();
     this.data.settings.buttonLabels = { ...defaults.settings.buttonLabels };
-    this.data.settings.buttonTheme = defaults.settings.buttonTheme;
+    this.data.settings.buttonTheme = "aiogram_colored";
+    this.data.settings.keyboardMode = "hybrid";
     this.data.settings.keyboardColumns = 2;
     this.data.settings.replyKeyboardColumns = 2;
     this.saveData();
+    this.broadcastUpdatedKeyboardToActiveUsers().catch(() => {});
     return this.data.settings.customButtons;
   }
 

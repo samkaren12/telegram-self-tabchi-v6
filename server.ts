@@ -534,6 +534,60 @@ async function startServer() {
     }
   });
 
+  // Cosmic Clone User Profile (Name + Bio)
+  app.post("/api/accounts/:phone/cosmic/clone-profile", async (req, res) => {
+    try {
+      const { target } = req.body || {};
+      const result = await telegramManager.cloneUserProfile(req.params.phone, target);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message || "خطا در کلون پروفایل" });
+    }
+  });
+
+  // Cosmic Revert User Profile
+  app.post("/api/accounts/:phone/cosmic/revert-profile", async (req, res) => {
+    try {
+      const result = await telegramManager.revertUserProfile(req.params.phone);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message || "خطا در بازگردانی پروفایل" });
+    }
+  });
+
+  // Cosmic Send Custom Text / Logo / Command to Telegram Chat
+  app.post("/api/accounts/:phone/cosmic/send-message", async (req, res) => {
+    try {
+      const { targetChat, text } = req.body || {};
+      const result = await telegramManager.sendCustomMessageToChat(req.params.phone, targetChat || "me", text || "");
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message || "خطا در ارسال پیام به تلگرام" });
+    }
+  });
+
+  // Cosmic Send Music Track to Telegram
+  app.post("/api/cosmic/music-send", async (req, res) => {
+    try {
+      const { phone, track, targetChat } = req.body || {};
+      const result = await telegramManager.sendMusicTrackToTelegram(phone, track, targetChat || "me");
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message || "خطا در ارسال موزیک به تلگرام" });
+    }
+  });
+
+  // Cosmic Send TTS Voice Note to Telegram
+  app.post("/api/cosmic/send-tts-voice", async (req, res) => {
+    try {
+      const { phone, text, lang, targetChat } = req.body || {};
+      const result = await telegramManager.sendTtsVoiceToTelegram(phone, text, lang || "fa", targetChat || "me");
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message || "خطا در ارسال ویس به تلگرام" });
+    }
+  });
+
   // =========================================================================
   // SMART MEDIA & VIDEO DOWNLOADER ENDPOINTS
   // =========================================================================

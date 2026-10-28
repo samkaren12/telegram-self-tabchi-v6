@@ -56,20 +56,6 @@ const AIOGRAM_STYLES = [
     bg: "bg-blue-600/90 text-white border-blue-400/60 shadow-blue-500/20",
     indicator: "🔵",
   },
-  {
-    id: "warning",
-    name: "Warning (زرد طلایی)",
-    shortName: "زرد (Warning)",
-    bg: "bg-amber-600/90 text-white border-amber-400/60 shadow-amber-500/20",
-    indicator: "🟡",
-  },
-  {
-    id: "default",
-    name: "Default (خاکستری استاندارد)",
-    shortName: "پیش‌فرض",
-    bg: "bg-slate-700 text-slate-100 border-slate-600",
-    indicator: "⚪",
-  },
 ];
 
 const ACTION_LABELS: Record<string, string> = {
@@ -190,7 +176,20 @@ export function ButtonCustomizer({
     setBtnModalOpen(true);
   };
 
-  const handleSaveButton = (e: React.FormEvent) => {
+  const persistButtonsImmediately = async (nextButtons: StoreCustomButton[], toastMsg?: string) => {
+    setCustomButtons(nextButtons);
+    try {
+      await fetch("/api/store-bot/custom-buttons", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ buttons: nextButtons }),
+      });
+      if (toastMsg) showToast("success", toastMsg);
+      onRefresh();
+    } catch (_) {}
+  };
+
+  const handleSaveButton = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!btnText.trim()) {
       showToast("error", "متن دکمه را وارد فرمایید.");
@@ -203,22 +202,24 @@ export function ButtonCustomizer({
       action: btnAction,
       targetCategoryId: btnAction === "buy_category" ? btnTargetCat : undefined,
       url: btnAction === "custom_url" ? btnTargetUrl.trim() : undefined,
-      style: btnStyle,
+      style: btnStyle === "success" || btnStyle === "danger" || btnStyle === "primary" ? btnStyle : "primary",
       customEmojiId: btnCustomEmojiId.trim() || undefined,
       rowIndex: Number(btnRow) || 0,
       columnIndex: Number(btnCol) || 0,
       isActive: editingBtn ? editingBtn.isActive !== false : true,
     };
 
-    if (editingBtn) {
-      setCustomButtons(customButtons.map((b) => (b.id === editingBtn.id ? newBtn : b)));
-      showToast("success", "دکمه ویرایش شد. برای اعمال در ربات روی «ذخیره تغییرات» بزنید.");
-    } else {
-      setCustomButtons([...customButtons, newBtn]);
-      showToast("success", "دکمه جدید اضافه شد. برای اعمال در ربات روی «ذخیره تغییرات» بزنید.");
-    }
+    const nextList = editingBtn
+      ? customButtons.map((b) => (b.id === editingBtn.id ? newBtn : b))
+      : [...customButtons, newBtn];
 
     setBtnModalOpen(false);
+    await persistButtonsImmediately(
+      nextList,
+      editingBtn
+        ? "دکمه ویرایش شد و به صورت زنده در کیبورد ربات اعمال گردید."
+        : "دکمه جدید اضافه شد و به صورت زنده در کیبورد ربات اعمال گردید."
+    );
   };
 
   const handleDeleteButton = async (id: string) => {
@@ -231,19 +232,18 @@ export function ButtonCustomizer({
     });
     if (!ok) return;
 
-    setCustomButtons(customButtons.filter((b) => b.id !== id));
-    showToast("success", "دکمه از لیست حذف شد. برای اعمال نهایی ذخیره را بزنید.");
+    const nextList = customButtons.filter((b) => b.id !== id);
+    await persistButtonsImmediately(nextList, "دکمه حذف شد و منوی ربات بروزرسانی گردید.");
   };
 
-  const handleToggleActive = (id: string) => {
-    setCustomButtons(
-      customButtons.map((b) =>
-        b.id === id ? { ...b, isActive: b.isActive === false ? true : false } : b
-      )
+  const handleToggleActive = async (id: string) => {
+    const nextList = customButtons.map((b) =>
+      b.id === id ? { ...b, isActive: b.isActive === false ? true : false } : b
     );
+    await persistButtonsImmediately(nextList);
   };
 
-  const handleMoveButton = (index: number, direction: "up" | "down") => {
+  const handleMoveButton = async (index: number, direction: "up" | "down") => {
     const sorted = [...customButtons].sort((a, b) => {
       if ((a.rowIndex || 0) !== (b.rowIndex || 0)) return (a.rowIndex || 0) - (b.rowIndex || 0);
       return (a.columnIndex || 0) - (b.columnIndex || 0);
@@ -273,19 +273,19 @@ export function ButtonCustomizer({
       });
     }
 
-    setCustomButtons([...sorted]);
+    await persistButtonsImmediately([...sorted]);
   };
 
-  const handleQuickCycleColor = (id: string) => {
-    const order: Array<StoreCustomButton["style"]> = ["success", "danger", "primary", "warning", "default"];
-    setCustomButtons(
-      customButtons.map((b) => {
-        if (b.id !== id) return b;
-        const idx = order.indexOf(b.style || "primary");
-        const nextStyle = order[(idx + 1) % order.length];
-        return { ...b, style: nextStyle };
-      })
-    );
+  const handleQuickCycleColor = async (id: string) => {
+    const order: Array<StoreCustomButton["style"]> = ["success", "danger", "primary"];
+    const nextList = customButtons.map((b) => {
+      if (b.id !== id) return b;
+      const cur = b.style === "success" || b.style === "danger" || b.style === "primary" ? b.style : "primary";
+      const idx = order.indexOf(cur);
+      const nextStyle = order[(idx + 1) % order.length];
+      return { ...b, style: nextStyle };
+    });
+    await persistButtonsImmediately(nextList, "رنگ دکمه در کیبورد ربات بروزرسانی شد.");
   };
 
   const handleResetToDefaults = async () => {

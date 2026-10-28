@@ -46,10 +46,14 @@ import {
   Database,
   Headphones,
   RefreshCw,
+  ChevronRight,
+  ChevronLeft,
+  LayoutGrid,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
-import { transformFont } from "../utils/fontStyler";
+import { transformFont, GENERAL_FONT_OPTIONS } from "../utils/fontStyler";
 import { formatTehranTime } from "../utils/tehranTime";
 
 interface CosmicArsenalModuleProps {
@@ -85,6 +89,9 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [isTabsWrapped, setIsTabsWrapped] = useState<boolean>(false);
+  const tabsScrollRef = useRef<HTMLDivElement | null>(null);
+  const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // 0. Samkaren Pro New State Features
   // Profile Stalker (فضول پروفایل)
@@ -112,9 +119,17 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
   const [ttsText, setTtsText] = useState<string>("");
   const [ttsRate, setTtsRate] = useState<number>(1);
   const [ttsPitch, setTtsPitch] = useState<number>(1);
+  const [ttsLang, setTtsLang] = useState<string>("fa");
+  const [ttsTargetChat, setTtsTargetChat] = useState<string>("me");
+  const [ttsSendingTg, setTtsSendingTg] = useState<boolean>(false);
   const [ttsSpeaking, setTtsSpeaking] = useState<boolean>(false);
   const [sttListening, setSttListening] = useState<boolean>(false);
   const [sttTranscript, setSttTranscript] = useState<string>("");
+  const [sendingMusicId, setSendingMusicId] = useState<number | null>(null);
+  const [musicTargetChat, setMusicTargetChat] = useState<string>("me");
+  const [cloningProfile, setCloningProfile] = useState<boolean>(false);
+  const [revertingProfile, setRevertingProfile] = useState<boolean>(false);
+  const [executingCmd, setExecutingCmd] = useState<string | null>(null);
 
   // 1. Chat Action Studio State
   const [currentAction, setCurrentAction] = useState<
@@ -159,6 +174,7 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
   const [autoMuteSeconds, setAutoMuteSeconds] = useState<number>(60);
 
   // 4. Friend & Enemy System
+  const [friendEnemyActive, setFriendEnemyActive] = useState<boolean>(true);
   const [friendReplyMode, setFriendReplyMode] = useState<"loving" | "vip" | "silent">("loving");
   const [enemyReplyMode, setEnemyReplyMode] = useState<"insult" | "block" | "mute">("insult");
   const [friendsList, setFriendsList] = useState<string>("@friend1\n@best_buddy");
@@ -434,6 +450,7 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
         }
       }
       if (cosmic.friend_enemy) {
+        if (cosmic.friend_enemy.active !== undefined) setFriendEnemyActive(Boolean(cosmic.friend_enemy.active));
         if (cosmic.friend_enemy.friend_reply_mode) setFriendReplyMode(cosmic.friend_enemy.friend_reply_mode);
         if (cosmic.friend_enemy.enemy_reply_mode) setEnemyReplyMode(cosmic.friend_enemy.enemy_reply_mode);
         if (Array.isArray(cosmic.friend_enemy.friends)) {
@@ -524,9 +541,9 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
           stars_price: starsPrice,
         },
         friend_enemy: {
-          active: true,
-          friends: friendsList.split("\n").filter(Boolean),
-          enemies: enemiesList.split("\n").filter(Boolean),
+          active: friendEnemyActive,
+          friends: friendsList.split("\n").map((s) => s.trim()).filter(Boolean),
+          enemies: enemiesList.split("\n").map((s) => s.trim()).filter(Boolean),
           friend_reply_mode: friendReplyMode,
           enemy_reply_mode: enemyReplyMode,
         },
@@ -817,6 +834,186 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
     }
   };
 
+  // Send Custom Message / Execute Self-Bot Command in Telegram
+  const handleSendTextToTelegram = async (text: string, targetChat = "me") => {
+    if (!account?.phone) {
+      showToast(isRtl ? "ابتدا یک اکانت تلگرام متصل انتخاب کنید." : "Select an account first");
+      return;
+    }
+    if (!text.trim()) return;
+    setExecutingCmd(text);
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/cosmic/send-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetChat, text }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message || (isRtl ? "با موفقیت در تلگرام اجرا/ارسال شد ✅" : "Sent to Telegram ✅"));
+      } else {
+        showToast(data.message || (isRtl ? "خطا در ارسال به تلگرام" : "Failed to send"));
+      }
+    } catch (_) {
+      showToast(isRtl ? "خطای ارتباط با سرور تلگرام" : "Network error");
+    } finally {
+      setExecutingCmd(null);
+    }
+  };
+
+  // Clone Target User Profile
+  const handleCloneProfile = async (targetQuery?: string) => {
+    if (!account?.phone) return;
+    const q = (targetQuery || cloneTarget || entityQuery).trim();
+    if (!q) {
+      showToast(isRtl ? "یوزرنیم یا آیدی هدف جهت کلون پروفایل را وارد کنید." : "Enter target username or ID");
+      return;
+    }
+    setCloningProfile(true);
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/cosmic/clone-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetQuery: q }),
+      });
+      const data = await res.json();
+      showToast(data.message || (data.success ? "پروفایل با موفقیت کلون شد 👥" : "خطا در کلون پروفایل"));
+    } catch (_) {
+      showToast(isRtl ? "خطا در کلون پروفایل" : "Clone failed");
+    } finally {
+      setCloningProfile(false);
+    }
+  };
+
+  // Revert Cloned Profile to Original
+  const handleRevertProfile = async () => {
+    if (!account?.phone) return;
+    setRevertingProfile(true);
+    try {
+      const res = await fetch(`/api/accounts/${encodeURIComponent(account.phone)}/cosmic/revert-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      showToast(data.message || (data.success ? "پروفایل اصلی شما بازگردانی شد ↩️" : "خطا در بازگردانی پروفایل"));
+    } catch (_) {
+      showToast(isRtl ? "خطا در بازگردانی پروفایل" : "Revert failed");
+    } finally {
+      setRevertingProfile(false);
+    }
+  };
+
+  // Send Music Track to Telegram
+  const handleSendMusicToTelegram = async (track: any) => {
+    if (!account?.phone) {
+      showToast(isRtl ? "اکانت تلگرام متصل نیست" : "No account connected");
+      return;
+    }
+    setSendingMusicId(track.id);
+    try {
+      const res = await fetch("/api/cosmic/music-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: account.phone,
+          track,
+          targetChat: musicTargetChat || "me",
+        }),
+      });
+      const data = await res.json();
+      showToast(data.message || (data.success ? "آهنگ به تلگرام ارسال شد 🎵" : "خطا در ارسال آهنگ"));
+    } catch (_) {
+      showToast(isRtl ? "خطا در ارسال موزیک به تلگرام" : "Music send error");
+    } finally {
+      setSendingMusicId(null);
+    }
+  };
+
+  // Send TTS Voice Note directly to Telegram
+  const handleSendVoiceToTelegram = async () => {
+    if (!account?.phone) {
+      showToast(isRtl ? "اکانت تلگرام متصل نیست" : "No account connected");
+      return;
+    }
+    if (!ttsText.trim()) {
+      showToast(isRtl ? "ابتدا متن ویس را وارد کنید" : "Enter text first");
+      return;
+    }
+    setTtsSendingTg(true);
+    try {
+      const res = await fetch("/api/cosmic/send-tts-voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: account.phone,
+          text: ttsText.trim(),
+          lang: ttsLang,
+          targetChat: ttsTargetChat || "me",
+        }),
+      });
+      const data = await res.json();
+      showToast(data.message || (data.success ? "ویس صوتی به تلگرام ارسال شد 🎙️" : "خطا در ارسال ویس"));
+    } catch (_) {
+      showToast(isRtl ? "خطا در ارسال ویس به تلگرام" : "Failed to send voice");
+    } finally {
+      setTtsSendingTg(false);
+    }
+  };
+
+  // Subtabs definition for pagination & flipping ("ورق زدن")
+  const cosmicSubtabs = [
+    { id: "actions", label: isRtl ? "حالت‌های اکشن 🎭" : "Chat Actions", icon: Send, color: "text-amber-400" },
+    { id: "stalker", label: isRtl ? "فضول‌گیر پروفایل 🕵️‍♂️" : "Profile Stalker", icon: Eye, color: "text-cyan-400" },
+    { id: "intelligence", label: isRtl ? "استخراج آیدی و اطلاعات 🔍" : "ID Intelligence", icon: Search, color: "text-violet-400" },
+    { id: "music", label: isRtl ? "سرچ آهنگ 🎵" : "Music Search", icon: Music, color: "text-rose-400" },
+    { id: "voice", label: isRtl ? "متن به ویس و صوتی 🎙️" : "TTS & Voice", icon: Mic, color: "text-emerald-400" },
+    { id: "clocks", label: isRtl ? "ساعت، اسم و بیو چرخشی ⏰" : "Clocks & Rotator", icon: Clock, color: "text-cyan-400" },
+    { id: "shields", label: isRtl ? "قفل پیوی و نگهبان 🛡️" : "PV Shields & Guard", icon: Shield, color: "text-rose-400" },
+    { id: "friends", label: isRtl ? "دوست و دشمن ⚔️" : "Friend & Enemy", icon: Users, color: "text-emerald-400" },
+    { id: "stylist", label: isRtl ? "استایل متن و لوگو 🎨" : "Stylist & Logo", icon: Type, color: "text-purple-400" },
+    { id: "translator", label: isRtl ? "مترجم چندزبانه 🌐" : "Translator", icon: Globe, color: "text-emerald-400" },
+    { id: "downloader", label: isRtl ? "دانلودر و رسانه 📥" : "Downloader & Media", icon: Download, color: "text-blue-400" },
+    { id: "fun", label: isRtl ? "سرگرمی، تقلب و فال 🎲" : "Fun & Cheats", icon: Dices, color: "text-teal-400" },
+    { id: "cheatsheet", label: isRtl ? "دستورات کلیکی ⚡" : "Quick Console", icon: Zap, color: "text-amber-300" },
+  ] as const;
+
+  const activeTabIndex = Math.max(
+    0,
+    cosmicSubtabs.findIndex((t) => t.id === activeTab)
+  );
+
+  const selectAndScrollTab = (tabId: typeof activeTab) => {
+    setActiveTab(tabId);
+    setTimeout(() => {
+      const btn = tabButtonRefs.current[tabId];
+      if (btn) {
+        btn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      }
+    }, 30);
+  };
+
+  const handleFlipTab = (direction: "prev" | "next") => {
+    const total = cosmicSubtabs.length;
+    const nextIdx =
+      direction === "next"
+        ? (activeTabIndex + 1) % total
+        : (activeTabIndex - 1 + total) % total;
+    selectAndScrollTab(cosmicSubtabs[nextIdx].id);
+  };
+
+  // Auto-load stalker visitors & deep stats when entering those tabs
+  useEffect(() => {
+    if (activeTab === "stalker" && stalkerVisitors.length === 0 && !stalkerLoading && account?.phone) {
+      handleFetchVisitors();
+    }
+    if (activeTab === "intelligence" && !accountDeepStats && !loadingDeepStats && account?.phone) {
+      handleFetchDeepAccountStats();
+    }
+    if (activeTab === "fun" && proxies.length === 0 && !loadingProxies) {
+      handleFetchProxies();
+    }
+  }, [activeTab, account?.phone]);
+
   return (
     <div className="space-y-6" dir={isRtl ? "rtl" : "ltr"}>
       {/* Toast Feedback */}
@@ -850,7 +1047,7 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               </div>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
                 {isRtl
-                  ? "مجموعه فوق‌العاده امکانات سلف سام‌کارن پرو: فضول‌گیر پروفایل، استخراج هوشمند آیدی، سرچ آهنگ زنده، متن به ویس، ساعت چند کشوره، بیو و اسم چرخشی، قفل‌های پیوی، دوست/دشمن و دستورات کلیکی."
+                  ? "مجموعه فوق‌العاده امکانات سلف سام‌کارن پرو: فضول‌گیر پروفایل، استخراج هوشمند آیدی، سرچ و ارسال آهنگ زنده، متن به ویس تلگرام، ساعت چند کشوره، بیو و اسم چرخشی، قفل‌های پیوی، دوست/دشمن و دستورات کلیکی."
                   : "Complete suite of Samkaren Pro & Cosmic self features: profile stalker, ID & entity resolver, live music search, text-to-speech, multi-clocks, rotating bio/name, PV shields, and cheat console."}
               </p>
             </div>
@@ -868,40 +1065,112 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
         </div>
       </div>
 
-      {/* Internal Subtabs Navigation */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none border-b border-slate-800">
-        {[
-          { id: "actions", label: isRtl ? "حالت‌های اکشن 🎭" : "Chat Actions", icon: Send, color: "text-amber-400" },
-          { id: "stalker", label: isRtl ? "فضول‌گیر پروفایل 🕵️‍♂️" : "Profile Stalker", icon: Eye, color: "text-cyan-400" },
-          { id: "intelligence", label: isRtl ? "استخراج آیدی و اطلاعات 🔍" : "ID Intelligence", icon: Search, color: "text-violet-400" },
-          { id: "music", label: isRtl ? "سرچ آهنگ 🎵" : "Music Search", icon: Music, color: "text-rose-400" },
-          { id: "voice", label: isRtl ? "متن به ویس و صوتی 🎙️" : "TTS & Voice", icon: Mic, color: "text-emerald-400" },
-          { id: "clocks", label: isRtl ? "ساعت و بیو چرخشی ⏰" : "Clocks & Rotator", icon: Clock, color: "text-cyan-400" },
-          { id: "shields", label: isRtl ? "قفل پیوی و نگهبان 🛡️" : "PV Shields & Guard", icon: Shield, color: "text-rose-400" },
-          { id: "friends", label: isRtl ? "دوست و دشمن ⚔️" : "Friend & Enemy", icon: Users, color: "text-emerald-400" },
-          { id: "stylist", label: isRtl ? "استایل متن و لوگو 🎨" : "Stylist & Logo", icon: Type, color: "text-purple-400" },
-          { id: "translator", label: isRtl ? "مترجم چندزبانه 🌐" : "Translator", icon: Globe, color: "text-emerald-400" },
-          { id: "downloader", label: isRtl ? "دانلودر و رسانه 📥" : "Downloader & Media", icon: Download, color: "text-blue-400" },
-          { id: "fun", label: isRtl ? "سرگرمی، تقلب و فال 🎲" : "Fun & Cheats", icon: Dices, color: "text-teal-400" },
-          { id: "cheatsheet", label: isRtl ? "دستورات کلیکی ⚡" : "Quick Console", icon: Zap, color: "text-amber-300" },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
+      {/* Interactive Paginated / Flip-ready Subtabs Bar (ورق زدن امکانات سلف ساز) */}
+      <div className="glass-panel rounded-3xl p-3 sm:p-4 border border-slate-800/90 space-y-3 bg-slate-950/80 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-xs font-black">
+              {activeTabIndex + 1} / {cosmicSubtabs.length}
+            </span>
+            <span className="text-xs font-bold text-slate-200">
+              {isRtl ? "ورق زدن بین ۱۳ بخش تخصصی سام‌کارن پرو:" : "Flip through 13 Samkaren Pro Modules:"}
+            </span>
+            <span className="text-xs text-amber-400 font-bold hidden sm:inline">
+              ({cosmicSubtabs[activeTabIndex]?.label})
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 cursor-pointer ${
-                isActive
-                  ? "bg-slate-800 text-white shadow-lg border border-slate-700 backdrop-blur-md"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-900"
+              type="button"
+              onClick={() => setIsTabsWrapped((prev) => !prev)}
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                isTabsWrapped
+                  ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
+                  : "bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300"
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 ${tab.color}`} />
-              <span>{tab.label}</span>
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>
+                {isTabsWrapped
+                  ? isRtl
+                    ? "حالت اسلایدی (تک‌ردیفه)"
+                    : "Slider Mode"
+                  : isRtl
+                  ? "نمایش یکجای همه ۱۳ بخش"
+                  : "Show All Grid"}
+              </span>
             </button>
-          );
-        })}
+
+            <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleFlipTab("prev")}
+                className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-amber-500 hover:text-slate-950 text-slate-200 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                title={isRtl ? "بخش قبلی" : "Previous Feature"}
+              >
+                <ChevronRight className="w-4 h-4" />
+                <span className="hidden sm:inline">{isRtl ? "قبلی" : "Prev"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFlipTab("next")}
+                className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 text-xs font-bold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                title={isRtl ? "ورق زدن به بخش بعدی" : "Next Feature"}
+              >
+                <span className="hidden sm:inline">{isRtl ? "ورق بزن (بعدی)" : "Next"}</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Scrollable / Flipping Tabs List */}
+        <div
+          ref={tabsScrollRef}
+          onWheel={(e) => {
+            if (!isTabsWrapped && tabsScrollRef.current && Math.abs(e.deltaY) > 0) {
+              tabsScrollRef.current.scrollLeft += isRtl ? -e.deltaY : e.deltaY;
+            }
+          }}
+          className={
+            isTabsWrapped
+              ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 pt-1"
+              : "flex items-center gap-2 overflow-x-auto pb-2 pt-1 scroll-smooth"
+          }
+        >
+          {cosmicSubtabs.map((tab, idx) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                ref={(el) => {
+                  tabButtonRefs.current[tab.id] = el;
+                }}
+                type="button"
+                onClick={() => selectAndScrollTab(tab.id)}
+                className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all active:scale-95 cursor-pointer flex-shrink-0 ${
+                  isActive
+                    ? "bg-gradient-to-r from-amber-500/25 to-orange-500/20 text-white shadow-lg border border-amber-500/60 ring-1 ring-amber-400/30"
+                    : "bg-slate-900/90 text-slate-400 hover:text-slate-100 hover:bg-slate-800 border border-slate-800/80"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Icon className={`w-3.5 h-3.5 ${tab.color}`} />
+                  <span>{tab.label}</span>
+                </div>
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-md ${
+                    isActive ? "bg-amber-500 text-slate-950 font-black" : "bg-slate-950 text-slate-500"
+                  }`}
+                >
+                  {idx + 1}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* SUBTAB 1: CHAT ACTION STUDIO */}
@@ -947,29 +1216,64 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
             })}
           </div>
 
-          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex-1 space-y-1">
-              <label className="text-xs font-bold text-slate-300">
-                چت هدف جهت ارسال اکشن (آیدی کاربری، یوزرنیم، یا me برای پیام‌های ذخیره‌شده):
-              </label>
-              <input
-                type="text"
-                value={actionTargetChat}
-                onChange={(e) => setActionTargetChat(e.target.value)}
-                placeholder="e.g. @username or me or chat_id"
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500 font-mono"
-              />
+          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex-1 space-y-1">
+                <label className="text-xs font-bold text-slate-300">
+                  چت هدف جهت ارسال اکشن (آیدی کاربری، یوزرنیم، یا me برای پیام‌های ذخیره‌شده):
+                </label>
+                <input
+                  type="text"
+                  value={actionTargetChat}
+                  onChange={(e) => setActionTargetChat(e.target.value)}
+                  placeholder="e.g. @username or me or chat_id"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto pt-2 sm:pt-4">
+                <button
+                  type="button"
+                  onClick={handleTriggerAction}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>ارسال تست آنی اکشن</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 self-end sm:self-auto pt-2 sm:pt-4">
-              <button
-                type="button"
-                onClick={handleTriggerAction}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                <span>ارسال تست آنی اکشن</span>
-              </button>
+            <div className="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <span>تکرار دائمی و خودکار اکشن در پس‌زمینه و هنگام دریافت پیام جدید</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${actionActive ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-slate-800 text-slate-400"}`}>
+                    {actionActive ? "فعال (LIVE)" : "غیرفعال"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  در صورت روشن بودن، سلف هر ۵ ثانیه در چت هدف و همچنین به محض پیام دادن هر کاربر در پیوی، حالت اکشن انتخابی شما را نمایش می‌دهد.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={actionActive}
+                    onChange={(e) => setActionActive(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSaveCosmicConfig}
+                  disabled={saving}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs border border-amber-500/30 cursor-pointer"
+                >
+                  ذخیره حالت دائمی
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1143,15 +1447,14 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          const warningMsg = `⛔ اخطار: ورود شما به پیوی ثبت گردید. لطفاً از ارسال پیام‌های غیرکاری خودداری نمایید.`;
-                          navigator.clipboard.writeText(warningMsg);
-                          showToast(isRtl ? "متن اخطار کپی شد!" : "Warning text copied");
+                          const warningMsg = `⛔ اخطار سیستم امنیتی سلف: ورود و بازدید شما در پیوی ثبت گردید. لطفاً تنها در صورت داشتن کار ضروری پیام دهید.`;
+                          handleSendTextToTelegram(warningMsg, vis.username || vis.id);
                         }}
-                        className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-[11px] text-rose-300 flex items-center gap-1 transition-colors"
-                        title={isRtl ? "کپی اخطار پیوی" : "Copy warning"}
+                        className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-[11px] text-rose-300 flex items-center gap-1 transition-colors cursor-pointer"
+                        title={isRtl ? "ارسال اخطار مستقیم به پیوی کاربر در تلگرام" : "Send warning in Telegram"}
                       >
                         <ShieldAlert className="w-3 h-3" />
-                        <span>{isRtl ? "اخطار" : "Warn"}</span>
+                        <span>{isRtl ? "ارسال اخطار به پیوی ⚡" : "Send Warn"}</span>
                       </button>
                     </div>
                   </div>
@@ -1308,6 +1611,33 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                       <span className="text-xs text-slate-500">استاندارد</span>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Real Profile Clone & Revert Actions */}
+              <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] text-slate-400">
+                  {isRtl ? "عملیات مستقیم روی این کاربر در تلگرام:" : "Direct Telegram operations:"}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={cloningProfile}
+                    onClick={() => handleCloneProfile(entityResult.username || entityResult.numericId)}
+                    className="px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{cloningProfile ? "درحال کلون..." : "کلون آنی نام و بیو روی اکانت من 👥"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={revertingProfile}
+                    onClick={handleRevertProfile}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{revertingProfile ? "درحال بازگردانی..." : "بازگردانی پروفایل اصلی من ↩️"}</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1498,6 +1828,17 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
 
                         <button
                           type="button"
+                          disabled={sendingMusicId === t.id}
+                          onClick={() => handleSendMusicToTelegram(t)}
+                          className="px-2.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-md"
+                          title="ارسال فایل صوتی آهنگ به تلگرام"
+                        >
+                          <Send className={`w-3.5 h-3.5 ${sendingMusicId === t.id ? "animate-spin" : ""}`} />
+                          <span>{sendingMusicId === t.id ? "..." : isRtl ? "ارسال به تلگرام" : "Send"}</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => {
                             const info = `🎵 آهنگ: ${t.title}\n🎤 خواننده: ${t.artist}\n💿 آلبوم: ${t.album || "-"}`;
                             navigator.clipboard.writeText(info);
@@ -1598,32 +1939,57 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">زبان گوینده ویس تلگرام:</label>
+                  <select
+                    value={ttsLang}
+                    onChange={(e) => setTtsLang(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white"
+                  >
+                    <option value="fa">🇮🇷 فارسی (Persian)</option>
+                    <option value="en">🇬🇧 انگلیسی (English)</option>
+                    <option value="ar">🇸🇦 عربی (Arabic)</option>
+                    <option value="tr">🇹🇷 ترکی (Turkish)</option>
+                    <option value="ru">🇷🇺 روسی (Russian)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">چت هدف در تلگرام (me یا @user):</label>
+                  <input
+                    type="text"
+                    value={ttsTargetChat}
+                    onChange={(e) => setTtsTargetChat(e.target.value)}
+                    placeholder="me یا @username"
+                    dir="ltr"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => handleSpeakText()}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg ${
+                  className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow-lg ${
                     ttsSpeaking
                       ? "bg-rose-500 text-white animate-pulse shadow-rose-500/20"
-                      : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20"
+                      : "bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700"
                   }`}
                 >
-                  <Volume2 className="w-4 h-4" />
-                  <span>{ttsSpeaking ? (isRtl ? "درحال پخش صدا..." : "Speaking...") : (isRtl ? "پخش زنده ویس صوتی" : "Speak Voice")}</span>
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  <span>{ttsSpeaking ? (isRtl ? "درحال پخش..." : "Speaking...") : (isRtl ? "پخش در مرورگر" : "Preview Voice")}</span>
                 </button>
 
-                {ttsSpeaking && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-                      setTtsSpeaking(false);
-                    }}
-                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
-                  >
-                    {isRtl ? "توقف" : "Stop"}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={ttsSendingTg}
+                  onClick={handleSendVoiceToTelegram}
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
+                >
+                  <Send className={`w-4 h-4 ${ttsSendingTg ? "animate-spin" : ""}`} />
+                  <span>{ttsSendingTg ? "درحال ارسال ویس..." : "ارسال مستقیم ویس به تلگرام 🚀🎙️"}</span>
+                </button>
               </div>
             </div>
 
@@ -1741,18 +2107,92 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-3 text-xs">
-              <span className="text-slate-400">فاصله زمانی تعویض بیو:</span>
-              <select
-                value={rotatorBioInterval}
-                onChange={(e) => setRotatorBioInterval(Number(e.target.value))}
-                className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-white"
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-400">فاصله زمانی تعویض بیو:</span>
+                <select
+                  value={rotatorBioInterval}
+                  onChange={(e) => setRotatorBioInterval(Number(e.target.value))}
+                  className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-white"
+                >
+                  <option value={1}>هر ۱ دقیقه</option>
+                  <option value={5}>هر ۵ دقیقه</option>
+                  <option value={15}>هر ۱۵ دقیقه</option>
+                  <option value={30}>هر ۳۰ دقیقه</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveCosmicConfig}
+                disabled={saving}
+                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs cursor-pointer transition-all"
               >
-                <option value={1}>هر ۱ دقیقه</option>
-                <option value={5}>هر ۵ دقیقه</option>
-                <option value={15}>هر ۱۵ دقیقه</option>
-                <option value={30}>هر ۳۰ دقیقه</option>
-              </select>
+                اعمال و ذخیره بیو چرخشی ⚡
+              </button>
+            </div>
+          </div>
+
+          {/* Rotating Name & Font Section */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-xs sm:text-sm text-white">اسم چرخشی و فونت ساعت زنده پروفایل (Rotating Name)</h4>
+                <p className="text-[11px] text-slate-400">بروزرسانی خودکار نام پروفایل تلگرام با فونت‌های خاص و نشان‌های متغیر هر دقیقه</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rotatorNameActive}
+                  onChange={(e) => setRotatorNameActive(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400">نام پایه پروفایل شما:</label>
+                <input
+                  type="text"
+                  value={baseName}
+                  onChange={(e) => setBaseName(e.target.value)}
+                  placeholder="نام اصلی شما..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400">استایل فونت نام و ساعت:</label>
+                <select
+                  value={selectedFontStyle}
+                  onChange={(e) => setSelectedFontStyle(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500"
+                >
+                  {GENERAL_FONT_OPTIONS.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.label} ({f.sample})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="text-slate-400 ml-2">پیش‌نمایش زنده نام در تلگرام:</span>
+                <span className="font-bold text-amber-300 font-mono">
+                  {transformFont(baseName || "User", selectedFontStyle)} ⚡ {transformFont(worldClocks.tehran.slice(0, 5), selectedFontStyle)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveCosmicConfig}
+                disabled={saving}
+                className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer transition-all"
+              >
+                فعال‌سازی و ذخیره اسم چرخشی 🚀
+              </button>
             </div>
           </div>
         </div>
@@ -1854,6 +2294,56 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
             </div>
           </div>
 
+          {/* Group Chat Guard Card */}
+          <div className="p-4 sm:p-5 bg-slate-950 rounded-2xl border border-rose-500/30 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-rose-400" />
+                  <span>نگهبان هوشمند گروه‌ها (ضد فحش، ضد لینک و سکوت خودکار)</span>
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  حذف آنی فحش و لینک‌های تبلیغاتی در گروه‌هایی که ادمین هستید و اعمال سکوت (Mute) خودکار روی متخلف
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={chatGuardActive}
+                  onChange={(e) => setChatGuardActive(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <label className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between cursor-pointer">
+                <span className="text-slate-200 font-bold">فیلتر هوشمند کلمات رکیک و فحش (Anti-Curse)</span>
+                <input
+                  type="checkbox"
+                  checked={antiCurse}
+                  onChange={(e) => setAntiCurse(e.target.checked)}
+                  className="w-4 h-4 accent-rose-500"
+                />
+              </label>
+
+              <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 flex items-center justify-between">
+                <span className="text-slate-200 font-bold">مدت زمان سکوت متخلف (ثانیه):</span>
+                <select
+                  value={autoMuteSeconds}
+                  onChange={(e) => setAutoMuteSeconds(Number(e.target.value))}
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-rose-300 font-mono"
+                >
+                  <option value={60}>۶۰ ثانیه (۱ دقیقه)</option>
+                  <option value={300}>۳۰۰ ثانیه (۵ دقیقه)</option>
+                  <option value={900}>۹۰۰ ثانیه (۱۵ دقیقه)</option>
+                  <option value={3600}>۳۶۰۰ ثانیه (۱ ساعت)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* Quick Save in Shields subtab */}
           <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
             <span className="text-[11px] text-slate-400">
@@ -1866,7 +2356,7 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <Save className={`w-3.5 h-3.5 ${saving ? "animate-spin" : ""}`} />
-              <span>{saving ? "درحال ذخیره..." : "ذخیره قفل پیوی و استارز"}</span>
+              <span>{saving ? "درحال ذخیره..." : "ذخیره قفل پیوی، نگهبان و استارز"}</span>
             </button>
           </div>
         </div>
@@ -1975,6 +2465,27 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               </div>
             </div>
           </div>
+
+          <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-xs text-slate-200 font-bold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={friendEnemyActive}
+                onChange={(e) => setFriendEnemyActive(e.target.checked)}
+                className="w-4 h-4 accent-emerald-500"
+              />
+              <span>واکنش خودکار به لیست دوستان و دشمنان در تلگرام فعال باشد</span>
+            </label>
+            <button
+              type="button"
+              onClick={handleSaveCosmicConfig}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>ذخیره لیست دوست و دشمن</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -2053,6 +2564,28 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                   {copiedText === "format-txt" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const txt =
+                      selectedFormat === "code"
+                        ? `\`${styleInputText}\``
+                        : selectedFormat === "italic"
+                        ? `_${styleInputText}_`
+                        : selectedFormat === "spoiler"
+                        ? `||${styleInputText}||`
+                        : selectedFormat === "quote"
+                        ? `> ${styleInputText}`
+                        : `~${styleInputText}~`;
+                    handleSendTextToTelegram(txt, "me");
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>ارسال مستقیم به تلگرام 🚀</span>
+                </button>
+              </div>
             </div>
 
             {/* ASCII & Cyber Logo Generator */}
@@ -2070,17 +2603,30 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                 {`╔════════════════════════════════╗\n║  ⚡ ${logoText.toUpperCase()} OFFICIAL ⚡  ║\n║   COSMIC ARSENAL ENGINE v6.2   ║\n╚════════════════════════════════╝`}
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const logo = `╔════════════════════════════════╗\n║  ⚡ ${logoText.toUpperCase()} OFFICIAL ⚡  ║\n║   COSMIC ARSENAL ENGINE v6.2   ║\n╚════════════════════════════════╝`;
-                  copyToClipboard(logo, "logo-copy");
-                }}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                {copiedText === "logo-copy" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>کپی لوگو</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const logo = `╔════════════════════════════════╗\n║  ⚡ ${logoText.toUpperCase()} OFFICIAL ⚡  ║\n║   COSMIC ARSENAL ENGINE v6.2   ║\n╚════════════════════════════════╝`;
+                    copyToClipboard(logo, "logo-copy");
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedText === "logo-copy" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>کپی لوگو</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const logo = `╔════════════════════════════════╗\n║  ⚡ ${logoText.toUpperCase()} OFFICIAL ⚡  ║\n║   COSMIC ARSENAL ENGINE v6.2   ║\n╚════════════════════════════════╝`;
+                    handleSendTextToTelegram(logo, "me");
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>ارسال لوگو به تلگرام 🚀</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2254,16 +2800,26 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                 )}
 
                 {translateResult && (
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500">
+                  <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
                     <span>موتور پردازش: ترجمه چندزبانه زنده</span>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(translateResult, "tr-copy")}
-                      className="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/20 transition-all cursor-pointer flex items-center gap-1"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>کپی سریع</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(translateResult, "tr-copy")}
+                        className="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/20 transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>کپی سریع</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSendTextToTelegram(translateResult, "me")}
+                        className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Send className="w-3 h-3" />
+                        <span>ارسال به تلگرام 🚀</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2730,7 +3286,22 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
 
             {falResult && (
               <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/30 space-y-3 text-xs">
-                <div className="font-bold text-amber-400">{falResult.ghazal}</div>
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-amber-400">{falResult.ghazal}</div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSendTextToTelegram(
+                        `📜 ${falResult.ghazal}\n\n${falResult.poem}\n\n✨ تعبیر فال:\n${falResult.interpretation}`,
+                        "me"
+                      )
+                    }
+                    className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Send className="w-3 h-3" />
+                    <span>ارسال فال به تلگرام 🚀</span>
+                  </button>
+                </div>
                 <div className="font-serif text-slate-200 whitespace-pre-line leading-relaxed italic text-sm">
                   {falResult.poem}
                 </div>
@@ -2765,16 +3336,29 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
                         {p.server}:{p.port} ({p.pingMs}ms)
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const link = `https://t.me/proxy?server=${p.server}&port=${p.port}&secret=${p.secret}`;
-                        copyToClipboard(link, `pr-${i}`);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 text-[11px] font-bold border border-cyan-500/30"
-                    >
-                      {copiedText === `pr-${i}` ? "کپی شد" : "اتصال / کپی"}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const link = `https://t.me/proxy?server=${p.server}&port=${p.port}&secret=${p.secret}`;
+                          copyToClipboard(link, `pr-${i}`);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 text-[11px] font-bold border border-cyan-500/30 cursor-pointer"
+                      >
+                        {copiedText === `pr-${i}` ? "کپی شد" : "کپی لینک"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const link = `🌐 پروکسی پرسرعت (${p.country}):\nhttps://t.me/proxy?server=${p.server}&port=${p.port}&secret=${p.secret}`;
+                          handleSendTextToTelegram(link, "me");
+                        }}
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-[11px] font-bold cursor-pointer"
+                        title="ارسال به Saved Messages"
+                      >
+                        <Send className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2786,14 +3370,16 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
       {/* SUBTAB 8: QUICK COMMANDS CONSOLE */}
       {activeTab === "cheatsheet" && (
         <div className="glass-panel rounded-3xl p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
             <div className="flex items-center gap-2">
               <Zap className="w-5 h-5 text-amber-400" />
               <h3 className="font-bold text-sm sm:text-base text-white">
                 {isRtl ? "کنسول دستورات سریع و کلیکی سلف ساز کازمیک" : "Cosmic Quick Commands Console"}
               </h3>
             </div>
-            <span className="text-xs text-slate-400">کپی و اجرای فوری با یک کلیک</span>
+            <span className="text-xs text-amber-300 font-bold">
+              کلیک روی «اجرا ⚡» دستور را مستقیماً در تلگرام شما اجرا می‌کند!
+            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -2808,6 +3394,8 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               { cmd: ".calc [فرمول]", copyCmd: ".calc 50 * 85000", desc: "محاسبه عبارات ریاضی و مالی" },
               { cmd: ".id", copyCmd: ".id", desc: "دریافت آیدی عددی کاربر یا چت" },
               { cmd: ".whois", copyCmd: ".whois", desc: "مشاهده آمار کامل و مشخصات اکانت یا گروه" },
+              { cmd: ".voice [متن]", copyCmd: ".voice سلام روز بخیر، این ویس توسط سلف سام کارن پرو ساخته شد", desc: "تبدیل فوری متن به ویس تلگرام" },
+              { cmd: ".music [نام آهنگ]", copyCmd: ".music شادمهر عقیلی", desc: "جستجو و ارسال موزیک در چت" },
               { cmd: ".clean [تعداد]", copyCmd: ".clean 5", desc: "پاکسازی پیام‌های ارسالی شما در گروه" },
               { cmd: ".tagall [متن]", copyCmd: ".tagall سلام دوستان", desc: "تگ همگانی تمامی اعضای گروه" },
               { cmd: ".mute [ثانیه]", copyCmd: ".mute 300", desc: "سکوت کاربر در گروه (روی ریپلای)" },
@@ -2821,24 +3409,76 @@ export const CosmicArsenalModule: React.FC<CosmicArsenalModuleProps> = ({
               { cmd: ".proxy", copyCmd: ".proxy", desc: "دریافت پروکسی‌های فعال MTProto" },
               { cmd: ".fal", copyCmd: ".fal", desc: "گرفتن فال حافظ با شعر و تفسیر" },
               { cmd: ".dice", copyCmd: ".dice", desc: "پرتاب تاس با شانس برد ۱۰۰٪" },
-            ].map((c, i) => (
-              <div
-                key={i}
-                onClick={() => copyToClipboard(c.copyCmd || c.cmd, `c-${i}`)}
-                className="p-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/40 rounded-2xl flex items-center justify-between cursor-pointer transition-all active:scale-95"
-              >
-                <div>
-                  <div className="font-mono text-xs font-bold text-amber-300" dir="ltr">{c.cmd}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{c.desc}</div>
+            ].map((c, i) => {
+              const targetCmd = c.copyCmd || c.cmd;
+              const isRunning = executingCmd === targetCmd;
+              return (
+                <div
+                  key={i}
+                  className="p-3 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-amber-500/40 rounded-2xl flex items-center justify-between gap-2 transition-all"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs font-bold text-amber-300 truncate" dir="ltr">
+                      {c.cmd}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{c.desc}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => handleSendTextToTelegram(targetCmd, "me")}
+                      className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 text-[11px] font-black transition-all cursor-pointer flex items-center gap-1"
+                      title="اجرای مستقیم دستور در تلگرام"
+                    >
+                      <Zap className={`w-3 h-3 ${isRunning ? "animate-spin" : ""}`} />
+                      <span>{isRunning ? "..." : "اجرا"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(targetCmd, `c-${i}`)}
+                      className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer"
+                      title="کپی دستور"
+                    >
+                      {copiedText === `c-${i}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
-                <button type="button" className="text-slate-500 hover:text-white p-1">
-                  {copiedText === `c-${i}` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
+
+      {/* Bottom Page Flipper Bar (ورق زدن سریع در پایین صفحه) */}
+      <div className="glass-panel rounded-2xl p-3.5 border border-slate-800 flex items-center justify-between gap-3 bg-slate-950/90">
+        <button
+          type="button"
+          onClick={() => handleFlipTab("prev")}
+          className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 font-bold text-xs flex items-center gap-1.5 border border-slate-800 transition-all cursor-pointer active:scale-95"
+        >
+          <ChevronRight className="w-4 h-4 text-amber-400" />
+          <span>{isRtl ? "ورق زدن به بخش قبلی" : "Previous Module"}</span>
+        </button>
+
+        <div className="text-center">
+          <span className="text-xs font-bold text-amber-400 block">
+            {cosmicSubtabs[activeTabIndex]?.label}
+          </span>
+          <span className="text-[10px] text-slate-500 font-mono">
+            {isRtl ? `بخش ${activeTabIndex + 1} از ${cosmicSubtabs.length}` : `Page ${activeTabIndex + 1} of ${cosmicSubtabs.length}`}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleFlipTab("next")}
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all cursor-pointer active:scale-95"
+        >
+          <span>{isRtl ? "ورق زدن به بخش بعدی" : "Next Module"}</span>
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 };
