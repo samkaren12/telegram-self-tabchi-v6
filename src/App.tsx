@@ -51,13 +51,26 @@ import { useSoundNotification } from "./hooks/useSoundNotification";
 import { ConfirmProvider } from "./components/ui/ConfirmProvider";
 import { motion, AnimatePresence } from "motion/react";
 
+const isStoreAdminUrl = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const portal = params.get("portal");
+  return portal === "store-admin" || portal === "store" || Boolean(params.get("storeToken"));
+};
+
 const getInitialPortal = (): "admin" | "client" => {
   if (typeof window === "undefined") return "client";
   const path = window.location.pathname.toLowerCase();
   const hash = window.location.hash.toLowerCase();
   const search = new URLSearchParams(window.location.search).get("portal");
 
-  if (path.includes("admin") || path.includes("owner") || hash.includes("admin") || search === "admin") {
+  if (
+    isStoreAdminUrl() ||
+    path.includes("admin") ||
+    path.includes("owner") ||
+    hash.includes("admin") ||
+    search === "admin"
+  ) {
     return "admin";
   }
   return "client";
@@ -66,7 +79,10 @@ const getInitialPortal = (): "admin" | "client" => {
 export default function App() {
   const [lang, setLang] = useState<Language>("fa");
   const [portalMode, setPortalMode] = useState<"admin" | "client">(getInitialPortal);
-  const [activeTab, setActiveTab] = useState<TabId>(() => (getInitialPortal() === "client" ? "self" : "dashboard"));
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (isStoreAdminUrl()) return "store";
+    return getInitialPortal() === "client" ? "self" : "dashboard";
+  });
 
   const [storePendingCount, setStorePendingCount] = useState<number>(0);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -120,12 +136,41 @@ export default function App() {
   const prevBroadcastingMapRef = useRef<Map<string, boolean>>(new Map());
   const isInitialFetchRef = useRef<boolean>(true);
 
-  // Sync portal from URL / history changes
+  // Sync portal from URL / history changes & support 1-click Store Bot Admin Web Panel login
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const storeToken = params.get("storeToken");
+    if (isStoreAdminUrl()) {
+      setPortalMode("admin");
+      setActiveTab("store");
+    }
+    if (storeToken) {
+      fetch("/api/store-bot/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeToken }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          if (json?.success && json?.session) {
+            sessionStorage.setItem("hacker_v6_authenticated", "true");
+            sessionStorage.setItem("hacker_v6_session", JSON.stringify(json.session));
+            sessionStorage.setItem("store_bot_admin_unlocked", "true");
+            setAuthSession(json.session);
+            setIsUnlocked(true);
+            setPortalMode("admin");
+            setActiveTab("store");
+          }
+        })
+        .catch(() => {});
+    }
+
     const handlePortalChange = () => {
       const mode = getInitialPortal();
       setPortalMode(mode);
-      if (mode === "client") {
+      if (isStoreAdminUrl()) {
+        setActiveTab("store");
+      } else if (mode === "client") {
         setActiveTab("self");
       }
     };

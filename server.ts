@@ -1042,7 +1042,12 @@ async function startServer() {
   app.get("/api/store-bot/admin-credentials", (req, res) => {
     try {
       const credentials = storeBotManager.getAdminCredentials();
-      return res.json({ success: true, credentials });
+      return res.json({
+        success: true,
+        credentials,
+        webPanelUrl: storeBotManager.getStoreWebPanelUrl(true),
+        cleanWebPanelUrl: storeBotManager.getStoreWebPanelUrl(false),
+      });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
     }
@@ -1062,6 +1067,8 @@ async function startServer() {
       return res.json({
         success: true,
         credentials: result,
+        webPanelUrl: storeBotManager.getStoreWebPanelUrl(true),
+        cleanWebPanelUrl: storeBotManager.getStoreWebPanelUrl(false),
         message: "نام کاربری و رمز عبور اختصاصی پنل مدیریت ربات با موفقیت ذخیره شد.",
       });
     } catch (err: any) {
@@ -1071,17 +1078,64 @@ async function startServer() {
 
   app.post("/api/store-bot/admin-login", (req, res) => {
     try {
-      const { username, password } = req.body || {};
-      if (!storeBotManager.verifyAdminCredentials(username, password)) {
+      const { username, password, storeToken } = req.body || {};
+      let verifiedUsername = "";
+
+      if (storeToken && storeBotManager.verifyStoreWebAutoToken(storeToken)) {
+        verifiedUsername = storeBotManager.getAdminCredentials().username || "store_admin";
+      } else if (storeBotManager.verifyAdminCredentials(username, password)) {
+        verifiedUsername = (username || "store_admin").trim();
+      } else {
         return res.status(401).json({ success: false, message: "نام کاربری یا رمز عبور پنل فروشگاه نامعتبر است." });
       }
+
+      const token = crypto.randomUUID();
+      activeSessions.set(token, {
+        token,
+        role: "owner",
+        username: verifiedUsername,
+        createdAt: Date.now(),
+      });
+
       return res.json({
         success: true,
-        message: "ورود به پنل اختصاصی مدیریت ربات فروشگاه با موفقیت انجام شد.",
-        session: { role: "owner", username, portal: "store" },
+        message: "ورود به پنل اختصاصی تحت وب مدیریت ربات فروشگاه با موفقیت انجام شد.",
+        session: { role: "owner", username: verifiedUsername, token, portal: "store" },
+        webPanelUrl: storeBotManager.getStoreWebPanelUrl(true),
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/send-admin-panel-to-owner", async (req, res) => {
+    try {
+      const data = storeBotManager.getData();
+      const targetId = (req.body?.ownerTelegramId || data.settings.ownerTelegramId || "").toString().trim();
+      if (!targetId) {
+        return res.status(400).json({
+          success: false,
+          message: "ابتدا آیدی عددی مالک ربات (Owner Telegram ID) را وارد نمایید.",
+        });
+      }
+      if (!data.settings.botToken) {
+        return res.status(400).json({
+          success: false,
+          message: "ابتدا توکن ربات فروشگاهی را در تنظیمات ثبت نمایید.",
+        });
+      }
+      const firstId = targetId.split(/[,،\s]+/).filter(Boolean)[0];
+      await storeBotManager.sendMainMenu(firstId);
+      await storeBotManager.sendInBotAdminMenu(firstId);
+      return res.json({
+        success: true,
+        message: `منوی «👑 پنل مدیریت» و دکمه ورود به پنل تحت وب با موفقیت به آیدی عددی ${firstId} در تلگرام ارسال شد!`,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "خطا در ارسال پیام به تلگرام مالک (مطمئن شوید مالک ربات را /start کرده است).",
+      });
     }
   });
 

@@ -2339,20 +2339,58 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                   )}
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    شناسه تلگرام مالک سرور (Admin Telegram ID)
+                <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-3.5 space-y-2">
+                  <label className="text-xs font-bold text-amber-300 flex items-center justify-between gap-2">
+                    <span>👑 آیدی عددی تلگرام مالک ربات (Owner Numeric Telegram ID)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-500/30">
+                      فعال‌ساز دکمه «👑 پنل مدیریت» و پنل تحت وب
+                    </span>
                   </label>
-                  <input
-                    type="text"
-                    value={ownerTelegramId}
-                    onChange={(e) => setOwnerTelegramId(e.target.value)}
-                    placeholder="مثال: 123456789 (جهت دریافت اعلان فیش‌های جدید در پیوی مالک)"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-300 focus:border-cyan-500 outline-none"
-                    dir="ltr"
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    برای پیدا کردن عددی آیدی تلگرام خود به ربات userinfobot@ پیام دهید.
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={ownerTelegramId}
+                      onChange={(e) => setOwnerTelegramId(e.target.value)}
+                      placeholder="مثال: 123456789 (می‌توانید چند آیدی را با ویرگول جدا کنید)"
+                      className="flex-1 bg-slate-950 border border-amber-500/40 rounded-xl px-3.5 py-2.5 text-xs font-mono text-amber-200 focus:border-amber-400 outline-none"
+                      dir="ltr"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!ownerTelegramId.trim()) {
+                          showToast("error", "ابتدا آیدی عددی تلگرام مالک را وارد نمایید.");
+                          return;
+                        }
+                        try {
+                          await fetch("/api/store-bot/settings", {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ ownerTelegramId: ownerTelegramId.trim() }),
+                          });
+                          const res = await fetch("/api/store-bot/send-admin-panel-to-owner", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ ownerTelegramId: ownerTelegramId.trim() }),
+                          });
+                          const json = await res.json();
+                          if (json.success) {
+                            showToast("success", json.message);
+                          } else {
+                            showToast("error", json.message || "خطا در ارسال به تلگرام مالک");
+                          }
+                        } catch (err: any) {
+                          showToast("error", err.message);
+                        }
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>ثبت و ارسال «👑 پنل مدیریت» به تلگرام مالک</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    با ثبت آیدی عددی مالک، در کیبورد ربات دکمه <strong className="text-amber-300">«👑 پنل مدیریت»</strong> برای مالک ظاهر می‌شود که با زدن آن دکمه، لینک مستقیم <strong className="text-cyan-300">«🌐 پنل تحت وب مدیریت ربات»</strong> برای مدیریت کل ربات باز می‌شود.
                   </p>
                 </div>
 

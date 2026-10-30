@@ -788,6 +788,30 @@ export class StoreBotManager {
     );
   }
 
+  public getStoreWebAutoToken(): string {
+    const creds = this.getAdminCredentials();
+    const raw = `store_web_auth:${creds.username}:${creds.password || "admin_store_2026"}`;
+    let hash = 2166136261;
+    for (let i = 0; i < raw.length; i++) {
+      hash ^= raw.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return `st_${(hash >>> 0).toString(16)}_${Buffer.from(creds.username).toString("hex").slice(0, 12)}`;
+  }
+
+  public verifyStoreWebAutoToken(token?: string): boolean {
+    if (!token || typeof token !== "string") return false;
+    return token.trim() === this.getStoreWebAutoToken();
+  }
+
+  public getStoreWebPanelUrl(includeAutoToken = true): string {
+    const baseUrl = (telegramManager.getEffectiveAppUrl() || "http://localhost:3000").replace(/\/+$/, "");
+    if (!includeAutoToken) {
+      return `${baseUrl}/?portal=store-admin`;
+    }
+    return `${baseUrl}/?portal=store-admin&storeToken=${encodeURIComponent(this.getStoreWebAutoToken())}`;
+  }
+
   // =============================================================
   // TELEGRAM BOT API CALLS
   // =============================================================
@@ -1001,7 +1025,13 @@ export class StoreBotManager {
       }
 
       // Step 2: If custom_emoji failed, ONLY strip icon_custom_emoji_id and keep colored button styles intact!
-      if (preparedBody?.reply_markup && (desc.includes("custom_emoji") || desc.includes("DOCUMENT_INVALID"))) {
+      if (
+        preparedBody?.reply_markup &&
+        (desc.includes("custom_emoji") ||
+          desc.includes("DOCUMENT_INVALID") ||
+          desc.includes("EMOJI") ||
+          desc.includes("BUTTON_CUSTOM_EMOJI"))
+      ) {
         const retryBody = {
           ...preparedBody,
           reply_markup: this.stripCustomEmojiOnly(preparedBody.reply_markup),
@@ -1358,7 +1388,13 @@ export class StoreBotManager {
       }
 
       if (userId && this.isUserAdmin(userId)) {
-        keyboardRows.push([{ text: "👑 پنل مدیریت", style: "danger" }]);
+        keyboardRows.push([
+          {
+            text: "👑 پنل مدیریت",
+            style: "danger",
+            icon_custom_emoji_id: "5357315181649076022",
+          },
+        ]);
       }
 
       if (this.data.settings.allowCustomerKeyboardSwitch) {
@@ -1381,6 +1417,9 @@ export class StoreBotManager {
         allButtons.push({
           text: `${cat.icon || "💎"} ${cat.title}`,
           style,
+          ...(cat.customEmojiId && /^\d{15,22}$/.test(cat.customEmojiId.trim())
+            ? { icon_custom_emoji_id: cat.customEmojiId.trim() }
+            : {}),
         });
       }
     } else {
@@ -1407,7 +1446,13 @@ export class StoreBotManager {
     }
 
     if (userId && this.isUserAdmin(userId)) {
-      keyboardRows.push([{ text: "👑 پنل مدیریت", style: "danger" }]);
+      keyboardRows.push([
+        {
+          text: "👑 پنل مدیریت",
+          style: "danger",
+          icon_custom_emoji_id: "5357315181649076022",
+        },
+      ]);
     }
 
     if (this.data.settings.allowCustomerKeyboardSwitch) {
@@ -1480,12 +1525,35 @@ export class StoreBotManager {
       }
 
       if (userId && this.isUserAdmin(userId)) {
+        const webPanelUrl = this.getStoreWebPanelUrl(true);
+        const isHttps = webPanelUrl.startsWith("https://");
+        const isPublicUrl = /^https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(webPanelUrl);
         inlineRows.push([
           {
-            text: "👑 ورود به پنل مدیریت ربات (/admin)",
+            text: "👑 پنل مدیریت",
             callback_data: "admin_menu",
             style: "danger",
+            icon_custom_emoji_id: "5357315181649076022",
           },
+          ...(isHttps
+            ? [
+                {
+                  text: "🌐 پنل مدیریت تحت وب",
+                  web_app: { url: webPanelUrl },
+                  style: "primary",
+                  icon_custom_emoji_id: "5368324170671202286",
+                },
+              ]
+            : isPublicUrl
+            ? [
+                {
+                  text: "🌐 پنل مدیریت تحت وب",
+                  url: webPanelUrl,
+                  style: "primary",
+                  icon_custom_emoji_id: "5368324170671202286",
+                },
+              ]
+            : []),
         ]);
       }
 
@@ -1510,6 +1578,9 @@ export class StoreBotManager {
           text: `${cat.icon || "💎"} ${cat.title}`,
           callback_data: `cat_${cat.id}`,
           style,
+          ...(cat.customEmojiId && /^\d{15,22}$/.test(cat.customEmojiId.trim())
+            ? { icon_custom_emoji_id: cat.customEmojiId.trim() }
+            : {}),
         });
       }
     } else {
@@ -1583,12 +1654,35 @@ export class StoreBotManager {
     }
 
     if (userId && this.isUserAdmin(userId)) {
+      const webPanelUrl = this.getStoreWebPanelUrl(true);
+      const isHttps = webPanelUrl.startsWith("https://");
+      const isPublicUrl = /^https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(webPanelUrl);
       inlineRows.push([
         {
-          text: "👑 ورود به پنل مدیریت ربات (/admin)",
+          text: "👑 پنل مدیریت",
           callback_data: "admin_menu",
           style: "danger",
+          icon_custom_emoji_id: "5357315181649076022",
         },
+        ...(isHttps
+          ? [
+              {
+                text: "🌐 پنل مدیریت تحت وب",
+                web_app: { url: webPanelUrl },
+                style: "primary",
+                icon_custom_emoji_id: "5368324170671202286",
+              },
+            ]
+          : isPublicUrl
+          ? [
+              {
+                text: "🌐 پنل مدیریت تحت وب",
+                url: webPanelUrl,
+                style: "primary",
+                icon_custom_emoji_id: "5368324170671202286",
+              },
+            ]
+          : []),
       ]);
     }
 
@@ -1783,11 +1877,36 @@ export class StoreBotManager {
       strippedAdmin === "👑 پنل مدیریت" ||
       strippedAdmin === "پنل مدیریت" ||
       strippedAdmin === "مدیریت" ||
-      strippedAdmin === "/panel"
+      strippedAdmin === "/panel" ||
+      strippedAdmin.includes("👑 پنل مدیریت")
     ) {
       if (this.isUserAdmin(user?.id)) {
         this.userSessions.delete(chatId);
         await this.sendInBotAdminMenu(chatId);
+        return;
+      } else if (!String(this.data.settings.ownerTelegramId || "").trim()) {
+        // Owner ID not set yet — guide the owner or allow 1-click claim
+        await this.sendMessage(
+          chatId,
+          `👑 <b>تنظیم آیدی عددی مالک ربات فروشگاهی</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🆔 <b>آیدی عددی تلگرام شما:</b> <code>${user?.id}</code>\n\n` +
+            `هنوز آیدی عددی مالک در تنظیمات ربات ثبت نشده است. با زدن دکمه زیر، آیدی شما به عنوان مالک ربات ثبت شده و دکمه <b>«👑 پنل مدیریت»</b> به همراه <b>پنل تحت وب مدیریت ربات</b> برایتان فعال می‌گردد:`,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: `👑 ثبت آیدی من (${user?.id}) به عنوان مالک ربات`,
+                    callback_data: "claim_store_owner",
+                    style: "success",
+                  },
+                ],
+              ],
+            },
+          }
+        );
         return;
       }
     }
@@ -2377,14 +2496,74 @@ export class StoreBotManager {
         );
         await this.sendInBotAdminMenu(chatId);
       }
+    } else if (data === "claim_store_owner") {
+      if (!String(this.data.settings.ownerTelegramId || "").trim() && user?.id) {
+        this.data.settings.ownerTelegramId = String(user.id);
+        this.saveData();
+        await this.sendMessage(
+          chatId,
+          `✅ <b>آیدی عددی شما (<code>${user.id}</code>) به عنوان مالک ربات ثبت شد!</b>\n\nاکنون دکمه <b>«👑 پنل مدیریت»</b> در منوی شما فعال گردید.`,
+          {
+            parse_mode: "HTML",
+            reply_markup: this.getReplyKeyboardMarkup(user.id),
+          }
+        );
+        await this.sendInBotAdminMenu(chatId);
+      }
     } else if (data === "admin_webpanel_link") {
       if (this.isUserAdmin(user?.id)) {
         const creds = this.getAdminCredentials();
-        const appUrl = telegramManager.getEffectiveAppUrl();
+        const directWebUrl = this.getStoreWebPanelUrl(true);
+        const cleanWebUrl = this.getStoreWebPanelUrl(false);
+        const isHttps = directWebUrl.startsWith("https://");
+        const isPublicUrl = /^https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(directWebUrl);
+        const kb: any[][] = [];
+        if (isHttps) {
+          kb.push([
+            {
+              text: "📱 باز کردن پنل تحت وب در تلگرام (WebApp)",
+              web_app: { url: directWebUrl },
+              style: "success",
+              icon_custom_emoji_id: "5357315181649076022",
+            },
+          ]);
+          kb.push([
+            {
+              text: "🌐 باز کردن مستقیم پنل تحت وب در مرورگر",
+              url: directWebUrl,
+              style: "primary",
+              icon_custom_emoji_id: "5368324170671202286",
+            },
+          ]);
+        } else if (isPublicUrl) {
+          kb.push([
+            {
+              text: "🌐 باز کردن مستقیم پنل تحت وب مدیریت ربات",
+              url: directWebUrl,
+              style: "success",
+              icon_custom_emoji_id: "5357315181649076022",
+            },
+          ]);
+        }
+        kb.push([{ text: "🔙 بازگشت به پنل مدیریت", callback_data: "admin_menu", style: "danger" }]);
+
         await this.sendMessage(
           chatId,
-          `🌐 <b>مشخصات ورود به وب پنل اختصاصی مدیریت:</b>\n━━━━━━━━━━━━━━━━━━━━\n🔗 <b>آدرس وب‌پنل:</b> ${appUrl}\n👤 <b>نام کاربری:</b> <code>${creds.username}</code>\n🔑 <b>رمز عبور:</b> <code>${creds.password || "admin_store_2026"}</code>\n━━━━━━━━━━━━━━━━━━━━\n💡 با ورود به وب پنل به داشبورد کامل فروش، تنظیم دسته‌بندی‌ها، درگاه‌ها و دکمه‌ها دسترسی دارید.`,
-          { parse_mode: "HTML" }
+          `🌐 <b>پنل تحت وب اختصاصی مدیریت ربات فروشگاه</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `🚀 <b>لینک ورود مستقیم ۱-کلیکی (بدون نیاز به رمز):</b>\n` +
+            `<a href="${directWebUrl}">🔗 کلیک برای باز کردن پنل مدیریت تحت وب ربات</a>\n` +
+            `<code>${directWebUrl}</code>\n\n` +
+            `🔐 <b>مشخصات ورود دستی به پنل مدیریت فروشگاه:</b>\n` +
+            `• <b>آدرس پنل:</b> <code>${cleanWebUrl}</code>\n` +
+            `• <b>نام کاربری:</b> <code>${creds.username}</code>\n` +
+            `• <b>رمز عبور:</b> <code>${creds.password || "admin_store_2026"}</code>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `💡 از طریق پنل تحت وب می‌توانید تمام دکمه‌ها، ایموجی‌های پرمیوم، پکیج‌ها، قیمت‌ها، سفارشات، مشتریان و درگاه‌های پرداخت ربات را به صورت گرافیکی مدیریت نمایید.`,
+          {
+            parse_mode: "HTML",
+            reply_markup: { inline_keyboard: kb },
+          }
         );
       }
     } else if (data === "cust_manage_panel") {
@@ -4867,10 +5046,21 @@ export class StoreBotManager {
   // IN-BOT ADMIN PANEL (TELEGRAM /ADMIN INTERFACE)
   // =============================================================
 
-  public isUserAdmin(userId: number | string): boolean {
-    const ownerId = this.data.settings.ownerTelegramId;
-    if (!ownerId) return true; // if not set yet, allow initial configuration
-    return String(userId) === String(ownerId);
+  public isUserAdmin(userId?: number | string): boolean {
+    if (!userId) return false;
+    const rawOwner = String(this.data.settings.ownerTelegramId || "").trim();
+    if (rawOwner) {
+      const ids = rawOwner
+        .split(/[,،\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return ids.includes(String(userId).trim());
+    }
+    const globalBotOwner = telegramManager.getBotSettings()?.owner_id;
+    if (globalBotOwner && String(globalBotOwner) === String(userId).trim()) {
+      return true;
+    }
+    return false;
   }
 
   public async sendInBotAdminMenu(chatId: number | string, messageIdToEdit?: number) {
@@ -4888,8 +5078,15 @@ export class StoreBotManager {
         ? "🟢 فعال"
         : "🔴 غیرفعال";
 
+    const directWebUrl = this.getStoreWebPanelUrl(true);
+    const isHttps = directWebUrl.startsWith("https://");
+    const isPublicUrl = /^https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0)/i.test(directWebUrl);
+
     const text =
       `👑 <b>پنل اختصاصی مدیریت ربات فروشگاه</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🌐 <b>پنل تحت وب مدیریت ربات:</b>\n` +
+      `🔗 <a href="${directWebUrl}">ورود مستقیم به پنل تحت وب مدیریت ربات (کلیک کنید)</a>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📊 <b>آمار زنده کسب‌وکار:</b>\n` +
       `• کل مشتریان ثبت‌شده: <b>${totalUsers} نفر</b>\n` +
@@ -4901,28 +5098,65 @@ export class StoreBotManager {
       `• ارسال گزارشات به کانال: <b>${reportsOn}</b>\n` +
       `• قفل عضویت اجباری: <b>${forceJoinOn}</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `دستورات مدیریتی ربات:`;
+      `💡 برای مدیریت کامل گرافیکی دکمه‌ها، ایموجی‌های پرمیوم، پکیج‌ها، درگاه‌ها و سفارشات، روی دکمه <b>«🌐 باز کردن پنل تحت وب مدیریت ربات»</b> در زیر بزنید:`;
 
-    const buttons = [
+    const webPanelButtons: any[][] = [];
+    if (isHttps) {
+      webPanelButtons.push([
+        {
+          text: "📱 باز کردن پنل تحت وب مدیریت در تلگرام (Mini App)",
+          web_app: { url: directWebUrl },
+          style: "success",
+          icon_custom_emoji_id: "5357315181649076022",
+        },
+      ]);
+      webPanelButtons.push([
+        {
+          text: "🌐 باز کردن پنل تحت وب مدیریت در مرورگر",
+          url: directWebUrl,
+          style: "primary",
+          icon_custom_emoji_id: "5368324170671202286",
+        },
+      ]);
+    } else if (isPublicUrl) {
+      webPanelButtons.push([
+        {
+          text: "🌐 باز کردن پنل تحت وب مدیریت ربات",
+          url: directWebUrl,
+          style: "success",
+          icon_custom_emoji_id: "5357315181649076022",
+        },
+      ]);
+    }
+
+    const buttons: any[][] = [
+      ...webPanelButtons,
       [
-        { text: `⏳ سفارشات در انتظار (${pendingOrders.length})`, callback_data: "admin_orders_pending" },
-        { text: "📦 مدیریت تعرفه‌ها و پلن‌ها", callback_data: "admin_plans" },
+        {
+          text: "🌐 دریافت لینک و رمز ورود پنل تحت وب مدیریت",
+          callback_data: "admin_webpanel_link",
+          style: "primary",
+          icon_custom_emoji_id: "5368324170671202286",
+        },
       ],
       [
-        { text: "📁 مدیریت دسته‌بندی‌ها", callback_data: "admin_categories" },
-        { text: `📢 گزارشات خرید (${reportsOn})`, callback_data: "admin_toggle_reports" },
+        { text: `⏳ سفارشات در انتظار (${pendingOrders.length})`, callback_data: "admin_orders_pending", style: "danger" },
+        { text: "📦 مدیریت تعرفه‌ها و پلن‌ها", callback_data: "admin_plans", style: "primary" },
       ],
       [
-        { text: `🔒 عضویت اجباری (${forceJoinOn})`, callback_data: "admin_toggle_force" },
-        { text: "🔄 همگام‌سازی نام اکانت‌ها", callback_data: "admin_sync_profiles" },
+        { text: "📁 مدیریت دسته‌بندی‌ها", callback_data: "admin_categories", style: "primary" },
+        { text: `📢 گزارشات خرید (${reportsOn})`, callback_data: "admin_toggle_reports", style: "success" },
       ],
       [
-        { text: "🎛 تست پنل مدیریت سلف/تبچی", callback_data: "cust_manage_panel" },
-        { text: "🔄 بازنشانی دکمه‌های پیش‌فرض", callback_data: "admin_reset_buttons" },
+        { text: `🔒 عضویت اجباری (${forceJoinOn})`, callback_data: "admin_toggle_force", style: "primary" },
+        { text: "🔄 همگام‌سازی نام اکانت‌ها", callback_data: "admin_sync_profiles", style: "success" },
       ],
       [
-        { text: "🌐 آدرس و مشخصات وب‌پنل", callback_data: "admin_webpanel_link" },
-        { text: "🏠 بازگشت به منوی کاربری", callback_data: "main_menu" },
+        { text: "🎛 تست پنل مدیریت سلف/تبچی", callback_data: "cust_manage_panel", style: "success" },
+        { text: "🔄 بازنشانی دکمه‌های پیش‌فرض", callback_data: "admin_reset_buttons", style: "danger" },
+      ],
+      [
+        { text: "🏠 بازگشت به منوی اصلی فروشگاه", callback_data: "main_menu", style: "primary" },
       ],
     ];
 
