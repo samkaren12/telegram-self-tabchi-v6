@@ -1364,8 +1364,18 @@ async function startServer() {
       return res.json({
         success: true,
         ...result,
-        message: `همگام‌سازی انجام شد! ${result.syncedCount} ایموجی پرمیوم معتبر از سرور تلگرام استخراج و روی دکمه‌های ربات تنظیم گردید.`,
+        message: `همگام‌سازی انجام شد! ${result.syncedCount} ایموجی رسمی (شامل ${result.freeIconsCount || 0} آیکون Free Topic با فلگ free=true) از سرور تلگرام استخراج و روی دکمه‌های ربات تنظیم گردید.`,
       });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/test-custom-emoji-live", async (req, res) => {
+    try {
+      const { chatId } = req.body || {};
+      const result = await storeBotManager.testLiveButtonCustomEmoji(chatId);
+      return res.json(result);
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });
     }

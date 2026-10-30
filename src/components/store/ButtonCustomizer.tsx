@@ -78,23 +78,8 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export const PREMIUM_EMOJI_PRESETS = [
-  { icon: "🔥", label: "🔥 ایموجی پرمیوم رسمی تلگرام (تأییدشده)", id: "5368324170671202286" },
-  { icon: "💎", label: "💎 الماس پرمیوم", id: "5368324170671202286" },
-  { icon: "🚀", label: "🚀 موشک نئونی", id: "5445284980978621387" },
-  { icon: "⚡", label: "⚡ صاعقه طلایی", id: "5456140674028019486" },
-  { icon: "🔥", label: "🔥 آتش متحرک", id: "5424972470023104089" },
-  { icon: "👑", label: "👑 تاج VIP", id: "5357315181649076022" },
-  { icon: "✅", label: "✅ تیک سبز پرمیوم", id: "5206607081334906820" },
-  { icon: "🌟", label: "🌟 ستاره طلایی", id: "5438496463044752972" },
-  { icon: "🎁", label: "🎁 جعبه هدیه ویژه", id: "5373098009640836781" },
-  { icon: "🛡️", label: "🛡️ سپر امنیت سایبری", id: "5379748062124056162" },
-  { icon: "🤖", label: "🤖 ربات هوشمند", id: "5309958691854754293" },
-  { icon: "💰", label: "💰 کیسه سکه طلا", id: "5382194935057372936" },
-  { icon: "💜", label: "💜 قلب نئون", id: "5359523920993066759" },
-  { icon: "🛍️", label: "🛍️ سبد خرید فروشگاه", id: "5397782960512444700" },
-  { icon: "📊", label: "📊 نمودار و آمار", id: "5231200819986047254" },
-  { icon: "🔑", label: "🔑 کلید اشتراک VIP", id: "5406745015365943482" },
-  { icon: "🔔", label: "🔔 زنگوله اعلان", id: "5458603043203327669" },
+  { icon: "🔥", label: "🔥 آیکون رسمی تلگرام (Free Topic Icon • free=true)", id: "5312536423581202898" },
+  { icon: "🔥", label: "🔥 ایموجی پرمیوم رسمی تلگرام (RestrictedEmoji)", id: "5368324170671202286" },
 ];
 
 export function ButtonCustomizer({
@@ -116,14 +101,24 @@ export function ButtonCustomizer({
   const [quickEmojiPickerBtnId, setQuickEmojiPickerBtnId] = useState<string | null>(null);
   const [previewAdminOpen, setPreviewAdminOpen] = useState(false);
   const [syncingEmojis, setSyncingEmojis] = useState(false);
+  const [testingLiveEmoji, setTestingLiveEmoji] = useState(false);
+  const [liveTestResult, setLiveTestResult] = useState<{
+    success: boolean;
+    telegramReturnedEmojiOnButton: boolean;
+    diagnosis: string;
+    freeIconIdUsed?: string;
+    premiumIconIdUsed?: string;
+    telegramErrorDescription?: string;
+  } | null>(null);
   const [packUrlInput, setPackUrlInput] = useState("");
   const [discoveredServerEmojis, setDiscoveredServerEmojis] = useState<
-    Array<{ id: string; emoji: string; setName?: string }>
+    Array<{ id: string; emoji: string; setName?: string; isFree?: boolean }>
   >([]);
   const [emojiStatus, setEmojiStatus] = useState<{
     ok: boolean;
     reason?: string;
     description?: string;
+    telegramReturnedEmojiInMarkup?: boolean;
   } | null>(null);
 
   // Settings state
@@ -230,7 +225,7 @@ export function ButtonCustomizer({
     setBtnTargetCat(categories[0]?.id || "self");
     setBtnTargetUrl("");
     setBtnStyle("success");
-    setBtnCustomEmojiId("5368324170671202286");
+    setBtnCustomEmojiId(discoveredServerEmojis[0]?.id || "5312536423581202898");
     const maxRow = customButtons.reduce((max, b) => Math.max(max, b.rowIndex || 0), 0);
     setBtnRow(customButtons.length > 0 ? maxRow + 1 : 0);
     setBtnCol(0);
@@ -313,15 +308,41 @@ export function ButtonCustomizer({
     const verifiedPool =
       discoveredServerEmojis.length > 0
         ? discoveredServerEmojis.map((x) => x.id)
-        : ["5368324170671202286"];
+        : ["5312536423581202898", "5368324170671202286"];
     const nextList = customButtons.map((b, idx) => ({
       ...b,
-      customEmojiId: verifiedPool[idx % verifiedPool.length] || "5368324170671202286",
+      customEmojiId: verifiedPool[idx % verifiedPool.length] || "5312536423581202898",
     }));
     await persistButtonsImmediately(
       nextList,
-      "✨ شناسه‌های معتبر ایموجی پرمیوم تلگرام روی تمام دکمه‌های ربات ست شدند!"
+      "✨ شناسه‌های معتبر ایموجی تلگرام (Free Topic Icons & Premium) روی تمام دکمه‌های ربات ست شدند!"
     );
+  };
+
+  const handleTestLiveEmojiInTelegram = async () => {
+    setTestingLiveEmoji(true);
+    setLiveTestResult(null);
+    try {
+      const res = await fetch("/api/store-bot/test-custom-emoji-live", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: ownerIdInput.trim() || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok && !json.diagnosis) {
+        throw new Error(json.message || "خطا در اجرای تست زنده ایموجی در تلگرام");
+      }
+      setLiveTestResult(json);
+      if (json.telegramReturnedEmojiOnButton) {
+        showToast("success", "✅ تلگرام فیلد icon_custom_emoji_id را روی دکمه تأیید و رندر کرد!");
+      } else {
+        showToast("error", json.diagnosis || "تلگرام فیلد icon_custom_emoji_id را از روی دکمه حذف کرد (بررسی نتیجه تست).");
+      }
+    } catch (err: any) {
+      showToast("error", err.message);
+    } finally {
+      setTestingLiveEmoji(false);
+    }
   };
 
   const handleSaveOwnerIdQuick = async () => {
@@ -570,8 +591,36 @@ export function ButtonCustomizer({
       .map((entry) => entry[1]);
   })();
 
+  const allAvailableEmojiPresets = (() => {
+    const map = new Map<string, { icon: string; label: string; id: string; isFree?: boolean }>();
+    for (const em of discoveredServerEmojis) {
+      if (em?.id && !map.has(em.id)) {
+        map.set(em.id, {
+          icon: em.emoji || "✨",
+          label: `${em.emoji || "✨"} ${em.isFree ? "Free Icon" : "Premium"} (${em.id.slice(-4)})`,
+          id: em.id,
+          isFree: em.isFree,
+        });
+      }
+    }
+    for (const p of PREMIUM_EMOJI_PRESETS) {
+      if (!map.has(p.id)) {
+        map.set(p.id, p);
+      }
+    }
+    return Array.from(map.values());
+  })();
+
   const getPresetEmojiById = (emojiId?: string) => {
     if (!emojiId) return null;
+    const foundServer = discoveredServerEmojis.find((e) => e.id === emojiId);
+    if (foundServer) {
+      return {
+        icon: foundServer.emoji || "✨",
+        label: `${foundServer.emoji || "✨"} (${emojiId.slice(-4)})`,
+        id: emojiId,
+      };
+    }
     return PREMIUM_EMOJI_PRESETS.find((p) => p.id === emojiId) || {
       icon: "✨",
       label: `پرمیوم (${emojiId.slice(-4)})`,
@@ -793,37 +842,74 @@ export function ButtonCustomizer({
               type="button"
               onClick={handleSyncRealTelegramEmojis}
               disabled={syncingEmojis}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50"
             >
               {syncingEmojis ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              <span>همگام‌سازی و ست کردن ایموجی‌های واقعی از تلگرام</span>
+              <span>دریافت آیکون‌های Free Topic و پرمیوم از تلگرام</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleTestLiveEmojiInTelegram}
+              disabled={testingLiveEmoji}
+              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              title="ارسال پیام تست به تلگرام مالک و بررسی مستقیم پاسخ سرور تلگرام (result.reply_markup)"
+            >
+              {testingLiveEmoji ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              <span>🧪 تست زنده ایموجی دکمه در تلگرام</span>
             </button>
           </div>
         </div>
 
+        {liveTestResult && (
+          <div
+            className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
+              liveTestResult.telegramReturnedEmojiOnButton
+                ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-200"
+                : "bg-amber-950/50 border-amber-500/50 text-amber-200"
+            }`}
+          >
+            <div className="font-black flex items-center justify-between">
+              <span>📊 نتیجه تست مستقیم سرور تلگرام (بررسی فیلد icon_custom_emoji_id روی دکمه):</span>
+              <span className="font-mono text-[10px]">
+                {liveTestResult.telegramReturnedEmojiOnButton ? "ACTIVE ✅" : "STRIPPED BY TELEGRAM ⚠️"}
+              </span>
+            </div>
+            <p className="leading-relaxed">{liveTestResult.diagnosis}</p>
+          </div>
+        )}
+
         {discoveredServerEmojis.length > 0 && (
           <div className="pt-2 border-t border-slate-800/70 space-y-1.5">
             <div className="text-[11px] text-slate-400 font-semibold">
-              ایموجی‌های پرمیوم تأییدشده توسط سرور تلگرام (کلیک کنید تا کپی شود):
+              ایموجی‌های تأییدشده توسط سرور تلگرام — شامل <span className="text-emerald-300">Free Topic Icons (free=true)</span> و <span className="text-purple-300">emojiGroupPremium</span> (کلیک برای کپی شناسه):
             </div>
-            <div className="flex items-center gap-1.5 flex-wrap max-h-28 overflow-y-auto">
-              {discoveredServerEmojis.slice(0, 24).map((em) => (
+            <div className="flex items-center gap-1.5 flex-wrap max-h-32 overflow-y-auto">
+              {discoveredServerEmojis.slice(0, 36).map((em) => (
                 <button
                   key={em.id}
                   type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(em.id);
-                    showToast("success", `شناسه ایموجی پرمیوم (${em.id}) کپی شد!`);
+                    showToast("success", `شناسه ایموجی (${em.id}) کپی شد!`);
                   }}
-                  className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-purple-950/60 border border-slate-800 hover:border-purple-500/50 text-[11px] text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
-                  title={`کپی شناسه ${em.id}`}
+                  className={`px-2.5 py-1 rounded-lg border text-[11px] flex items-center gap-1.5 transition-all cursor-pointer ${
+                    em.isFree
+                      ? "bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-500/40 text-emerald-200"
+                      : "bg-slate-950 hover:bg-purple-950/60 border-slate-800 hover:border-purple-500/50 text-slate-200"
+                  }`}
+                  title={`کپی شناسه ${em.id} (${em.isFree ? "documentAttributeCustomEmoji.free = true" : "Premium"})`}
                 >
                   <span className="text-sm">{em.emoji || "✨"}</span>
-                  <span className="font-mono text-[10px] text-purple-300">{em.id.slice(-6)}</span>
+                  <span className="font-mono text-[10px] opacity-85">{em.id.slice(-6)}</span>
                 </button>
               ))}
             </div>
@@ -1220,8 +1306,8 @@ export function ButtonCustomizer({
                                 بستن ✕
                               </button>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-                              {PREMIUM_EMOJI_PRESETS.map((pe) => (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 max-h-36 overflow-y-auto">
+                              {allAvailableEmojiPresets.map((pe) => (
                                 <button
                                   key={pe.id}
                                   type="button"
@@ -1558,7 +1644,7 @@ export function ButtonCustomizer({
                   یا یکی از ایموجی‌های پرمیوم متحرک آماده زیر را با ۱ کلیک انتخاب کنید:
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1 max-h-40 overflow-y-auto pr-1">
-                  {PREMIUM_EMOJI_PRESETS.map((pe) => (
+                  {allAvailableEmojiPresets.map((pe) => (
                     <button
                       key={pe.id}
                       type="button"

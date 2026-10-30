@@ -575,22 +575,53 @@ export function defaultStoreData(): StoreData {
   };
 }
 
+const KNOWN_FAKE_CUSTOM_EMOJI_IDS = new Set<string>([
+  "5368324170671202288",
+  "5445284980978621387",
+  "5456140674028019486",
+  "5424972470023104089",
+  "5357315181649076022",
+  "5206607081334906820",
+  "5438496463044752972",
+  "5373098009640836781",
+  "5379748062124056162",
+  "5309958691854754293",
+  "5382194935057372936",
+  "5359523920993066759",
+  "5397782960512444700",
+  "5231200819986047254",
+  "5406745015365943482",
+  "5458603043203327669",
+]);
+
 export class StoreBotManager {
   private data: StoreData;
   private pollingActive = false;
   private lastUpdateId = 0;
   private pollAbortController?: AbortController;
-  private validCustomEmojiCache: Set<string> = new Set(["5368324170671202286"]);
-  private invalidCustomEmojiCache: Set<string> = new Set(["5368324170671202288"]);
+  private customEmojisInitialSyncDone = false;
+  private customEmojisSyncPromise: Promise<any> | null = null;
+  // "5312536423581202898" is an official Telegram Forum Topic Icon sticker where documentAttributeCustomEmoji.free = true
+  // "5368324170671202286" is Telegram's official Bot API documented custom emoji ID from RestrictedEmoji
+  private validCustomEmojiCache: Set<string> = new Set([
+    "5312536423581202898",
+    "5368324170671202286",
+  ]);
+  private invalidCustomEmojiCache: Set<string> = new Set(KNOWN_FAKE_CUSTOM_EMOJI_IDS);
   private emojiToRealCustomIdMap: Map<string, string> = new Map();
-  private discoveredCustomEmojiList: Array<{ id: string; emoji: string; setName?: string }> = [
-    { id: "5368324170671202286", emoji: "🔥", setName: "TelegramOfficial" },
+  private freeTopicIconEmojiList: Array<{ id: string; emoji: string; setName?: string; isFree?: boolean }> = [
+    { id: "5312536423581202898", emoji: "🔥", setName: "FreeTopicIcons", isFree: true },
+  ];
+  private discoveredCustomEmojiList: Array<{ id: string; emoji: string; setName?: string; isFree?: boolean }> = [
+    { id: "5312536423581202898", emoji: "🔥", setName: "FreeTopicIcons (free=true)", isFree: true },
+    { id: "5368324170671202286", emoji: "🔥", setName: "RestrictedEmoji (Premium)", isFree: false },
   ];
   private lastEmojiStatus: {
     ok: boolean;
     reason?: "active" | "owner_premium_required" | "invalid_id_replaced" | "unknown";
     description?: string;
     updatedAt?: string;
+    telegramReturnedEmojiInMarkup?: boolean;
   } = { ok: true, reason: "active" };
   private userSessions: Map<
     number | string,
@@ -671,9 +702,11 @@ export class StoreBotManager {
           Array.isArray(parsed.settings?.customButtons) && parsed.settings.customButtons.length > 0
             ? parsed.settings.customButtons.map((b: StoreCustomButton) => {
                 const matchedDef = defaultBtns.find((d) => d.id === b.id || d.action === b.action);
-                let cleanEmojiId = b.customEmojiId ? String(b.customEmojiId).trim() : matchedDef?.customEmojiId || "5368324170671202286";
-                if (cleanEmojiId === "5368324170671202288") {
-                  cleanEmojiId = "5368324170671202286";
+                let cleanEmojiId = b.customEmojiId
+                  ? String(b.customEmojiId).trim()
+                  : matchedDef?.customEmojiId || "5312536423581202898";
+                if (KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(cleanEmojiId) || !/^\d{15,22}$/.test(cleanEmojiId)) {
+                  cleanEmojiId = "5312536423581202898";
                 }
                 return {
                   ...b,
@@ -849,10 +882,10 @@ export class StoreBotManager {
       const parsed = new URL(url);
       if (parsed.protocol !== "https:") return false;
       const host = parsed.hostname.toLowerCase();
-      if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0") return false;
-      if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return false;
+      if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host.endsWith(".local")) return false;
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) return false;
       if (parsed.port && parsed.port !== "443") return false;
-      return host.includes(".");
+      return host.includes(".") && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host);
     } catch {
       return false;
     }
@@ -863,8 +896,11 @@ export class StoreBotManager {
       const parsed = new URL(url);
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
       const host = parsed.hostname.toLowerCase();
-      if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0") return false;
-      return host.includes(".");
+      if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host.endsWith(".local")) return false;
+      // Telegram Bot API rejects raw IPv4/IPv6 addresses and non-standard ports (like :3000) in InlineKeyboardButton URLs with BUTTON_URL_INVALID!
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) return false;
+      if (parsed.port && parsed.port !== "80" && parsed.port !== "443") return false;
+      return host.includes(".") && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host);
     } catch {
       return false;
     }
@@ -933,31 +969,52 @@ export class StoreBotManager {
     return "primary";
   }
 
-  private resolveValidCustomEmojiId(rawEmojiId?: string, buttonText?: string): string | undefined {
-    if (!rawEmojiId) return undefined;
-    let emojiId = String(rawEmojiId).trim();
-    if (!/^\d{15,22}$/.test(emojiId)) return undefined;
-    if (emojiId === "5368324170671202288") {
-      emojiId = "5368324170671202286";
+  private pickBestVerifiedEmojiForText(buttonText?: string, fallbackSeed = 0): string {
+    const text = String(buttonText || "");
+    if (text) {
+      for (const [uni, realId] of this.emojiToRealCustomIdMap.entries()) {
+        if (uni && text.includes(uni)) {
+          return realId;
+        }
+      }
     }
+    if (this.freeTopicIconEmojiList.length > 0) {
+      const idx = Math.abs(fallbackSeed) % this.freeTopicIconEmojiList.length;
+      return this.freeTopicIconEmojiList[idx].id;
+    }
+    if (this.discoveredCustomEmojiList.length > 0) {
+      const idx = Math.abs(fallbackSeed) % this.discoveredCustomEmojiList.length;
+      return this.discoveredCustomEmojiList[idx].id;
+    }
+    return "5312536423581202898";
+  }
+
+  private resolveValidCustomEmojiId(rawEmojiId?: string, buttonText?: string, fallbackIndex = 0): string {
+    const emojiId = rawEmojiId ? String(rawEmojiId).trim() : "";
+    const hashSeed =
+      (emojiId || String(buttonText || "")).split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) + fallbackIndex;
+
+    if (
+      !emojiId ||
+      !/^\d{15,22}$/.test(emojiId) ||
+      KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(emojiId) ||
+      this.invalidCustomEmojiCache.has(emojiId)
+    ) {
+      return this.pickBestVerifiedEmojiForText(buttonText, hashSeed);
+    }
+
     if (this.validCustomEmojiCache.has(emojiId)) {
-      return emojiId;
-    }
-    if (this.invalidCustomEmojiCache.has(emojiId)) {
-      // Try matching by Unicode emoji inside buttonText
-      if (buttonText) {
+      // If the user hasn't picked a specific custom emoji and it's just the generic default, try matching their button's Unicode emoji to a real Free Topic Icon!
+      if ((emojiId === "5368324170671202286" || emojiId === "5312536423581202898") && buttonText) {
         for (const [uni, realId] of this.emojiToRealCustomIdMap.entries()) {
           if (uni && buttonText.includes(uni)) {
             return realId;
           }
         }
       }
-      if (this.discoveredCustomEmojiList.length > 0) {
-        const hash = emojiId.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-        return this.discoveredCustomEmojiList[hash % this.discoveredCustomEmojiList.length].id;
-      }
-      return "5368324170671202286";
+      return emojiId;
     }
+
     return emojiId;
   }
 
@@ -965,14 +1022,34 @@ export class StoreBotManager {
     return {
       status: this.lastEmojiStatus,
       validCount: this.validCustomEmojiCache.size,
-      discoveredEmojis: this.discoveredCustomEmojiList.slice(0, 40),
+      freeCount: this.freeTopicIconEmojiList.length,
+      discoveredEmojis: this.discoveredCustomEmojiList.slice(0, 60),
     };
+  }
+
+  private async ensureCustomEmojisLoaded(): Promise<void> {
+    if (this.customEmojisInitialSyncDone || !this.data.settings.botToken) return;
+    if (this.customEmojisSyncPromise) {
+      await this.customEmojisSyncPromise.catch(() => {});
+      return;
+    }
+    this.customEmojisSyncPromise = this.syncRealTelegramCustomEmojis()
+      .then((res) => {
+        this.customEmojisInitialSyncDone = true;
+        return res;
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.customEmojisSyncPromise = null;
+      });
+    await this.customEmojisSyncPromise;
   }
 
   public async syncRealTelegramCustomEmojis(packUrlOrName?: string): Promise<{
     syncedCount: number;
+    freeIconsCount: number;
     packName?: string;
-    discoveredEmojis: Array<{ id: string; emoji: string; setName?: string }>;
+    discoveredEmojis: Array<{ id: string; emoji: string; setName?: string; isFree?: boolean }>;
     customButtons: StoreCustomButton[];
     emojiStatus: any;
   }> {
@@ -983,7 +1060,50 @@ export class StoreBotManager {
 
     const baseUrl = `https://api.telegram.org/bot${token}`;
     const setNamesToFetch = new Set<string>();
+    let primaryPackName = "";
 
+    // STEP 0: Fetch Telegram's official Free Forum Topic Icon Stickers (`getForumTopicIconStickers`)
+    // In Telegram's TL-schema, these stickers have `documentAttributeCustomEmoji.free = true` (as opposed to emojiGroupPremium where free is not set)!
+    try {
+      const topicRes = await fetch(`${baseUrl}/getForumTopicIconStickers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      const topicJson: any = await topicRes.json();
+      if (topicJson.ok && Array.isArray(topicJson.result) && topicJson.result.length > 0) {
+        primaryPackName = "Telegram Free Topic Icons (free=true)";
+        for (const st of topicJson.result) {
+          if (st.custom_emoji_id) {
+            const cid = String(st.custom_emoji_id).trim();
+            const em = st.emoji || "✨";
+            this.validCustomEmojiCache.add(cid);
+            this.invalidCustomEmojiCache.delete(cid);
+            if (em && !this.emojiToRealCustomIdMap.has(em)) {
+              this.emojiToRealCustomIdMap.set(em, cid);
+            }
+            if (!this.freeTopicIconEmojiList.some((x) => x.id === cid)) {
+              this.freeTopicIconEmojiList.push({
+                id: cid,
+                emoji: em,
+                setName: st.set_name || "FreeTopicIcons",
+                isFree: true,
+              });
+            }
+            if (!this.discoveredCustomEmojiList.some((x) => x.id === cid)) {
+              this.discoveredCustomEmojiList.push({
+                id: cid,
+                emoji: em,
+                setName: st.set_name || "FreeTopicIcons (free=true)",
+                isFree: true,
+              });
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // STEP 1: Check if user passed a custom pack link, name, or 19-digit custom emoji ID
     if (packUrlOrName && packUrlOrName.trim()) {
       const raw = packUrlOrName.trim();
       const match = raw.match(/(?:t\.me\/addemoji\/|t\.me\/addstickers\/)([a-zA-Z0-9_]+)/i);
@@ -992,25 +1112,27 @@ export class StoreBotManager {
       } else if (/^[a-zA-Z0-9_]+$/.test(raw) && !/^\d+$/.test(raw)) {
         setNamesToFetch.add(raw);
       } else if (/^\d{15,22}$/.test(raw)) {
-        // User entered a 19-digit custom emoji ID directly
         try {
           const r = await fetch(`${baseUrl}/getCustomEmojiStickers`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ custom_emoji_ids: [raw] }),
+            signal: AbortSignal.timeout(8000),
           });
           const j: any = await r.json();
           if (j.ok && Array.isArray(j.result) && j.result.length > 0) {
             for (const st of j.result) {
               if (st.custom_emoji_id) {
-                this.validCustomEmojiCache.add(String(st.custom_emoji_id));
-                this.invalidCustomEmojiCache.delete(String(st.custom_emoji_id));
-                if (st.emoji) this.emojiToRealCustomIdMap.set(st.emoji, String(st.custom_emoji_id));
-                if (!this.discoveredCustomEmojiList.some((x) => x.id === String(st.custom_emoji_id))) {
+                const cid = String(st.custom_emoji_id);
+                this.validCustomEmojiCache.add(cid);
+                this.invalidCustomEmojiCache.delete(cid);
+                if (st.emoji) this.emojiToRealCustomIdMap.set(st.emoji, cid);
+                if (!this.discoveredCustomEmojiList.some((x) => x.id === cid)) {
                   this.discoveredCustomEmojiList.unshift({
-                    id: String(st.custom_emoji_id),
+                    id: cid,
                     emoji: st.emoji || "✨",
-                    setName: st.set_name,
+                    setName: st.set_name || "CustomEmoji",
+                    isFree: false,
                   });
                 }
                 if (st.set_name) setNamesToFetch.add(st.set_name);
@@ -1021,12 +1143,13 @@ export class StoreBotManager {
       }
     }
 
-    // 1. Query Telegram's documented valid custom emoji ID (5368324170671202286) to discover its official sticker set name
+    // STEP 2: Query Telegram's documented custom emoji IDs ("5312536423581202898" & "5368324170671202286")
     try {
       const seedRes = await fetch(`${baseUrl}/getCustomEmojiStickers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ custom_emoji_ids: ["5368324170671202286"] }),
+        body: JSON.stringify({ custom_emoji_ids: ["5312536423581202898", "5368324170671202286"] }),
+        signal: AbortSignal.timeout(8000),
       });
       const seedJson: any = await seedRes.json();
       if (seedJson.ok && Array.isArray(seedJson.result)) {
@@ -1034,21 +1157,24 @@ export class StoreBotManager {
           if (st.custom_emoji_id) {
             const cid = String(st.custom_emoji_id);
             this.validCustomEmojiCache.add(cid);
-            if (st.emoji) this.emojiToRealCustomIdMap.set(st.emoji, cid);
+            this.invalidCustomEmojiCache.delete(cid);
+            if (st.emoji && !this.emojiToRealCustomIdMap.has(st.emoji)) {
+              this.emojiToRealCustomIdMap.set(st.emoji, cid);
+            }
             if (st.set_name) setNamesToFetch.add(st.set_name);
           }
         }
       }
     } catch (_) {}
 
-    // 2. Fetch all custom emojis from discovered sticker sets
-    let primaryPackName = "";
+    // STEP 3: Fetch stickers from discovered sticker sets (e.g. RestrictedEmoji)
     for (const setName of setNamesToFetch) {
       try {
         const setRes = await fetch(`${baseUrl}/getStickerSet`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: setName }),
+          signal: AbortSignal.timeout(8000),
         });
         const setJson: any = await setRes.json();
         if (setJson.ok && setJson.result && Array.isArray(setJson.result.stickers)) {
@@ -1066,6 +1192,7 @@ export class StoreBotManager {
                   id: cid,
                   emoji: st.emoji || "✨",
                   setName: setJson.result.name || setName,
+                  isFree: false,
                 });
               }
             }
@@ -1074,13 +1201,13 @@ export class StoreBotManager {
       } catch (_) {}
     }
 
-    // 3. Validate all existing customEmojiIds on buttons & categories individually or in batch
+    // STEP 4: Validate all existing customEmojiIds on buttons in batch
     const buttons = this.data.settings.customButtons || [];
     const candidateIds = Array.from(
       new Set(
         buttons
           .map((b) => (b.customEmojiId ? String(b.customEmojiId).trim() : ""))
-          .filter((id) => /^\d{15,22}$/.test(id))
+          .filter((id) => /^\d{15,22}$/.test(id) && !KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(id))
       )
     );
 
@@ -1091,9 +1218,15 @@ export class StoreBotManager {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ custom_emoji_ids: [cid] }),
+          signal: AbortSignal.timeout(6000),
         });
         const checkJson: any = await checkRes.json();
-        if (checkJson.ok && Array.isArray(checkJson.result) && checkJson.result.length > 0 && checkJson.result[0]?.custom_emoji_id) {
+        if (
+          checkJson.ok &&
+          Array.isArray(checkJson.result) &&
+          checkJson.result.length > 0 &&
+          checkJson.result[0]?.custom_emoji_id
+        ) {
           this.validCustomEmojiCache.add(cid);
           this.invalidCustomEmojiCache.delete(cid);
           const st = checkJson.result[0];
@@ -1102,6 +1235,7 @@ export class StoreBotManager {
               id: cid,
               emoji: st.emoji || "✨",
               setName: st.set_name,
+              isFree: false,
             });
           }
         } else {
@@ -1112,18 +1246,22 @@ export class StoreBotManager {
       }
     }
 
-    // 4. Update customButtons so every button has a 100% real, Telegram-verified custom_emoji_id
-    const verifiedList = this.discoveredCustomEmojiList.length > 0
-      ? this.discoveredCustomEmojiList
-      : [{ id: "5368324170671202286", emoji: "🔥" }];
+    // STEP 5: Update customButtons so every button has a 100% real, Telegram-verified custom_emoji_id
+    // Preferring `freeTopicIconEmojiList` (`documentAttributeCustomEmoji.free = true`) matched to each button's emoji!
+    const preferredPool =
+      this.freeTopicIconEmojiList.length > 0
+        ? this.freeTopicIconEmojiList
+        : this.discoveredCustomEmojiList.length > 0
+        ? this.discoveredCustomEmojiList
+        : [{ id: "5312536423581202898", emoji: "🔥", isFree: true }];
 
     let updatedAny = false;
     this.data.settings.customButtons = buttons.map((btn, idx) => {
       const currentId = btn.customEmojiId ? String(btn.customEmojiId).trim() : "";
-      if (currentId && this.validCustomEmojiCache.has(currentId)) {
+      const isGenericDefault = currentId === "5368324170671202286" || currentId === "5312536423581202898";
+      if (currentId && this.validCustomEmojiCache.has(currentId) && !KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(currentId) && !isGenericDefault) {
         return btn;
       }
-      // Try matching by emoji in button text first
       let replacementId = "";
       for (const [uni, realId] of this.emojiToRealCustomIdMap.entries()) {
         if (uni && btn.text && btn.text.includes(uni)) {
@@ -1132,14 +1270,18 @@ export class StoreBotManager {
         }
       }
       if (!replacementId) {
-        replacementId = verifiedList[idx % verifiedList.length].id;
+        replacementId = preferredPool[idx % preferredPool.length].id;
       }
-      updatedAny = true;
+      if (replacementId !== currentId) {
+        updatedAny = true;
+      }
       return {
         ...btn,
         customEmojiId: replacementId,
       };
     });
+
+    this.customEmojisInitialSyncDone = true;
 
     if (updatedAny) {
       this.saveData();
@@ -1148,8 +1290,9 @@ export class StoreBotManager {
 
     return {
       syncedCount: this.validCustomEmojiCache.size,
+      freeIconsCount: this.freeTopicIconEmojiList.length,
       packName: primaryPackName || undefined,
-      discoveredEmojis: this.discoveredCustomEmojiList.slice(0, 48),
+      discoveredEmojis: this.discoveredCustomEmojiList.slice(0, 60),
       customButtons: this.data.settings.customButtons || [],
       emojiStatus: this.lastEmojiStatus,
     };
@@ -1159,21 +1302,40 @@ export class StoreBotManager {
     if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
     const copy = JSON.parse(JSON.stringify(replyMarkup));
 
+    let btnCounter = 0;
     if (Array.isArray(copy.inline_keyboard)) {
       copy.inline_keyboard = copy.inline_keyboard.map((row: any[]) =>
         Array.isArray(row)
           ? row.map((btn: any) => {
               if (!btn || typeof btn !== "object") return btn;
               const cleaned: any = { ...btn };
-              cleaned.style = this.inferButtonStyleFromTextOrData(cleaned);
-              if (cleaned.icon_custom_emoji_id) {
-                const resolved = this.resolveValidCustomEmojiId(cleaned.icon_custom_emoji_id, cleaned.text);
-                if (resolved) {
-                  cleaned.icon_custom_emoji_id = resolved;
-                } else {
-                  delete cleaned.icon_custom_emoji_id;
+              btnCounter++;
+
+              // Prevent BUTTON_URL_INVALID on raw IP / localhost / port URLs BEFORE sending to Telegram!
+              if (cleaned.web_app?.url && !this.isSafeTelegramWebAppUrl(cleaned.web_app.url)) {
+                delete cleaned.web_app;
+                if (!cleaned.callback_data && !cleaned.url) {
+                  cleaned.callback_data = "admin_webpanel_link";
                 }
               }
+              if (cleaned.url && !this.isSafeTelegramInlineUrl(cleaned.url)) {
+                delete cleaned.url;
+                if (!cleaned.callback_data) {
+                  cleaned.callback_data = "admin_webpanel_link";
+                }
+              }
+
+              // Skip pay buttons if they don't support extra fields
+              if (cleaned.pay) {
+                return cleaned;
+              }
+
+              cleaned.style = this.inferButtonStyleFromTextOrData(cleaned);
+              cleaned.icon_custom_emoji_id = this.resolveValidCustomEmojiId(
+                cleaned.icon_custom_emoji_id,
+                cleaned.text,
+                btnCounter
+              );
               return cleaned;
             })
           : row
@@ -1193,16 +1355,14 @@ export class StoreBotManager {
       copy.keyboard = copy.keyboard.map((row: any[]) =>
         Array.isArray(row)
           ? row.map((btn: any) => {
+              btnCounter++;
               const btnObj = typeof btn === "string" ? { text: btn } : { ...(btn || {}) };
               btnObj.style = this.inferButtonStyleFromTextOrData(btnObj);
-              if (btnObj.icon_custom_emoji_id) {
-                const resolved = this.resolveValidCustomEmojiId(btnObj.icon_custom_emoji_id, btnObj.text);
-                if (resolved) {
-                  btnObj.icon_custom_emoji_id = resolved;
-                } else {
-                  delete btnObj.icon_custom_emoji_id;
-                }
-              }
+              btnObj.icon_custom_emoji_id = this.resolveValidCustomEmojiId(
+                btnObj.icon_custom_emoji_id,
+                btnObj.text,
+                btnCounter
+              );
               return btnObj;
             })
           : row
@@ -1212,7 +1372,7 @@ export class StoreBotManager {
     return copy;
   }
 
-  private replaceCustomEmojisWithFallbackId(replyMarkup: any, fallbackEmojiId = "5368324170671202286"): any {
+  private convertUnsafeUrlButtonsOnly(replyMarkup: any): any {
     if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
     const copy = JSON.parse(JSON.stringify(replyMarkup));
     if (Array.isArray(copy.inline_keyboard)) {
@@ -1220,10 +1380,43 @@ export class StoreBotManager {
         Array.isArray(row)
           ? row.map((btn: any) => {
               if (!btn || typeof btn !== "object") return btn;
-              if (btn.icon_custom_emoji_id) {
-                return { ...btn, icon_custom_emoji_id: fallbackEmojiId };
+              const { web_app, url, ...rest } = btn;
+              if (web_app || url) {
+                return {
+                  ...rest,
+                  text: rest.text || "🌐 پنل مدیریت تحت وب",
+                  callback_data: rest.callback_data || "admin_webpanel_link",
+                };
               }
-              return btn;
+              return rest;
+            })
+          : row
+      );
+    }
+    return copy;
+  }
+
+  private replaceCustomEmojisWithFallbackId(replyMarkup: any, fallbackEmojiId = "5312536423581202898"): any {
+    if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
+    const copy = JSON.parse(JSON.stringify(replyMarkup));
+    if (Array.isArray(copy.inline_keyboard)) {
+      copy.inline_keyboard = copy.inline_keyboard.map((row: any[]) =>
+        Array.isArray(row)
+          ? row.map((btn: any) => {
+              if (!btn || typeof btn !== "object") return btn;
+              const { web_app, url, ...rest } = btn;
+              const safeBtn =
+                web_app || url
+                  ? {
+                      ...rest,
+                      text: rest.text || "🌐 پنل مدیریت تحت وب",
+                      callback_data: rest.callback_data || "admin_webpanel_link",
+                    }
+                  : { ...btn };
+              if (safeBtn.icon_custom_emoji_id) {
+                safeBtn.icon_custom_emoji_id = fallbackEmojiId;
+              }
+              return safeBtn;
             })
           : row
       );
@@ -1250,7 +1443,14 @@ export class StoreBotManager {
       copy.inline_keyboard = copy.inline_keyboard.map((row: any[]) =>
         Array.isArray(row)
           ? row.map((btn: any) => {
-              const { icon_custom_emoji_id, ...rest } = btn || {};
+              const { icon_custom_emoji_id, web_app, url, ...rest } = btn || {};
+              if (web_app || url) {
+                return {
+                  ...rest,
+                  text: rest.text || "🌐 پنل مدیریت تحت وب",
+                  callback_data: rest.callback_data || "admin_webpanel_link",
+                };
+              }
               return rest;
             })
           : row
@@ -1340,6 +1540,10 @@ export class StoreBotManager {
     const token = this.data.settings.botToken;
     if (!token) throw new Error("توکن ربات تلگرام تنظیم نشده است.");
 
+    if (body?.reply_markup && !this.customEmojisInitialSyncDone) {
+      await this.ensureCustomEmojisLoaded();
+    }
+
     const preparedBody = body ? { ...body } : undefined;
     if (preparedBody?.reply_markup) {
       preparedBody.reply_markup = this.sanitizeReplyMarkupForTelegram(preparedBody.reply_markup);
@@ -1362,7 +1566,44 @@ export class StoreBotManager {
       console.warn(`[STORE BOT API] ${method} warning:`, desc);
 
       if (preparedBody?.reply_markup) {
-        // Step 0: If a custom emoji ID in the keyboard was invalid, replace with Telegram's guaranteed valid ID (5368324170671202286) BEFORE stripping custom emojis!
+        // Step 0A: Convert any URL/WebApp buttons to callback_data FIRST while preserving ALL `style` & `icon_custom_emoji_id`!
+        const retryBodyUrlFixed = {
+          ...preparedBody,
+          reply_markup: this.convertUnsafeUrlButtonsOnly(preparedBody.reply_markup),
+        };
+        const retryResUrlFixed = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(retryBodyUrlFixed),
+        });
+        const retryJsonUrlFixed: any = await retryResUrlFixed.json();
+        if (retryJsonUrlFixed.ok) {
+          return retryJsonUrlFixed.result;
+        }
+
+        // Step 0B: Replace custom emoji IDs with Telegram's Free Topic Icon ID ("5312536423581202898" where documentAttributeCustomEmoji.free = true)
+        const retryBodyFreeIcon = {
+          ...preparedBody,
+          reply_markup: this.replaceCustomEmojisWithFallbackId(preparedBody.reply_markup, "5312536423581202898"),
+        };
+        const retryResFreeIcon = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(retryBodyFreeIcon),
+        });
+        const retryJsonFreeIcon: any = await retryResFreeIcon.json();
+        if (retryJsonFreeIcon.ok) {
+          this.lastEmojiStatus = {
+            ok: true,
+            reason: "invalid_id_replaced",
+            description: "شناسه‌های قبلی با ایموجی رسمی تلگرام (Free Topic Icon) جایگزین شدند.",
+            updatedAt: new Date().toISOString(),
+          };
+          this.syncRealTelegramCustomEmojis().catch(() => {});
+          return retryJsonFreeIcon.result;
+        }
+
+        // Step 0C: Replace with Telegram's documented RestrictedEmoji ID ("5368324170671202286")
         const retryBody0 = {
           ...preparedBody,
           reply_markup: this.replaceCustomEmojisWithFallbackId(preparedBody.reply_markup, "5368324170671202286"),
@@ -1380,12 +1621,11 @@ export class StoreBotManager {
             description: "برخی شناسه‌های ایموجی نامعتبر با شناسه رسمی تلگرام جایگزین شدند.",
             updatedAt: new Date().toISOString(),
           };
-          // Trigger background sync so all customButtons get real IDs from the official pack
           this.syncRealTelegramCustomEmojis().catch(() => {});
           return retryJson0.result;
         }
 
-        // Step 1: Strip custom emoji only (keep colored styles & web_app intact)
+        // Step 1: Strip custom emoji only (keep colored Aiogram styles intact!)
         const retryBody1 = {
           ...preparedBody,
           reply_markup: this.stripCustomEmojiOnly(preparedBody.reply_markup),
@@ -1397,14 +1637,13 @@ export class StoreBotManager {
         });
         const retryJson1: any = await retryRes1.json();
         if (retryJson1.ok) {
-          if (descLower.includes("custom_emoji") || descLower.includes("emoji") || descLower.includes("document_invalid") || descLower.includes("button_icon")) {
-            this.lastEmojiStatus = {
-              ok: false,
-              reason: "owner_premium_required",
-              description: desc,
-              updatedAt: new Date().toISOString(),
-            };
-          }
+          this.lastEmojiStatus = {
+            ok: false,
+            reason: "owner_premium_required",
+            description: desc,
+            updatedAt: new Date().toISOString(),
+            telegramReturnedEmojiInMarkup: false,
+          };
           return retryJson1.result;
         }
 
@@ -1455,14 +1694,166 @@ export class StoreBotManager {
     }
 
     if (preparedBody?.reply_markup && JSON.stringify(preparedBody.reply_markup).includes("icon_custom_emoji_id")) {
-      this.lastEmojiStatus = {
-        ok: true,
-        reason: "active",
-        updatedAt: new Date().toISOString(),
-      };
+      const sentInline = Array.isArray(preparedBody.reply_markup.inline_keyboard);
+      const returnedMarkupStr = JSON.stringify(json.result?.reply_markup || {});
+      const returnedHasEmoji = returnedMarkupStr.includes("icon_custom_emoji_id");
+
+      if (sentInline && json.result?.reply_markup && !returnedHasEmoji) {
+        this.lastEmojiStatus = {
+          ok: false,
+          reason: "owner_premium_required",
+          description:
+            "سرور تلگرام دکمه را با موفقیت تحویل گرفت، اما چون اکانت سازنده این ربات در @BotFather اشتراک فعال Telegram Premium ندارد، تلگرام فیلد icon_custom_emoji_id روی دکمه را نادیده گرفت.",
+          updatedAt: new Date().toISOString(),
+          telegramReturnedEmojiInMarkup: false,
+        };
+      } else {
+        this.lastEmojiStatus = {
+          ok: true,
+          reason: "active",
+          updatedAt: new Date().toISOString(),
+          telegramReturnedEmojiInMarkup: true,
+        };
+      }
     }
 
     return json.result;
+  }
+
+  public async testLiveButtonCustomEmoji(targetChatId?: string | number): Promise<{
+    success: boolean;
+    chatId: string;
+    freeIconIdUsed: string;
+    premiumIconIdUsed: string;
+    httpOk: boolean;
+    telegramReturnedEmojiOnButton: boolean;
+    telegramErrorDescription?: string;
+    rawReturnedReplyMarkup?: any;
+    diagnosis: string;
+  }> {
+    const token = this.data.settings.botToken;
+    if (!token) {
+      throw new Error("ابتدا توکن ربات فروشگاهی را در تنظیمات وارد و ذخیره نمایید.");
+    }
+    await this.ensureCustomEmojisLoaded();
+
+    const ownerRaw = String(targetChatId || this.data.settings.ownerTelegramId || "").trim();
+    const firstOwnerId = ownerRaw.split(/[,،\s]+/).map((s) => s.trim()).filter(Boolean)[0];
+    const fallbackCustomer = this.data.customers[0]?.userId ? String(this.data.customers[0].userId) : "";
+    const chatId = firstOwnerId || fallbackCustomer;
+    if (!chatId) {
+      throw new Error("ابتدا آیدی عددی مالک را وارد کنید یا یک بار در تلگرام به ربات /start بدهید.");
+    }
+
+    const freeIconId = this.freeTopicIconEmojiList[0]?.id || "5312536423581202898";
+    const premiumIconId = "5368324170671202286";
+
+    const testMarkup = {
+      inline_keyboard: [
+        [
+          {
+            text: "🔥 دکمه تست Free Topic Icon (free=true)",
+            callback_data: "main_menu",
+            style: "success",
+            icon_custom_emoji_id: freeIconId,
+          },
+        ],
+        [
+          {
+            text: "👑 دکمه تست Premium Emoji (emojiGroupPremium)",
+            callback_data: "admin_menu",
+            style: "danger",
+            icon_custom_emoji_id: premiumIconId,
+          },
+        ],
+      ],
+    };
+
+    const testText =
+      `🧪 <b>تست زنده ایموجی متحرک تلگرام (Custom Emoji & Button Icon)</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `۱. ایموجی متحرک داخل متن پیام (HTML <code>&lt;tg-emoji&gt;</code>):\n` +
+      `• آیکون Free Topic (<code>${freeIconId}</code>): <tg-emoji emoji-id="${freeIconId}">🔥</tg-emoji>\n` +
+      `• آیکون Premium (<code>${premiumIconId}</code>): <tg-emoji emoji-id="${premiumIconId}">🔥</tg-emoji>\n\n` +
+      `۲. ایموجی متحرک روی دکمه‌های شیشه‌ای زیر (<code>icon_custom_emoji_id</code>):\n` +
+      `👇 اگر در پاسخ سرور تلگرام فیلد <code>icon_custom_emoji_id</code> حفظ شده باشد، کنار دکمه‌های زیر آیکون متحرک نمایش داده می‌شود:`;
+
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: testText,
+        parse_mode: "HTML",
+        reply_markup: testMarkup,
+      }),
+    });
+    const json: any = await res.json();
+
+    if (!json.ok) {
+      // Send fallback so user still sees the test message in Telegram
+      await this.sendMessage(chatId, testText, {
+        parse_mode: "HTML",
+        reply_markup: testMarkup,
+      }).catch(() => {});
+
+      const errDesc = String(json.description || "Unknown Telegram Error");
+      this.lastEmojiStatus = {
+        ok: false,
+        reason: "owner_premium_required",
+        description: errDesc,
+        updatedAt: new Date().toISOString(),
+        telegramReturnedEmojiInMarkup: false,
+      };
+
+      return {
+        success: false,
+        chatId,
+        freeIconIdUsed: freeIconId,
+        premiumIconIdUsed: premiumIconId,
+        httpOk: false,
+        telegramReturnedEmojiOnButton: false,
+        telegramErrorDescription: errDesc,
+        diagnosis: `سرور تلگرام خطای مستقیم زیر را برگرداند: «${errDesc}». طبق قوانین Bot API تلگرام، برای قرار دادن icon_custom_emoji_id روی دکمه، اکانت تلگرام سازنده ربات در @BotFather باید اشتراک فعال Telegram Premium داشته باشد.`,
+      };
+    }
+
+    const returnedMarkup = json.result?.reply_markup;
+    const returnedStr = JSON.stringify(returnedMarkup || {});
+    const hasIconInResponse = returnedStr.includes("icon_custom_emoji_id");
+
+    if (hasIconInResponse) {
+      this.lastEmojiStatus = {
+        ok: true,
+        reason: "active",
+        description: "تلگرام فیلد icon_custom_emoji_id را روی دکمه‌ها تأیید و رندر کرد!",
+        updatedAt: new Date().toISOString(),
+        telegramReturnedEmojiInMarkup: true,
+      };
+    } else {
+      this.lastEmojiStatus = {
+        ok: false,
+        reason: "owner_premium_required",
+        description:
+          "پیام با موفقیت ارسال شد، اما سرور تلگرام فیلد icon_custom_emoji_id را از خروجی reply_markup حذف کرد (اکانت مالک ربات در @BotFather فاقد اشتراک Telegram Premium است).",
+        updatedAt: new Date().toISOString(),
+        telegramReturnedEmojiInMarkup: false,
+      };
+    }
+
+    return {
+      success: true,
+      chatId,
+      freeIconIdUsed: freeIconId,
+      premiumIconIdUsed: premiumIconId,
+      httpOk: true,
+      telegramReturnedEmojiOnButton: hasIconInResponse,
+      rawReturnedReplyMarkup: returnedMarkup,
+      diagnosis: hasIconInResponse
+        ? "✅ عالی! سرور تلگرام فیلد icon_custom_emoji_id را روی دکمه‌ها تأیید کرد و در خروجی پیام برگرداند. هم‌اکنون در تلگرام کنار دکمه‌ها ایموجی متحرک فعال است!"
+        : "⚠️ پیام تست به تلگرام ارسال شد، اما در پاسخ برگشتی سرور تلگرام (result.reply_markup)، تلگرام فیلد icon_custom_emoji_id را حذف کرده است! دلیل فنی در هسته تلگرام: اکانتی که توکن این ربات را در @BotFather ساخته است اشتراک Telegram Premium فعال ندارد (یا در @BotFather متعلق به اکانت بدون پرمیوم است).",
+    };
   }
 
   public async testBotToken(tokenToTest?: string): Promise<{
@@ -1934,7 +2325,7 @@ export class StoreBotManager {
             text: "👑 پنل مدیریت",
             callback_data: "admin_menu",
             style: "danger",
-            icon_custom_emoji_id: "5368324170671202286",
+            icon_custom_emoji_id: "5312536423581202898",
           },
           ...(canWebApp
             ? [
@@ -1942,7 +2333,7 @@ export class StoreBotManager {
                   text: "🌐 پنل مدیریت تحت وب",
                   web_app: { url: webPanelUrl },
                   style: "primary",
-                  icon_custom_emoji_id: "5368324170671202286",
+                  icon_custom_emoji_id: "5312536423581202898",
                 },
               ]
             : canInlineUrl
@@ -1951,10 +2342,17 @@ export class StoreBotManager {
                   text: "🌐 پنل مدیریت تحت وب",
                   url: webPanelUrl,
                   style: "primary",
-                  icon_custom_emoji_id: "5368324170671202286",
+                  icon_custom_emoji_id: "5312536423581202898",
                 },
               ]
-            : []),
+            : [
+                {
+                  text: "🌐 پنل مدیریت تحت وب",
+                  callback_data: "admin_webpanel_link",
+                  style: "primary",
+                  icon_custom_emoji_id: "5312536423581202898",
+                },
+              ]),
         ]);
       }
 
@@ -2063,7 +2461,7 @@ export class StoreBotManager {
           text: "👑 پنل مدیریت",
           callback_data: "admin_menu",
           style: "danger",
-          icon_custom_emoji_id: "5368324170671202286",
+          icon_custom_emoji_id: "5312536423581202898",
         },
         ...(canWebApp
           ? [
@@ -2071,7 +2469,7 @@ export class StoreBotManager {
                 text: "🌐 پنل مدیریت تحت وب",
                 web_app: { url: webPanelUrl },
                 style: "primary",
-                icon_custom_emoji_id: "5368324170671202286",
+                icon_custom_emoji_id: "5312536423581202898",
               },
             ]
           : canInlineUrl
@@ -2080,10 +2478,17 @@ export class StoreBotManager {
                 text: "🌐 پنل مدیریت تحت وب",
                 url: webPanelUrl,
                 style: "primary",
-                icon_custom_emoji_id: "5368324170671202286",
+                icon_custom_emoji_id: "5312536423581202898",
               },
             ]
-          : []),
+          : [
+              {
+                text: "🌐 پنل مدیریت تحت وب",
+                callback_data: "admin_webpanel_link",
+                style: "primary",
+                icon_custom_emoji_id: "5312536423581202898",
+              },
+            ]),
       ]);
     }
 
@@ -3083,7 +3488,7 @@ export class StoreBotManager {
               text: "📱 باز کردن پنل تحت وب در تلگرام (WebApp)",
               web_app: { url: directWebUrl },
               style: "success",
-              icon_custom_emoji_id: "5357315181649076022",
+              icon_custom_emoji_id: "5312536423581202898",
             },
           ]);
         }
@@ -3093,7 +3498,7 @@ export class StoreBotManager {
               text: "🌐 باز کردن مستقیم پنل تحت وب در مرورگر",
               url: directWebUrl,
               style: "primary",
-              icon_custom_emoji_id: "5368324170671202286",
+              icon_custom_emoji_id: "5312536423581202898",
             },
           ]);
         }
@@ -3386,10 +3791,16 @@ export class StoreBotManager {
   }
 
   public async sendMainMenu(chatId: number | string) {
-    const welcome =
+    await this.ensureCustomEmojisLoaded();
+    const rawWelcome =
       this.data.settings.messages?.welcome ||
       (this.data.settings.messages as any)?.welcomeHeader ||
       this.data.settings.welcomeText;
+    const headerIconId = this.freeTopicIconEmojiList[0]?.id || "5312536423581202898";
+    const welcome = rawWelcome.includes("<tg-emoji")
+      ? rawWelcome
+      : `<tg-emoji emoji-id="${headerIconId}">🔥</tg-emoji> ${rawWelcome}`;
+
     const customer = this.data.customers.find((c) => String(c.userId) === String(chatId));
     let mode = this.data.settings.keyboardMode || "hybrid";
 
@@ -3407,10 +3818,14 @@ export class StoreBotManager {
 
     // Always send/refresh the colored ReplyKeyboardMarkup (bottom KeyboardButtons with Aiogram styles)
     // AND send the colored InlineKeyboardMarkup so both keyboards are colored!
-    await this.sendMessage(chatId, "⌨️ <b>منوی دکمه‌های رنگی ربات (Aiogram) بروزرسانی و فعال شد:</b>", {
-      reply_markup: this.getReplyKeyboardMarkup(chatId),
-      parse_mode: "HTML",
-    }).catch(() => {});
+    await this.sendMessage(
+      chatId,
+      `<tg-emoji emoji-id="${headerIconId}">⌨️</tg-emoji> <b>منوی دکمه‌های رنگی ربات (Aiogram) بروزرسانی و فعال شد:</b>`,
+      {
+        reply_markup: this.getReplyKeyboardMarkup(chatId),
+        parse_mode: "HTML",
+      }
+    ).catch(() => {});
 
     await this.sendMessage(chatId, welcome, {
       reply_markup: this.getInlineKeyboardMenu(chatId),
