@@ -78,7 +78,8 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export const PREMIUM_EMOJI_PRESETS = [
-  { icon: "💎", label: "💎 الماس پرمیوم", id: "5368324170671202288" },
+  { icon: "🔥", label: "🔥 ایموجی پرمیوم رسمی تلگرام (تأییدشده)", id: "5368324170671202286" },
+  { icon: "💎", label: "💎 الماس پرمیوم", id: "5368324170671202286" },
   { icon: "🚀", label: "🚀 موشک نئونی", id: "5445284980978621387" },
   { icon: "⚡", label: "⚡ صاعقه طلایی", id: "5456140674028019486" },
   { icon: "🔥", label: "🔥 آتش متحرک", id: "5424972470023104089" },
@@ -114,6 +115,16 @@ export function ButtonCustomizer({
   );
   const [quickEmojiPickerBtnId, setQuickEmojiPickerBtnId] = useState<string | null>(null);
   const [previewAdminOpen, setPreviewAdminOpen] = useState(false);
+  const [syncingEmojis, setSyncingEmojis] = useState(false);
+  const [packUrlInput, setPackUrlInput] = useState("");
+  const [discoveredServerEmojis, setDiscoveredServerEmojis] = useState<
+    Array<{ id: string; emoji: string; setName?: string }>
+  >([]);
+  const [emojiStatus, setEmojiStatus] = useState<{
+    ok: boolean;
+    reason?: string;
+    description?: string;
+  } | null>(null);
 
   // Settings state
   const [keyboardMode, setKeyboardMode] = useState<StoreKeyboardMode>(
@@ -166,7 +177,34 @@ export function ButtonCustomizer({
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => {
         if (json?.webPanelUrl) {
-          setWebPanelUrl(json.webPanelUrl);
+          let url = String(json.webPanelUrl);
+          if (
+            typeof window !== "undefined" &&
+            (url.includes("localhost") || url.includes("127.0.0.1")) &&
+            !window.location.origin.includes("localhost")
+          ) {
+            try {
+              const parsed = new URL(url);
+              url = `${window.location.origin}${parsed.pathname}${parsed.search}`;
+            } catch (_) {
+              url = `${window.location.origin}/?portal=store-admin`;
+            }
+          }
+          setWebPanelUrl(url);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/store-bot/custom-emoji-status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.success) {
+          if (Array.isArray(json.discoveredEmojis)) {
+            setDiscoveredServerEmojis(json.discoveredEmojis);
+          }
+          if (json.status) {
+            setEmojiStatus(json.status);
+          }
         }
       })
       .catch(() => {});
@@ -192,7 +230,7 @@ export function ButtonCustomizer({
     setBtnTargetCat(categories[0]?.id || "self");
     setBtnTargetUrl("");
     setBtnStyle("success");
-    setBtnCustomEmojiId("5368324170671202288");
+    setBtnCustomEmojiId("5368324170671202286");
     const maxRow = customButtons.reduce((max, b) => Math.max(max, b.rowIndex || 0), 0);
     setBtnRow(customButtons.length > 0 ? maxRow + 1 : 0);
     setBtnCol(0);
@@ -238,32 +276,51 @@ export function ButtonCustomizer({
     );
   };
 
+  const handleSyncRealTelegramEmojis = async () => {
+    setSyncingEmojis(true);
+    try {
+      const res = await fetch("/api/store-bot/sync-custom-emojis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packUrlOrName: packUrlInput.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) {
+        throw new Error(json.message || "خطا در همگام‌سازی ایموجی‌های پرمیوم از تلگرام");
+      }
+      if (Array.isArray(json.customButtons)) {
+        setCustomButtons(json.customButtons);
+      }
+      if (Array.isArray(json.discoveredEmojis)) {
+        setDiscoveredServerEmojis(json.discoveredEmojis);
+      }
+      if (json.emojiStatus) {
+        setEmojiStatus(json.emojiStatus);
+      }
+      showToast(
+        "success",
+        json.message || "ایموجی‌های پرمیوم واقعی از سرور تلگرام دریافت و روی دکمه‌ها تنظیم شدند!"
+      );
+      onRefresh();
+    } catch (err: any) {
+      showToast("error", err.message);
+    } finally {
+      setSyncingEmojis(false);
+    }
+  };
+
   const handleAutoAssignPremiumEmojisToAll = async () => {
-    const actionEmojiMap: Record<string, string> = {
-      buy_category: "5368324170671202288", // 💎
-      manage_self_tabchi: "5456140674028019486", // ⚡
-      setup_personal_bot: "5309958691854754293", // 🤖
-      spambot_checker: "5379748062124056162", // 🛡️
-      my_account: "5357315181649076022", // 👑
-      my_orders: "5397782960512444700", // 🛍️
-      discount_coupon: "5373098009640836781", // 🎁
-      support: "5458603043203327669", // 🔔
-      help: "5438496463044752972", // 🌟
-      rules: "5206607081334906820", // ✅
-      custom_url: "5445284980978621387", // 🚀
-    };
-    const nextList = customButtons.map((b, idx) => {
-      let picked = actionEmojiMap[b.action] || PREMIUM_EMOJI_PRESETS[idx % PREMIUM_EMOJI_PRESETS.length].id;
-      if (b.targetCategoryId === "tabchi") picked = "5445284980978621387";
-      if (b.targetCategoryId === "combo") picked = "5357315181649076022";
-      return {
-        ...b,
-        customEmojiId: picked,
-      };
-    });
+    const verifiedPool =
+      discoveredServerEmojis.length > 0
+        ? discoveredServerEmojis.map((x) => x.id)
+        : ["5368324170671202286"];
+    const nextList = customButtons.map((b, idx) => ({
+      ...b,
+      customEmojiId: verifiedPool[idx % verifiedPool.length] || "5368324170671202286",
+    }));
     await persistButtonsImmediately(
       nextList,
-      "✨ ایموجی‌های پرمیوم متحرک تلگرام به صورت هوشمند روی تمام دکمه‌های ربات ست شدند!"
+      "✨ شناسه‌های معتبر ایموجی پرمیوم تلگرام روی تمام دکمه‌های ربات ست شدند!"
     );
   };
 
@@ -679,6 +736,101 @@ export function ButtonCustomizer({
         </div>
       </div>
 
+      {/* Telegram Premium Custom Emoji Sync & Owner Premium Requirement Card */}
+      <div className="bg-gradient-to-r from-purple-950/40 via-slate-900/90 to-cyan-950/40 border border-purple-500/40 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0 shadow-lg shadow-purple-500/10">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-sm sm:text-base font-black text-white">
+                  همگام‌سازی ایموجی‌های پرمیوم تلگرام روی دکمه‌ها (icon_custom_emoji_id)
+                </h4>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-200 border border-purple-500/40">
+                  {discoveredServerEmojis.length > 0
+                    ? `${discoveredServerEmojis.length} ایموجی رسمی تأییدشده`
+                    : "آماده همگام‌سازی از سرور تلگرام"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                <strong className="text-amber-300">نکته مهم قوانین تلگرام:</strong> طبق محدودیت رسمی Bot API تلگرام، برای نمایش ایموجی‌های پرمیوم متحرک روی دکمه‌های شیشه‌ای و کیبوردی،{" "}
+                <strong className="text-white underline decoration-amber-400">
+                  اکانت تلگرامی که توکن ربات را در @BotFather ساخته است (مالک ربات) باید اشتراک تلگرام پرمیوم (Telegram Premium) فعال داشته باشد
+                </strong>{" "}
+                و شناسه ۱۹ رقمی ایموجی نیز باید در سرور تلگرام معتبر باشد.
+              </p>
+              <p className="text-[11px] text-cyan-300 leading-relaxed">
+                💡 <strong>ترفند سریع:</strong> همچنین می‌توانید هر ایموجی پرمیوم دلخواهی را مستقیماً در تلگرام برای ربات بفرستید؛ ربات خودکار کد ۱۹ رقمی واقعی آن را استخراج کرده و با ۱ کلیک روی دکمه دلخواه شما ست می‌کند!
+              </p>
+            </div>
+          </div>
+
+          {emojiStatus && emojiStatus.reason === "owner_premium_required" && (
+            <div className="px-3.5 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs max-w-md">
+              ⚠️ تلگرام اعلام کرد اکانت سازنده این ربات در @BotFather فاقد اشتراک Telegram Premium است؛ بنابراین تلگرام دکمه‌ها را با رنگ Aiogram نمایش می‌دهد اما ایموجی متحرک داخل دکمه را مخفی می‌کند.
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 pt-2 border-t border-slate-800/80 items-end">
+          <div className="lg:col-span-7">
+            <label className="block text-xs font-bold text-purple-200 mb-1.5">
+              لینک پک ایموجی پرمیوم تلگرام (اختیاری - مثال: https://t.me/addemoji/RestrictedEmoji):
+            </label>
+            <input
+              type="text"
+              value={packUrlInput}
+              onChange={(e) => setPackUrlInput(e.target.value)}
+              placeholder="لینک پک t.me/addemoji/... یا نام پک یا شناسه ۱۹ رقمی (خالی بگذارید = پک رسمی تلگرام)"
+              dir="ltr"
+              className="w-full bg-slate-950 border border-purple-500/40 rounded-xl px-3.5 py-2.5 text-xs font-mono text-purple-200 focus:border-purple-400 outline-none"
+            />
+          </div>
+          <div className="lg:col-span-5 flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleSyncRealTelegramEmojis}
+              disabled={syncingEmojis}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+            >
+              {syncingEmojis ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              <span>همگام‌سازی و ست کردن ایموجی‌های واقعی از تلگرام</span>
+            </button>
+          </div>
+        </div>
+
+        {discoveredServerEmojis.length > 0 && (
+          <div className="pt-2 border-t border-slate-800/70 space-y-1.5">
+            <div className="text-[11px] text-slate-400 font-semibold">
+              ایموجی‌های پرمیوم تأییدشده توسط سرور تلگرام (کلیک کنید تا کپی شود):
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap max-h-28 overflow-y-auto">
+              {discoveredServerEmojis.slice(0, 24).map((em) => (
+                <button
+                  key={em.id}
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(em.id);
+                    showToast("success", `شناسه ایموجی پرمیوم (${em.id}) کپی شد!`);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-purple-950/60 border border-slate-800 hover:border-purple-500/50 text-[11px] text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                  title={`کپی شناسه ${em.id}`}
+                >
+                  <span className="text-sm">{em.emoji || "✨"}</span>
+                  <span className="font-mono text-[10px] text-purple-300">{em.id.slice(-6)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Settings Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Keyboards Configuration & Live Telegram Preview */}
@@ -848,10 +1000,19 @@ export function ButtonCustomizer({
                       {row.map((b) => {
                         const st = AIOGRAM_STYLES.find((s) => s.id === b.style) || AIOGRAM_STYLES[2];
                         const pe = getPresetEmojiById(b.customEmojiId);
+                        const isAdminBtn = b.text && b.text.includes("پنل مدیریت");
                         return (
-                          <div
+                          <button
                             key={b.id}
-                            className={`px-2.5 py-2 rounded-lg text-[11px] font-bold border text-center truncate flex items-center justify-center gap-1 shadow-sm ${st.bg}`}
+                            type="button"
+                            onClick={() => {
+                              if (isAdminBtn) {
+                                setPreviewAdminOpen(true);
+                              } else {
+                                showToast("success", `پیش‌نمایش کلیک روی دکمه: «${b.text}»`);
+                              }
+                            }}
+                            className={`px-2.5 py-2 rounded-lg text-[11px] font-bold border text-center truncate flex items-center justify-center gap-1 shadow-sm cursor-pointer transition-all active:scale-95 ${st.bg}`}
                             title={`${b.text} ${pe ? `• ایموجی پرمیوم: ${pe.id}` : ""}`}
                           >
                             {pe ? (
@@ -862,7 +1023,7 @@ export function ButtonCustomizer({
                               <span>{st.indicator}</span>
                             )}
                             <span className="truncate">{b.text}</span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -892,18 +1053,37 @@ export function ButtonCustomizer({
                       <span>👑 پنل اختصاصی مدیریت ربات فروشگاه</span>
                     </div>
                     <p className="text-slate-300 text-[10px] leading-relaxed">
-                      مالک محترم ({ownerIdInput.trim() || "Admin"}) خوش آمدید! برای مدیریت کامل دکمه‌ها، پکیج‌ها، سفارشات و درگاه‌ها روی دکمه پنل تحت وب زیر بزنید:
+                      مالک محترم ({ownerIdInput.trim() || "Admin"}) خوش آمدید! لینک مستقیم پنل تحت وب مدیریت ربات آماده است:
                     </p>
+                    <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 font-mono text-[10px] text-cyan-300 break-all" dir="ltr">
+                      {webPanelUrl}
+                    </div>
                   </div>
-                  <a
-                    href={webPanelUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-2.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs border border-emerald-400 flex items-center justify-center gap-1.5 shadow-md"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>🌐 باز کردن پنل تحت وب مدیریت ربات</span>
-                  </a>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    <a
+                      href={webPanelUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => {
+                        showToast("success", "پنل تحت وب مدیریت ربات آماده است (شما هم‌اکنون در پنل تحت وب حضور دارید).");
+                      }}
+                      className="w-full py-2.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs border border-emerald-400 flex items-center justify-center gap-1.5 shadow-md"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>🌐 باز کردن پنل تحت وب مدیریت ربات</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(webPanelUrl);
+                        showToast("success", "لینک مستقیم ورود ۱-کلیکی پنل مدیریت تحت وب کپی شد!");
+                      }}
+                      className="w-full py-2 px-3 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 font-bold text-[11px] border border-cyan-500/40 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>کپی لینک مستقیم پنل تحت وب</span>
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setPreviewAdminOpen(false)}

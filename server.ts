@@ -204,6 +204,20 @@ async function startServer() {
     const host = (req.headers["x-forwarded-host"] as string) || req.headers.host;
     if (host && !host.includes("localhost") && !host.includes("127.0.0.1") && !host.includes("0.0.0.0")) {
       telegramManager.setDetectedAppUrl(`${proto}://${host}`);
+    } else {
+      const originOrRef = (req.headers.origin as string) || (req.headers.referer as string) || "";
+      if (originOrRef.startsWith("http")) {
+        try {
+          const parsedOrigin = new URL(originOrRef).origin;
+          if (
+            !parsedOrigin.includes("localhost") &&
+            !parsedOrigin.includes("127.0.0.1") &&
+            !parsedOrigin.includes("0.0.0.0")
+          ) {
+            telegramManager.setDetectedAppUrl(parsedOrigin);
+          }
+        } catch (_) {}
+      }
     }
     next();
   });
@@ -1328,6 +1342,29 @@ async function startServer() {
         success: true,
         customButtons: defaults,
         message: "تمامی دکمه‌های ربات فروشگاهی به حالت پیش‌فرض و استاندارد بازگردانی شدند.",
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/store-bot/custom-emoji-status", (_req, res) => {
+    try {
+      const info = storeBotManager.getCustomEmojiStatus();
+      return res.json({ success: true, ...info });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/sync-custom-emojis", async (req, res) => {
+    try {
+      const { packUrlOrName } = req.body || {};
+      const result = await storeBotManager.syncRealTelegramCustomEmojis(packUrlOrName);
+      return res.json({
+        success: true,
+        ...result,
+        message: `همگام‌سازی انجام شد! ${result.syncedCount} ایموجی پرمیوم معتبر از سرور تلگرام استخراج و روی دکمه‌های ربات تنظیم گردید.`,
       });
     } catch (err: any) {
       return res.status(400).json({ success: false, message: err.message });

@@ -168,6 +168,7 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
   // Simulator state
   const [simStep, setSimStep] = useState<
     | "menu"
+    | "admin_panel"
     | "category"
     | "plan_details"
     | "card_pay"
@@ -2987,56 +2988,91 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                         ? "grid-cols-3"
                         : "grid-cols-2";
 
-                    const buttonsList = [
-                      {
-                        label: buttonLabels.buySelf || "خرید اکانت سلف",
-                        icon: themeObj.selfIcon,
-                        color: themeObj.selfColor,
-                        action: () => {
-                          setSimCategory("self");
-                          setSimStep("category");
-                        },
-                      },
-                      {
-                        label: buttonLabels.buyTabchi || "خرید اکانت تبچی",
-                        icon: themeObj.tabchiIcon,
-                        color: themeObj.tabchiColor,
-                        action: () => {
-                          setSimCategory("tabchi");
-                          setSimStep("category");
-                        },
-                      },
-                      {
-                        label: buttonLabels.buyCombo || "پکیج VIP ترکیبی",
-                        icon: themeObj.comboIcon,
-                        color: themeObj.comboColor,
-                        action: () => {
-                          setSimCategory("combo");
-                          setSimStep("category");
-                        },
-                      },
-                      {
-                        label: buttonLabels.plansCatalog || "تمام تعرفه‌ها",
-                        icon: themeObj.catalogIcon,
-                        color: themeObj.catalogColor,
-                        action: () => {
-                          setSimCategory("self");
-                          setSimStep("category");
-                        },
-                      },
-                      {
-                        label: buttonLabels.myAccount || "حساب کاربری",
-                        icon: themeObj.accountIcon,
-                        color: themeObj.catalogColor,
-                        action: () => setSimStep("menu"),
-                      },
-                      {
-                        label: buttonLabels.myOrders || "پیگیری سفارشات",
-                        icon: themeObj.ordersIcon,
-                        color: themeObj.selfColor,
-                        action: () => setSimStep("menu"),
-                      },
-                    ];
+                    const activeCustomBtns = (settings?.customButtons || []).filter((b) => b.isActive !== false);
+                    const styleColorClass = (st?: string) =>
+                      st === "success"
+                        ? "bg-emerald-600/85 hover:bg-emerald-500 text-white border-emerald-400/60"
+                        : st === "danger"
+                        ? "bg-rose-600/85 hover:bg-rose-500 text-white border-rose-400/60"
+                        : "bg-blue-600/85 hover:bg-blue-500 text-white border-blue-400/60";
+
+                    const buttonsList =
+                      activeCustomBtns.length > 0
+                        ? [...activeCustomBtns]
+                            .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.columnIndex || 0) - (b.columnIndex || 0))
+                            .map((cb) => ({
+                              label: cb.text,
+                              icon: "",
+                              customEmojiId: cb.customEmojiId,
+                              color: styleColorClass(cb.style),
+                              action: () => {
+                                if (cb.action === "buy_category") {
+                                  setSimCategory((cb.targetCategoryId as any) || "self");
+                                  setSimStep("category");
+                                } else if (cb.action === "help") {
+                                  setSimCategory("self");
+                                  setSimStep("category");
+                                } else {
+                                  setSimStep("menu");
+                                }
+                              },
+                            }))
+                        : [
+                            {
+                              label: buttonLabels.buySelf || "خرید اکانت سلف",
+                              icon: themeObj.selfIcon,
+                              customEmojiId: "5368324170671202286",
+                              color: themeObj.selfColor,
+                              action: () => {
+                                setSimCategory("self");
+                                setSimStep("category");
+                              },
+                            },
+                            {
+                              label: buttonLabels.buyTabchi || "خرید اکانت تبچی",
+                              icon: themeObj.tabchiIcon,
+                              customEmojiId: "5368324170671202286",
+                              color: themeObj.tabchiColor,
+                              action: () => {
+                                setSimCategory("tabchi");
+                                setSimStep("category");
+                              },
+                            },
+                            {
+                              label: buttonLabels.buyCombo || "پکیج VIP ترکیبی",
+                              icon: themeObj.comboIcon,
+                              customEmojiId: "5368324170671202286",
+                              color: themeObj.comboColor,
+                              action: () => {
+                                setSimCategory("combo");
+                                setSimStep("category");
+                              },
+                            },
+                            {
+                              label: buttonLabels.plansCatalog || "تمام تعرفه‌ها",
+                              icon: themeObj.catalogIcon,
+                              customEmojiId: "5368324170671202286",
+                              color: themeObj.catalogColor,
+                              action: () => {
+                                setSimCategory("self");
+                                setSimStep("category");
+                              },
+                            },
+                            {
+                              label: buttonLabels.myAccount || "حساب کاربری",
+                              icon: themeObj.accountIcon,
+                              customEmojiId: "5368324170671202286",
+                              color: themeObj.catalogColor,
+                              action: () => setSimStep("menu"),
+                            },
+                            {
+                              label: buttonLabels.myOrders || "پیگیری سفارشات",
+                              icon: themeObj.ordersIcon,
+                              customEmojiId: "5368324170671202286",
+                              color: themeObj.selfColor,
+                              action: () => setSimStep("menu"),
+                            },
+                          ];
 
                     return (
                       <div className="space-y-1.5 pt-2 border-t border-slate-800">
@@ -3045,11 +3081,35 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                             <button
                               key={idx}
                               onClick={btn.action}
-                              className={`px-2.5 py-2 rounded-xl font-bold text-[11px] border transition-all text-center truncate ${btn.color}`}
+                              className={`px-2.5 py-2 rounded-xl font-bold text-[11px] border transition-all flex items-center justify-center gap-1.5 truncate cursor-pointer ${btn.color}`}
                             >
-                              {btn.icon} {btn.label}
+                              {btn.customEmojiId && (
+                                <span
+                                  className="inline-flex items-center px-1 py-0.5 rounded bg-amber-400/25 border border-amber-300/60 text-[9px] text-amber-200 animate-pulse shrink-0"
+                                  title={`Telegram Custom Emoji ID: ${btn.customEmojiId}`}
+                                >
+                                  ✨
+                                </span>
+                              )}
+                              <span className="truncate">
+                                {btn.icon ? `${btn.icon} ` : ""}
+                                {btn.label}
+                              </span>
                             </button>
                           ))}
+                        </div>
+
+                        {/* Owner Admin Panel Button in Inline Menu */}
+                        <div className="pt-1">
+                          <button
+                            onClick={() => setSimStep("admin_panel")}
+                            className="w-full py-2 px-3 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white font-black text-[11px] border border-rose-400/70 transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                          >
+                            <span className="inline-flex items-center px-1 py-0.5 rounded bg-amber-400/25 border border-amber-300/60 text-[9px] text-amber-200 animate-pulse">
+                              ✨
+                            </span>
+                            <span>👑 پنل مدیریت (مخصوص مالک ربات)</span>
+                          </button>
                         </div>
 
                         {/* Customer Switch Button in Inline Menu */}
@@ -3075,6 +3135,72 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                   })()}
                 </div>
               </div>
+
+              {/* Step: Admin Panel in Simulator */}
+              {simStep === "admin_panel" && (
+                <div className="flex justify-start animate-in fade-in">
+                  <div className="max-w-[95%] bg-slate-900 border border-amber-500/50 rounded-2xl rounded-tl-none p-4 space-y-3 shadow-xl text-xs">
+                    <div className="font-black text-amber-300 text-sm flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <span>👑 پنل اختصاصی مدیریت ربات فروشگاه</span>
+                    </div>
+                    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-1.5 text-[11px] text-slate-300">
+                      <div>• کل مشتریان ثبت‌شده: <strong className="text-white">{customers.length} نفر</strong></div>
+                      <div>• سفارشات در انتظار بررسی: <strong className="text-amber-300">{pendingOrders.length} سفارش ⏳</strong></div>
+                      <div>• کل سفارشات تأیید شده: <strong className="text-emerald-400">{orders.filter((o) => o.status === "approved").length} عدد ✅</strong></div>
+                      <div>• تعرفه‌ها و پلن‌های فعال: <strong className="text-cyan-300">{plans.filter((p) => p.isActive).length} پلن</strong></div>
+                    </div>
+                    <div className="space-y-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSubTab("overview");
+                          showToast("success", "پنل تحت وب مدیریت ربات باز شد!");
+                        }}
+                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs border border-emerald-400 flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                      >
+                        <span>🌐 باز کردن پنل تحت وب مدیریت ربات (داشبورد کامل)</span>
+                      </button>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubTab("orders")}
+                          className="py-2 px-2.5 rounded-xl bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer"
+                        >
+                          ⏳ سفارشات ({pendingOrders.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubTab("plans")}
+                          className="py-2 px-2.5 rounded-xl bg-blue-600/80 hover:bg-blue-500 text-white font-bold text-[11px] cursor-pointer"
+                        >
+                          📦 مدیریت پلن‌ها
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubTab("buttons")}
+                          className="py-2 px-2.5 rounded-xl bg-amber-600/80 hover:bg-amber-500 text-white font-bold text-[11px] cursor-pointer"
+                        >
+                          ✨ دکمه‌ها و ایموجی پرمیوم
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubTab("payments")}
+                          className="py-2 px-2.5 rounded-xl bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold text-[11px] cursor-pointer"
+                        >
+                          💳 درگاه و ولت‌ها
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSimStep("menu")}
+                        className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs cursor-pointer"
+                      >
+                        🏠 بازگشت به منوی اصلی فروشگاه
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Step: Category plans */}
               {simStep === "category" && (
@@ -3454,53 +3580,85 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                   ? "grid-cols-3"
                   : "grid-cols-2";
 
-              const replyButtonsList = [
-                {
-                  label: buttonLabels.buySelf || "خرید سلف",
-                  icon: themeObj.selfIcon,
-                  color: themeObj.selfColor,
-                  action: () => {
-                    setSimCategory("self");
-                    setSimStep("category");
-                  },
-                },
-                {
-                  label: buttonLabels.buyTabchi || "خرید تبچی",
-                  icon: themeObj.tabchiIcon,
-                  color: themeObj.tabchiColor,
-                  action: () => {
-                    setSimCategory("tabchi");
-                    setSimStep("category");
-                  },
-                },
-                {
-                  label: buttonLabels.buyCombo || "پکیج VIP",
-                  icon: themeObj.comboIcon,
-                  color: themeObj.comboColor,
-                  action: () => {
-                    setSimCategory("combo");
-                    setSimStep("category");
-                  },
-                },
-                {
-                  label: buttonLabels.plansCatalog || "تعرفه‌ها",
-                  icon: themeObj.catalogIcon,
-                  color: themeObj.catalogColor,
-                  action: () => setSimStep("menu"),
-                },
-                {
-                  label: buttonLabels.myAccount || "حساب من",
-                  icon: themeObj.accountIcon,
-                  color: themeObj.catalogColor,
-                  action: () => setSimStep("menu"),
-                },
-                {
-                  label: buttonLabels.myOrders || "پیگیری",
-                  icon: themeObj.ordersIcon,
-                  color: themeObj.selfColor,
-                  action: () => setSimStep("menu"),
-                },
-              ];
+              const activeCustomBtns = (settings?.customButtons || []).filter((b) => b.isActive !== false);
+              const styleColorClass = (st?: string) =>
+                st === "success"
+                  ? "bg-emerald-600/85 hover:bg-emerald-500 text-white border-emerald-400/60"
+                  : st === "danger"
+                  ? "bg-rose-600/85 hover:bg-rose-500 text-white border-rose-400/60"
+                  : "bg-blue-600/85 hover:bg-blue-500 text-white border-blue-400/60";
+
+              const replyButtonsList =
+                activeCustomBtns.length > 0
+                  ? [...activeCustomBtns]
+                      .sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0) || (a.columnIndex || 0) - (b.columnIndex || 0))
+                      .map((cb) => ({
+                        label: cb.text,
+                        icon: "",
+                        customEmojiId: cb.customEmojiId,
+                        color: styleColorClass(cb.style),
+                        action: () => {
+                          if (cb.action === "buy_category") {
+                            setSimCategory((cb.targetCategoryId as any) || "self");
+                            setSimStep("category");
+                          } else {
+                            setSimStep("menu");
+                          }
+                        },
+                      }))
+                  : [
+                      {
+                        label: buttonLabels.buySelf || "خرید سلف",
+                        icon: themeObj.selfIcon,
+                        customEmojiId: "5368324170671202286",
+                        color: themeObj.selfColor,
+                        action: () => {
+                          setSimCategory("self");
+                          setSimStep("category");
+                        },
+                      },
+                      {
+                        label: buttonLabels.buyTabchi || "خرید تبچی",
+                        icon: themeObj.tabchiIcon,
+                        customEmojiId: "5368324170671202286",
+                        color: themeObj.tabchiColor,
+                        action: () => {
+                          setSimCategory("tabchi");
+                          setSimStep("category");
+                        },
+                      },
+                      {
+                        label: buttonLabels.buyCombo || "پکیج VIP",
+                        icon: themeObj.comboIcon,
+                        customEmojiId: "5368324170671202286",
+                        color: themeObj.comboColor,
+                        action: () => {
+                          setSimCategory("combo");
+                          setSimStep("category");
+                        },
+                      },
+                      {
+                        label: buttonLabels.plansCatalog || "تعرفه‌ها",
+                        icon: themeObj.catalogIcon,
+                        customEmojiId: "5368324170671202286",
+                        color: themeObj.catalogColor,
+                        action: () => setSimStep("menu"),
+                      },
+                      {
+                        label: buttonLabels.myAccount || "حساب من",
+                        icon: themeObj.accountIcon,
+                        customEmojiId: "5368324170671202286",
+                        color: themeObj.catalogColor,
+                        action: () => setSimStep("menu"),
+                      },
+                      {
+                        label: buttonLabels.myOrders || "پیگیری",
+                        icon: themeObj.ordersIcon,
+                        customEmojiId: "5368324170671202286",
+                        color: themeObj.selfColor,
+                        action: () => setSimStep("menu"),
+                      },
+                    ];
 
               return (
                 <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2 bg-slate-900/60 p-2.5 rounded-2xl">
@@ -3519,12 +3677,35 @@ export function StoreBotModule({ lang, onOpenHelp }: StoreBotModuleProps) {
                       <button
                         key={idx}
                         onClick={btn.action}
-                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all truncate text-center ${btn.color}`}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 truncate cursor-pointer ${btn.color}`}
                       >
-                        {btn.icon} {btn.label}
+                        {btn.customEmojiId && (
+                          <span
+                            className="inline-flex items-center px-1 py-0.5 rounded bg-amber-400/25 border border-amber-300/60 text-[9px] text-amber-200 animate-pulse shrink-0"
+                            title={`Telegram Custom Emoji ID: ${btn.customEmojiId}`}
+                          >
+                            ✨
+                          </span>
+                        )}
+                        <span className="truncate">
+                          {btn.icon ? `${btn.icon} ` : ""}
+                          {btn.label}
+                        </span>
                       </button>
                     ))}
                   </div>
+
+                  {/* Owner Admin Button in Reply Keyboard Simulator */}
+                  <button
+                    type="button"
+                    onClick={() => setSimStep("admin_panel")}
+                    className="w-full py-2 px-3 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-xs font-black text-white border border-rose-400/70 flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                  >
+                    <span className="inline-flex items-center px-1 py-0.5 rounded bg-amber-400/25 border border-amber-300/60 text-[9px] text-amber-200 animate-pulse">
+                      ✨
+                    </span>
+                    <span>👑 پنل مدیریت</span>
+                  </button>
 
                   {/* Switch to inline button for customer in simulator */}
                   {allowCustomerKeyboardSwitch && (
