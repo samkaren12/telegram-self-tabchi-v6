@@ -19,6 +19,7 @@ import {
   Menu,
   Sparkles,
   Clock,
+  Crown,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount, SystemHealth, AuthSession } from "../types";
@@ -31,6 +32,7 @@ interface NavbarProps {
   selectedPhone: string | null;
   onSelectAccount: (phone: string) => void;
   onOpenConnectModal: () => void;
+  onOpenLicenseModal?: () => void;
   systemHealth: SystemHealth | null;
   authSession: AuthSession | null;
   onLogout: () => void;
@@ -50,6 +52,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   selectedPhone,
   onSelectAccount,
   onOpenConnectModal,
+  onOpenLicenseModal,
   systemHealth,
   authSession,
   onLogout,
@@ -249,6 +252,22 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* License & Multi-Account Limit Button */}
+          {onOpenLicenseModal && (
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              type="button"
+              onClick={onOpenLicenseModal}
+              title={lang === "fa" ? "مدیریت لایسنس و سقف ۱۰ اکانت" : "License & Quota"}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500/15 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all cursor-pointer shadow-sm shadow-amber-950/20"
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
+              <span className="hidden lg:inline">{accounts.length}/۱۰ اکانت</span>
+              <span className="lg:hidden">لایسنس</span>
+            </motion.button>
           )}
 
           {/* Connect New Account Button */}

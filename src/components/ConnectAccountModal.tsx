@@ -15,6 +15,10 @@ import {
   Terminal,
   Send,
   HelpCircle,
+  Crown,
+  Sparkles,
+  Unlock,
+  RefreshCw,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
@@ -168,6 +172,63 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // License quota state
+  const [licenseData, setLicenseData] = useState<{
+    status: string;
+    isLicensed: boolean;
+    planTitle: string;
+    currentAccounts: number;
+    freeLimit: number;
+    maxAllowed: number;
+    canConnectMore: boolean;
+    daysRemaining: number;
+  } | null>(null);
+  const [inlineKey, setInlineKey] = useState("");
+  const [activatingKey, setActivatingKey] = useState(false);
+
+  const fetchLicenseStatus = async () => {
+    try {
+      const res = await fetch("/api/license/status");
+      const data = await res.json();
+      if (data.success) {
+        setLicenseData(data);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchLicenseStatus();
+    }
+  }, [isOpen]);
+
+  const handleInlineActivate = async (e?: React.FormEvent, directKey?: string) => {
+    if (e) e.preventDefault();
+    const keyToUse = (directKey || inlineKey).trim();
+    if (!keyToUse) return;
+
+    setActivatingKey(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/license/activate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: keyToUse }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "کلید لایسنس نامعتبر است.");
+      }
+      setSuccessMsg(data.message);
+      setInlineKey("");
+      await fetchLicenseStatus();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActivatingKey(false);
+    }
+  };
+
   // Timer countdown
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -219,6 +280,9 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data.requiresLicense) {
+          await fetchLicenseStatus();
+        }
         throw new Error(data.message || "خطا در ارسال کد تایید.");
       }
 
@@ -415,8 +479,25 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
               <Phone className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-sm sm:text-base">
-                {t.authModal.title}
+              <h3 className="font-bold text-white text-sm sm:text-base flex items-center gap-2">
+                <span>{t.authModal.title}</span>
+                {licenseData && (
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-medium border ${
+                      licenseData.isLicensed
+                        ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                        : licenseData.currentAccounts >= licenseData.freeLimit
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        : "bg-slate-800 text-slate-300 border-slate-700"
+                    }`}
+                  >
+                    {licenseData.isLicensed
+                      ? (lang === "fa" ? "لایسنس ماهانه فعال (نامحدود ♾️)" : "VIP License (Unlimited)")
+                      : (lang === "fa"
+                          ? `ظرفیت: ${licenseData.currentAccounts} از ${licenseData.freeLimit} اکانت رایگان`
+                          : `Quota: ${licenseData.currentAccounts}/${licenseData.freeLimit}`)}
+                  </span>
+                )}
               </h3>
               <p className="text-xs text-slate-400">
                 {step === "phone"
@@ -469,6 +550,57 @@ export const ConnectAccountModal: React.FC<ConnectAccountModalProps> = ({
 
         {/* Body Content */}
         <div className="p-6 overflow-y-auto space-y-4">
+          {/* License Limit Alert & Inline Activation Form */}
+          {licenseData && !licenseData.isLicensed && licenseData.currentAccounts >= licenseData.freeLimit && (
+            <div className="p-4 rounded-xl bg-gradient-to-br from-amber-950/50 via-slate-900 to-slate-950 border border-amber-500/40 text-slate-200 space-y-3 shadow-lg shadow-amber-950/30">
+              <div className="flex items-center gap-2.5 text-amber-400 font-bold text-sm">
+                <Crown className="w-5 h-5 text-amber-400 animate-pulse" />
+                <span>{lang === "fa" ? "سقف ۱۰ اکانت رایگان تکمیل شده است!" : "Free 10-Account Limit Reached!"}</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {lang === "fa"
+                  ? `شما در حال حاضر دارای ${licenseData.currentAccounts} اکانت متصل هستید. جهت اتصال شماره ۱۱ به بعد، نیاز به فعال‌سازی لایسنس ماهانه (اتصال نامحدود) دارید.`
+                  : "You have reached the 10 accounts free limit. To connect more accounts, activate a monthly license."}
+              </p>
+
+              <form onSubmit={handleInlineActivate} className="flex gap-2 pt-1">
+                <input
+                  type="text"
+                  value={inlineKey}
+                  onChange={(e) => setInlineKey(e.target.value.toUpperCase())}
+                  placeholder="SAM-VIP-MONTHLY-..."
+                  className="flex-1 px-3 py-2 bg-slate-950 border border-amber-500/40 rounded-lg text-xs font-mono text-amber-300 uppercase focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="submit"
+                  disabled={activatingKey || !inlineKey.trim()}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg transition flex items-center gap-1.5 shrink-0"
+                >
+                  {activatingKey ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Unlock className="w-3.5 h-3.5" />}
+                  <span>{lang === "fa" ? "فعال‌سازی" : "Activate"}</span>
+                </button>
+              </form>
+
+              <div className="pt-2 border-t border-slate-800 space-y-1.5 text-[11px]">
+                <div className="flex items-center justify-between text-slate-300 font-medium">
+                  <span>تعرفه: ۱ ماهه ۱.۲ تون / ۲۶ ترون</span>
+                  <a
+                    href="https://t.me/samkarendev"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-cyan-400 hover:underline flex items-center gap-1 font-bold"
+                  >
+                    ارسال فیش به @samkarendev
+                  </a>
+                </div>
+                <div className="p-2 rounded bg-slate-950 font-mono text-[10px] text-slate-300 space-y-1 dir-ltr text-right select-all">
+                  <div><span className="text-rose-400 font-bold">TRON:</span> TBgTK3Png5D467cvCnwfA3xdLvUgJbpAfy</div>
+                  <div><span className="text-cyan-400 font-bold">TON:</span> UQAozwWDvLXgp4XWS0t8Z9xYdmN5iJ76anD5XD3y74rdhQP-</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Alerts */}
           {error && (
             <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs sm:text-sm">

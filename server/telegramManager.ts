@@ -33,6 +33,7 @@ import {
 } from "../src/utils/tehranTime.js";
 import { generateAiSecretaryReply } from "./aiSecretary.js";
 import { getSslConfig, getRegisteredDomainConfig } from "./sslManager.js";
+import { licenseManager } from "./licenseManager.js";
 import { mediaDownloader } from "./mediaDownloader.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -1086,6 +1087,19 @@ export class TelegramManager {
     if (cleanPhone.length < 8 || !/^\+[0-9]{7,16}$/.test(cleanPhone)) {
       throw new Error(
         "شماره تلفن وارد شده نامعتبر است. فرمت صحیح مانند: +989123456789 یا +12025550123"
+      );
+    }
+
+    const existingPhones = Array.from(this.accounts.keys());
+    const limitCheck = licenseManager.checkAccountLimit(
+      existingPhones.length,
+      cleanPhone,
+      existingPhones
+    );
+    if (!limitCheck.allowed) {
+      throw new Error(
+        limitCheck.reason ||
+          "ظرفیت ۱۰ اکانت رایگان این سرور تکمیل شده است. جهت اتصال شماره ۱۱ به بعد، مالک سرور باید لایسنس ماهانه را فعال کند."
       );
     }
 

@@ -18,6 +18,7 @@ import {
   KeyRound,
   Lightbulb,
   FilterX,
+  Crown,
 } from "lucide-react";
 import { Language, translations } from "../utils/i18n";
 import { TelegramAccount } from "../types";
@@ -41,6 +42,7 @@ interface AccountsListProps {
   onRefresh: () => void;
   lang: Language;
   onOpenHelp?: (section?: any) => void;
+  onOpenLicenseModal?: () => void;
 }
 
 export const AccountsList: React.FC<AccountsListProps> = ({
@@ -51,6 +53,7 @@ export const AccountsList: React.FC<AccountsListProps> = ({
   onRefresh,
   lang,
   onOpenHelp,
+  onOpenLicenseModal,
 }) => {
   const t = translations[lang];
   const { confirm, toast } = useConfirm();
@@ -344,6 +347,17 @@ export const AccountsList: React.FC<AccountsListProps> = ({
             >
               <Lightbulb className="w-3.5 h-3.5 text-violet-400" />
               <span>راهنمای اتصال</span>
+            </button>
+          )}
+          {onOpenLicenseModal && (
+            <button
+              type="button"
+              onClick={onOpenLicenseModal}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-500/20 hover:from-amber-500/25 hover:to-yellow-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm shadow-amber-950/20"
+              title={lang === "fa" ? "سقف ۱۰ اکانت رایگان / لایسنس ماهانه" : "Account Quota & Monthly License"}
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span>{lang === "fa" ? "لایسنس و سهمیه ۱۰ اکانت" : "License & Quota"}</span>
             </button>
           )}
           <button

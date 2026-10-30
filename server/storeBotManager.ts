@@ -304,6 +304,27 @@ export function defaultStoreData(): StoreData {
       isActive: true,
       orderIndex: 6,
     },
+    {
+      id: "plan-license-multi-monthly",
+      title: "🔑 لایسنس ماهانه اتصال اکانت نامحدود (+۱۰ شماره)",
+      category: "combo",
+      durationDays: 30,
+      isUnlimited: false,
+      priceToman: 199000,
+      priceUsdt: 3.0,
+      description: "رفع سقف ۱۰ اکانت رایگان و اجازه اتصال همزمان بی‌نهایت شماره تلگرام با کلید لایسنس اختصاصی",
+      features: [
+        "مجوز اتصال بیش از ۱۰ اکانت به پنل و سرور",
+        "فعال‌سازی آنی با کلید لایسنس اختصاصی VIP",
+        "۳۰ روز اعتبار کامل با امکان تمدید ماهانه",
+        "سرعت پردازش بالاتر و ترافیک اختصاصی",
+        "پشتیبانی مستقیم و تضمین عدم مسدودی اکانت‌ها",
+      ],
+      badge: "کلید لایسنس VIP 🔑",
+      color: "amber",
+      isActive: true,
+      orderIndex: 7,
+    },
   ];
 
   const defaultPayments: StorePaymentSettings = {

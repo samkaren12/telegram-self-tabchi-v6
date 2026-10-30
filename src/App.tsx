@@ -38,6 +38,7 @@ import { BatchCreatorModule } from "./components/BatchCreatorModule";
 import { DashboardAnalyticsModule } from "./components/DashboardAnalyticsModule";
 import { AuditLogDashboard } from "./components/AuditLogDashboard";
 import { ConnectAccountModal } from "./components/ConnectAccountModal";
+import { LicenseModal } from "./components/LicenseModal";
 import { StartupLockModal } from "./components/StartupLockModal";
 import { ExtendSubscriptionModal } from "./components/ExtendSubscriptionModal";
 import { OwnerPasswordModal } from "./components/OwnerPasswordModal";
@@ -88,6 +89,7 @@ export default function App() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false);
   const [extendModalAccount, setExtendModalAccount] = useState<TelegramAccount | null>(null);
   const [isOwnerPasswordModalOpen, setIsOwnerPasswordModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
@@ -360,6 +362,7 @@ export default function App() {
           selectedPhone={selectedPhone}
           onSelectAccount={setSelectedPhone}
           onOpenConnectModal={() => setIsConnectModalOpen(true)}
+          onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
           systemHealth={systemHealth}
           authSession={authSession}
           onLogout={handleLogout}
@@ -451,6 +454,7 @@ export default function App() {
                 selectedPhone={selectedPhone}
                 onSelectAccount={setSelectedPhone}
                 onOpenConnectModal={() => setIsConnectModalOpen(true)}
+                onOpenLicenseModal={() => setIsLicenseModalOpen(true)}
                 onRefresh={fetchData}
                 lang={lang}
                 onOpenHelp={() => handleOpenHelp("accounts")}
@@ -587,6 +591,15 @@ export default function App() {
         onClose={() => setIsConnectModalOpen(false)}
         lang={lang}
         onAccountConnected={handleAccountConnected}
+      />
+
+      {/* License & Multi-Account Limit Modal */}
+      <LicenseModal
+        isOpen={isLicenseModalOpen}
+        onClose={() => setIsLicenseModalOpen(false)}
+        lang={lang}
+        onLicenseUpdated={fetchData}
+        authSession={authSession}
       />
 
       {/* Extend Subscription Modal */}

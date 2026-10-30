@@ -37,6 +37,7 @@ import { backupService } from "./server/backupService.js";
 import { translateText, SUPPORTED_LANGUAGES } from "./server/translationService.js";
 import { auditLogger } from "./server/auditLogger.js";
 import { mediaDownloader } from "./server/mediaDownloader.js";
+import { licenseManager } from "./server/licenseManager.js";
 import { exec } from "child_process";
 
 const startTime = Date.now();
@@ -1789,12 +1790,217 @@ async function startServer() {
 
 
 
+  // ==========================================
+  // SYSTEM LICENSING & MULTI-ACCOUNT QUOTA APIS
+  // ==========================================
+  app.get("/api/license/status", (_req, res) => {
+    try {
+      const accounts = telegramManager.getAccounts();
+      const status = licenseManager.getStatus(accounts.length);
+      return res.json({ success: true, ...status });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/license/activate", (req, res) => {
+    try {
+      const { key, customerName, customerPhone } = req.body || {};
+      const accounts = telegramManager.getAccounts();
+      const result = licenseManager.activateLicense(key, {
+        name: customerName,
+        phone: customerPhone,
+        currentAccountsCount: accounts.length,
+      });
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  function checkCreatorLicenseAccess(req: express.Request): boolean {
+    const creatorUser =
+      (req.headers["x-creator-username"] as string) ||
+      (req.body?.creatorUsername as string) ||
+      "";
+    const creatorPass =
+      (req.headers["x-creator-password"] as string) ||
+      (req.headers["x-owner-secret"] as string) ||
+      (req.body?.creatorPassword as string) ||
+      "";
+    return licenseManager.verifyCreatorCredentials(creatorUser, creatorPass);
+  }
+
+  app.post("/api/license/creator/login", (req, res) => {
+    try {
+      const { username, password } = req.body || {};
+      if (!licenseManager.verifyCreatorCredentials(username, password)) {
+        return res.status(401).json({
+          success: false,
+          message: "نام کاربری یا رمز عبور وارد شده نامعتبر است. دسترسی محدود به سازنده اصلی می‌باشد.",
+        });
+      }
+      const accounts = telegramManager.getAccounts();
+      return res.json({
+        success: true,
+        message: "احراز هویت با موفقیت انجام شد. به پنل اختصاصی صدور لایسنس خوش آمدید.",
+        keys: licenseManager.getKeysList(),
+        licenseStatus: licenseManager.getStatus(accounts.length),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get("/api/license/admin/keys", (req, res) => {
+    try {
+      if (!checkCreatorLicenseAccess(req)) {
+        return res.status(403).json({
+          success: false,
+          message: "دسترسی غیرمجاز! این بخش منحصراً برای سازنده اسکریپت محفوظ است.",
+        });
+      }
+      const keys = licenseManager.getKeysList();
+      return res.json({ success: true, keys });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/license/admin/generate", (req, res) => {
+    try {
+      if (!checkCreatorLicenseAccess(req)) {
+        return res.status(403).json({
+          success: false,
+          message: "دسترسی غیرمجاز! فقط سازنده اصلی اجازه تولید کلید لایسنس را دارد.",
+        });
+      }
+      const { durationDays, maxAccounts, note } = req.body || {};
+      const newKey = licenseManager.generateKey(
+        Number(durationDays) || 30,
+        Number(maxAccounts) || 9999,
+        note
+      );
+      return res.json({
+        success: true,
+        key: newKey,
+        keys: licenseManager.getKeysList(),
+        message: `کلید لایسنس ${newKey.durationDays} روزه با موفقیت تولید شد و روی هر سروری قابل فعال‌سازی است.`,
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.delete("/api/license/admin/keys/:key", (req, res) => {
+    try {
+      if (!checkCreatorLicenseAccess(req)) {
+        return res.status(403).json({
+          success: false,
+          message: "دسترسی غیرمجاز! فقط سازنده اسکریپت اجازه حذف کلید را دارد.",
+        });
+      }
+      const accounts = telegramManager.getAccounts();
+      licenseManager.deleteKey(decodeURIComponent(req.params.key));
+      return res.json({
+        success: true,
+        keys: licenseManager.getKeysList(),
+        license: licenseManager.getStatus(accounts.length),
+        message: "کلید لایسنس از لیست حذف گردید.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/license/admin/keys/:key/toggle", (req, res) => {
+    try {
+      if (!checkCreatorLicenseAccess(req)) {
+        return res.status(403).json({
+          success: false,
+          message: "دسترسی غیرمجاز! فقط سازنده اسکریپت اجازه فعال یا غیرفعال کردن کلید لایسنس را دارد.",
+        });
+      }
+      const accounts = telegramManager.getAccounts();
+      const result = licenseManager.toggleKeyStatus(
+        decodeURIComponent(req.params.key),
+        accounts.length
+      );
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/license/admin/server-toggle", (req, res) => {
+    try {
+      if (!checkCreatorLicenseAccess(req)) {
+        return res.status(403).json({
+          success: false,
+          message: "دسترسی غیرمجاز! فقط سازنده اسکریپت اجازه فعال یا غیرفعال کردن لایسنس سرور را دارد.",
+        });
+      }
+      const { enable, durationDays, targetKey } = req.body || {};
+      const accounts = telegramManager.getAccounts();
+      const result = licenseManager.setServerLicenseActive(
+        Boolean(enable),
+        Number(durationDays) || 30,
+        accounts.length,
+        targetKey
+      );
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/license/admin/revoke", (req, res) => {
+    try {
+      if (!checkCreatorLicenseAccess(req)) {
+        return res.status(403).json({
+          success: false,
+          message: "دسترسی غیرمجاز! لغو لایسنس فقط توسط سازنده اسکریپت امکان‌پذیر است.",
+        });
+      }
+      const accounts = telegramManager.getAccounts();
+      const status = licenseManager.revokeLicense(accounts.length);
+      return res.json({
+        success: true,
+        license: status,
+        message: "لایسنس با موفقیت لغو شد و سیستم به سقف ۱۰ اکانت رایگان بازگشت.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
   // Telegram Auth: Step 1 - Send Code to Phone Number
   app.post("/api/telegram/auth/send-code", async (req, res) => {
     try {
       const { phoneNumber, apiId, apiHash } = req.body;
       if (!phoneNumber) {
         return res.status(400).json({ success: false, message: "شماره تلفن الزامی است." });
+      }
+
+      // Check account limit (Max 10 for free tier, unlimited for monthly license)
+      const accounts = telegramManager.getAccounts();
+      const existingPhones = accounts.map((a) => a.phone);
+      const limitCheck = licenseManager.checkAccountLimit(accounts.length, phoneNumber, existingPhones);
+      if (!limitCheck.allowed) {
+        return res.status(403).json({
+          success: false,
+          code: limitCheck.code,
+          message: limitCheck.reason,
+          limit: limitCheck.freeLimit,
+          current: limitCheck.currentAccounts,
+          requiresLicense: true,
+        });
       }
 
       const result = await telegramManager.sendCode(phoneNumber, apiId ? Number(apiId) : undefined, apiHash);
@@ -1857,6 +2063,20 @@ async function startServer() {
         return res.status(400).json({
           success: false,
           message: "رشته سشن (sessionString) الزامی است.",
+        });
+      }
+
+      // Check account limit
+      const accounts = telegramManager.getAccounts();
+      const limitCheck = licenseManager.checkAccountLimit(accounts.length);
+      if (!limitCheck.allowed) {
+        return res.status(403).json({
+          success: false,
+          code: limitCheck.code,
+          message: limitCheck.reason,
+          limit: limitCheck.freeLimit,
+          current: limitCheck.currentAccounts,
+          requiresLicense: true,
         });
       }
 
