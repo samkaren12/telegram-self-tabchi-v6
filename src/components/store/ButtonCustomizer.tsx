@@ -78,9 +78,21 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export const PREMIUM_EMOJI_PRESETS = [
-  { icon: "🔥", label: "🔥 آیکون رسمی تلگرام (Free Topic Icon • free=true)", id: "5312536423581202898" },
-  { icon: "🔥", label: "🔥 ایموجی پرمیوم رسمی تلگرام (RestrictedEmoji)", id: "5368324170671202286" },
+  { icon: "⚡", label: "⚡ آیکون رسمی تلگرام (Free Topic Icon • free=true)", id: "5309832892262654231", isFree: true },
+  { icon: "✅", label: "✅ تیک سبز رسمی (Free Topic Icon • free=true)", id: "5357121491508928442", isFree: true },
+  { icon: "💎", label: "💎 الماس آبی Aiogram (Inline/Reply Button Icon)", id: "5310076249404621168", isFree: true },
+  { icon: "🔥", label: "🔥 آتش متحرک Aiogram (Inline/Reply Button Icon)", id: "5310169226856644648", isFree: true },
+  { icon: "🔥", label: "🔥 ایموجی پرمیوم تلگرام (RestrictedEmoji)", id: "5368324170671202286", isFree: false },
+  { icon: "⭐", label: "⭐ ستاره طلایی پرمیوم (RestrictedEmoji)", id: "5370869711888194012", isFree: false },
 ];
+
+function ensureButtonTextHasVisibleEmoji(rawText: string, emojiChar?: string): string {
+  const clean = String(rawText || "").trim();
+  if (!clean) return `${emojiChar || "💎"} دکمه`;
+  const hasLeadingEmoji = /^[^\w\s\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(clean);
+  if (hasLeadingEmoji) return clean;
+  return `${emojiChar || "💎"} ${clean}`;
+}
 
 export function ButtonCustomizer({
   settings,
@@ -102,6 +114,14 @@ export function ButtonCustomizer({
   const [previewAdminOpen, setPreviewAdminOpen] = useState(false);
   const [syncingEmojis, setSyncingEmojis] = useState(false);
   const [testingLiveEmoji, setTestingLiveEmoji] = useState(false);
+  const [sendingAiogramMenu, setSendingAiogramMenu] = useState(false);
+  const [aiogramModalOpen, setAiogramModalOpen] = useState(false);
+  const [aiogramCodeInfo, setAiogramCodeInfo] = useState<{
+    aiogramInstalled: boolean;
+    aiogramVersion: string;
+    engineMode: string;
+    pythonCode: string;
+  } | null>(null);
   const [liveTestResult, setLiveTestResult] = useState<{
     success: boolean;
     telegramReturnedEmojiOnButton: boolean;
@@ -225,7 +245,7 @@ export function ButtonCustomizer({
     setBtnTargetCat(categories[0]?.id || "self");
     setBtnTargetUrl("");
     setBtnStyle("success");
-    setBtnCustomEmojiId(discoveredServerEmojis[0]?.id || "5312536423581202898");
+    setBtnCustomEmojiId(discoveredServerEmojis[0]?.id || "5309832892262654231");
     const maxRow = customButtons.reduce((max, b) => Math.max(max, b.rowIndex || 0), 0);
     setBtnRow(customButtons.length > 0 ? maxRow + 1 : 0);
     setBtnCol(0);
@@ -259,8 +279,18 @@ export function ButtonCustomizer({
   };
 
   const handleQuickAssignPremiumEmoji = async (btnId: string, emojiId: string, emojiLabel?: string) => {
+    const matchedPreset =
+      discoveredServerEmojis.find((e) => e.id === emojiId) ||
+      PREMIUM_EMOJI_PRESETS.find((p) => p.id === emojiId);
+    const iconChar = (matchedPreset as any)?.emoji || (matchedPreset as any)?.icon || "💎";
     const nextList = customButtons.map((b) =>
-      b.id === btnId ? { ...b, customEmojiId: emojiId || undefined } : b
+      b.id === btnId
+        ? {
+            ...b,
+            text: emojiId ? ensureButtonTextHasVisibleEmoji(b.text, iconChar) : b.text,
+            customEmojiId: emojiId || undefined,
+          }
+        : b
     );
     setQuickEmojiPickerBtnId(null);
     await persistButtonsImmediately(
@@ -307,16 +337,62 @@ export function ButtonCustomizer({
   const handleAutoAssignPremiumEmojisToAll = async () => {
     const verifiedPool =
       discoveredServerEmojis.length > 0
-        ? discoveredServerEmojis.map((x) => x.id)
-        : ["5312536423581202898", "5368324170671202286"];
-    const nextList = customButtons.map((b, idx) => ({
-      ...b,
-      customEmojiId: verifiedPool[idx % verifiedPool.length] || "5312536423581202898",
-    }));
+        ? discoveredServerEmojis
+        : PREMIUM_EMOJI_PRESETS.map((p) => ({ id: p.id, emoji: p.icon, isFree: p.isFree }));
+    const nextList = customButtons.map((b, idx) => {
+      const picked = verifiedPool[idx % verifiedPool.length] || { id: "5309832892262654231", emoji: "⚡" };
+      return {
+        ...b,
+        text: ensureButtonTextHasVisibleEmoji(b.text, picked.emoji),
+        customEmojiId: picked.id,
+      };
+    });
     await persistButtonsImmediately(
       nextList,
-      "✨ شناسه‌های معتبر ایموجی تلگرام (Free Topic Icons & Premium) روی تمام دکمه‌های ربات ست شدند!"
+      "✨ شناسه‌های معتبر ایموجی تلگرام (Aiogram & Free Topic Icons) روی تمام دکمه‌های ربات ست شدند!"
     );
+  };
+
+  const handleSendViaPythonAiogram = async () => {
+    setSendingAiogramMenu(true);
+    setLiveTestResult(null);
+    try {
+      const res = await fetch("/api/store-bot/send-via-aiogram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: ownerIdInput.trim() || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) {
+        throw new Error(json.message || json.error || "خطا در ارسال با موتور پایتون Aiogram");
+      }
+      setLiveTestResult({
+        success: true,
+        telegramReturnedEmojiOnButton: Boolean(json.telegram_returned_emoji_on_button),
+        diagnosis: json.diagnosis || "منو با موتور پایتون Aiogram ارسال شد.",
+      });
+      showToast("success", "🐍 منوی ربات با کتابخانه پایتون Aiogram (InlineKeyboardBuilder & KeyboardBuilder) به تلگرام ارسال شد!");
+    } catch (err: any) {
+      showToast("error", err.message);
+    } finally {
+      setSendingAiogramMenu(false);
+    }
+  };
+
+  const handleOpenAiogramCodeModal = async () => {
+    setAiogramModalOpen(true);
+    try {
+      const res = await fetch("/api/store-bot/aiogram-code");
+      const json = await res.json();
+      if (json?.success) {
+        setAiogramCodeInfo({
+          aiogramInstalled: Boolean(json.aiogramInstalled),
+          aiogramVersion: json.aiogramVersion || "3.25.0",
+          engineMode: json.engineMode || "aiogram-v3-botapi-9.4",
+          pythonCode: json.pythonCode || "",
+        });
+      }
+    } catch (_) {}
   };
 
   const handleTestLiveEmojiInTelegram = async () => {
@@ -412,14 +488,20 @@ export function ButtonCustomizer({
       return;
     }
 
+    const cleanId = btnCustomEmojiId.trim();
+    const matchedPreset =
+      discoveredServerEmojis.find((em) => em.id === cleanId) ||
+      PREMIUM_EMOJI_PRESETS.find((p) => p.id === cleanId);
+    const iconChar = (matchedPreset as any)?.emoji || (matchedPreset as any)?.icon || "💎";
+
     const newBtn: StoreCustomButton = {
       id: editingBtn ? editingBtn.id : `btn-${Date.now()}`,
-      text: btnText.trim(),
+      text: ensureButtonTextHasVisibleEmoji(btnText.trim(), iconChar),
       action: btnAction,
       targetCategoryId: btnAction === "buy_category" ? btnTargetCat : undefined,
       url: btnAction === "custom_url" ? btnTargetUrl.trim() : undefined,
       style: btnStyle === "success" || btnStyle === "danger" || btnStyle === "primary" ? btnStyle : "primary",
-      customEmojiId: btnCustomEmojiId.trim() || undefined,
+      customEmojiId: cleanId || undefined,
       rowIndex: Number(btnRow) || 0,
       columnIndex: Number(btnCol) || 0,
       isActive: editingBtn ? editingBtn.isActive !== false : true,
@@ -842,21 +924,45 @@ export function ButtonCustomizer({
               type="button"
               onClick={handleSyncRealTelegramEmojis}
               disabled={syncingEmojis}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
             >
               {syncingEmojis ? (
                 <RefreshCw className="w-4 h-4 animate-spin" />
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              <span>دریافت آیکون‌های Free Topic و پرمیوم از تلگرام</span>
+              <span>دریافت ایموجی‌های رسمی (Aiogram Sync)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSendViaPythonAiogram}
+              disabled={sendingAiogramMenu}
+              className="px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              title="ارسال منوی ربات با کتابخانه پایتون Aiogram v3.25 (InlineKeyboardBuilder & KeyboardButton)"
+            >
+              {sendingAiogramMenu ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              <span>🐍 ارسال با پایتون Aiogram</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenAiogramCodeModal}
+              className="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-500/40 text-cyan-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              title="مشاهده کد پایتون Aiogram v3 برای دکمه‌های رنگی و ایموجی پرمیوم"
+            >
+              <span>💻 کد Aiogram</span>
             </button>
 
             <button
               type="button"
               onClick={handleTestLiveEmojiInTelegram}
               disabled={testingLiveEmoji}
-              className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all cursor-pointer disabled:opacity-50"
               title="ارسال پیام تست به تلگرام مالک و بررسی مستقیم پاسخ سرور تلگرام (result.reply_markup)"
             >
               {testingLiveEmoji ? (
@@ -864,7 +970,7 @@ export function ButtonCustomizer({
               ) : (
                 <Send className="w-4 h-4" />
               )}
-              <span>🧪 تست زنده ایموجی دکمه در تلگرام</span>
+              <span>🧪 تست زنده</span>
             </button>
           </div>
         </div>
@@ -1648,7 +1754,10 @@ export function ButtonCustomizer({
                     <button
                       key={pe.id}
                       type="button"
-                      onClick={() => setBtnCustomEmojiId(pe.id)}
+                      onClick={() => {
+                        setBtnCustomEmojiId(pe.id);
+                        setBtnText((prev) => ensureButtonTextHasVisibleEmoji(prev, pe.icon));
+                      }}
                       className={`px-2.5 py-1.5 rounded-xl text-[10px] text-right truncate border transition-all cursor-pointer ${
                         btnCustomEmojiId === pe.id
                           ? "bg-amber-500/25 border-amber-400 text-amber-200 font-bold shadow-sm"
@@ -1677,6 +1786,67 @@ export function ButtonCustomizer({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Python Aiogram v3 Code & Engine Status */}
+      {aiogramModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-3xl bg-slate-900 border border-cyan-500/40 rounded-2xl shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">🐍</span>
+                <div>
+                  <h4 className="text-sm sm:text-base font-black text-white">
+                    موتور و کد پایتون Aiogram v3.25+ (Telegram Bot API 9.4)
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    ساخت دکمه‌های رنگی و ایموجی‌های پرمیوم با <code className="text-cyan-300">InlineKeyboardBuilder</code>، <code className="text-cyan-300">ReplyKeyboardBuilder</code> و <code className="text-amber-300">icon_custom_emoji_id</code>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAiogramModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold">
+                  Aiogram Engine: {aiogramCodeInfo?.aiogramVersion || "3.25.0"}
+                </span>
+                <span className="text-slate-400 font-mono text-[11px]">
+                  server/aiogram_bot_engine.py
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (aiogramCodeInfo?.pythonCode) {
+                      navigator.clipboard.writeText(aiogramCodeInfo.pythonCode);
+                      showToast("success", "کد پایتون Aiogram کپی شد!");
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-200 font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>کپی کد پایتون Aiogram</span>
+                </button>
+              </div>
+            </div>
+
+            <pre
+              dir="ltr"
+              className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-[11px] font-mono text-emerald-300 overflow-x-auto max-h-[55vh] leading-relaxed"
+            >
+              {aiogramCodeInfo?.pythonCode || "# در حال تولید کد پایتون Aiogram از روی دکمه‌های فعلی شما..."}
+            </pre>
           </div>
         </div>
       )}

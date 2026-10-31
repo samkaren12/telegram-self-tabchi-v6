@@ -28,8 +28,11 @@ else
 fi
 
 # 3. Reinstall dependencies if needed
-echo "⚙️ Checking npm dependencies..."
+echo "⚙️ Checking npm & Python aiogram dependencies..."
 npm install --legacy-peer-deps --prefer-offline 2>/dev/null || npm install --legacy-peer-deps 2>/dev/null || true
+if command -v pip3 >/dev/null 2>&1; then
+  pip3 install -U aiogram --break-system-packages 2>/dev/null || pip3 install -U aiogram 2>/dev/null || true
+fi
 
 # 4. Update yt-dlp binary if present
 if command -v yt-dlp >/dev/null 2>&1; then

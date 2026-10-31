@@ -60,12 +60,21 @@ install_pkg() {
 }
 
 # Check essential utilities immediately
-for tool in curl git lsof tar gzip ffmpeg; do
+for tool in curl git lsof tar gzip ffmpeg python3; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo -e "${YELLOW}⚙ Installing required tool: $tool...${NC}"
     install_pkg "$tool" || true
   fi
 done
+
+# Ensure Python pip and aiogram v3.25+ (for Telegram Custom Emoji & Colored Buttons) are installed
+if ! command -v pip3 >/dev/null 2>&1; then
+  install_pkg "python3-pip" || true
+fi
+if command -v pip3 >/dev/null 2>&1; then
+  echo -e "${CYAN}🐍 Installing Python aiogram v3 library for Telegram Premium Emoji & Colored Buttons...${NC}"
+  pip3 install -U aiogram --break-system-packages 2>/dev/null || pip3 install -U aiogram 2>/dev/null || true
+fi
 
 # Install yt-dlp binary for full high-speed video downloader engine
 if ! command -v yt-dlp >/dev/null 2>&1; then

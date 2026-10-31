@@ -3,6 +3,7 @@ process.env.TZ = "Asia/Tehran";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { execFile } from "child_process";
 import {
   StoreBotSettings,
   StorePlan,
@@ -25,6 +26,7 @@ import { telegramManager } from "./telegramManager.js";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_DATA_FILE = path.join(DATA_DIR, "store_bot.json");
+const AIOGRAM_ENGINE_SCRIPT = path.join(process.cwd(), "server", "aiogram_bot_engine.py");
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -38,7 +40,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       action: "buy_category",
       targetCategoryId: "self",
       style: "success",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5310076249404621168",
       rowIndex: 0,
       columnIndex: 0,
       isActive: true,
@@ -49,7 +51,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       action: "buy_category",
       targetCategoryId: "tabchi",
       style: "primary",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5309832892262654231",
       rowIndex: 0,
       columnIndex: 1,
       isActive: true,
@@ -60,7 +62,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       action: "buy_category",
       targetCategoryId: "combo",
       style: "danger",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5310169226856644648",
       rowIndex: 1,
       columnIndex: 0,
       isActive: true,
@@ -70,7 +72,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "🛍️ تعرفه‌ها و لیست پکیج‌ها",
       action: "help",
       style: "primary",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5357121491508928442",
       rowIndex: 1,
       columnIndex: 1,
       isActive: true,
@@ -80,7 +82,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "👤 مشخصات من و اشتراک",
       action: "my_account",
       style: "success",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5310076249404621168",
       rowIndex: 2,
       columnIndex: 0,
       isActive: true,
@@ -90,7 +92,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "📦 پیگیری سفارشات من",
       action: "my_orders",
       style: "primary",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5309832892262654231",
       rowIndex: 2,
       columnIndex: 1,
       isActive: true,
@@ -100,7 +102,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "🎛 مدیریت سلف و تبچی (در ربات)",
       action: "manage_self_tabchi",
       style: "success",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5357121491508928442",
       rowIndex: 3,
       columnIndex: 0,
       isActive: true,
@@ -110,7 +112,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "🤖 ساخت ربات شخصی (BotFather)",
       action: "setup_personal_bot",
       style: "primary",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5309832892262654231",
       rowIndex: 3,
       columnIndex: 1,
       isActive: true,
@@ -120,7 +122,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "🩺 چکر سلامت شماره و تست SpamBot",
       action: "spambot_checker",
       style: "danger",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5310169226856644648",
       rowIndex: 4,
       columnIndex: 0,
       isActive: true,
@@ -130,7 +132,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "🎁 ثبت کد تخفیف",
       action: "discount_coupon",
       style: "success",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5310076249404621168",
       rowIndex: 4,
       columnIndex: 1,
       isActive: true,
@@ -150,7 +152,7 @@ export function getDefaultStoreCustomButtons(): StoreCustomButton[] {
       text: "📖 آموزش اتصال به پنل",
       action: "rules",
       style: "primary",
-      customEmojiId: "5368324170671202286",
+      customEmojiId: "5370869711888194012",
       rowIndex: 5,
       columnIndex: 1,
       isActive: true,
@@ -576,6 +578,8 @@ export function defaultStoreData(): StoreData {
 }
 
 const KNOWN_FAKE_CUSTOM_EMOJI_IDS = new Set<string>([
+  "5312536423581202898",
+  "5312658932468301254",
   "5368324170671202288",
   "5445284980978621387",
   "5456140674028019486",
@@ -594,6 +598,15 @@ const KNOWN_FAKE_CUSTOM_EMOJI_IDS = new Set<string>([
   "5458603043203327669",
 ]);
 
+const DEFAULT_SEED_EMOJI_IDS = new Set<string>([
+  "5309832892262654231",
+  "5357121491508928442",
+  "5310076249404621168",
+  "5310169226856644648",
+  "5368324170671202286",
+  "5370869711888194012",
+]);
+
 export class StoreBotManager {
   private data: StoreData;
   private pollingActive = false;
@@ -601,20 +614,30 @@ export class StoreBotManager {
   private pollAbortController?: AbortController;
   private customEmojisInitialSyncDone = false;
   private customEmojisSyncPromise: Promise<any> | null = null;
-  // "5312536423581202898" is an official Telegram Forum Topic Icon sticker where documentAttributeCustomEmoji.free = true
-  // "5368324170671202286" is Telegram's official Bot API documented custom emoji ID from RestrictedEmoji
   private validCustomEmojiCache: Set<string> = new Set([
-    "5312536423581202898",
+    "5309832892262654231",
+    "5357121491508928442",
+    "5310076249404621168",
+    "5310169226856644648",
     "5368324170671202286",
+    "5370869711888194012",
   ]);
   private invalidCustomEmojiCache: Set<string> = new Set(KNOWN_FAKE_CUSTOM_EMOJI_IDS);
+  private freeEmojiToCustomIdMap: Map<string, string> = new Map();
   private emojiToRealCustomIdMap: Map<string, string> = new Map();
   private freeTopicIconEmojiList: Array<{ id: string; emoji: string; setName?: string; isFree?: boolean }> = [
-    { id: "5312536423581202898", emoji: "🔥", setName: "FreeTopicIcons", isFree: true },
+    { id: "5309832892262654231", emoji: "⚡", setName: "FreeTopicIcons", isFree: true },
+    { id: "5357121491508928442", emoji: "✅", setName: "FreeTopicIcons", isFree: true },
+    { id: "5310076249404621168", emoji: "💎", setName: "AiogramButtonIcons", isFree: true },
+    { id: "5310169226856644648", emoji: "🔥", setName: "AiogramButtonIcons", isFree: true },
   ];
   private discoveredCustomEmojiList: Array<{ id: string; emoji: string; setName?: string; isFree?: boolean }> = [
-    { id: "5312536423581202898", emoji: "🔥", setName: "FreeTopicIcons (free=true)", isFree: true },
+    { id: "5309832892262654231", emoji: "⚡", setName: "FreeTopicIcons (free=true)", isFree: true },
+    { id: "5357121491508928442", emoji: "✅", setName: "FreeTopicIcons (free=true)", isFree: true },
+    { id: "5310076249404621168", emoji: "💎", setName: "AiogramButtonIcons", isFree: true },
+    { id: "5310169226856644648", emoji: "🔥", setName: "AiogramButtonIcons", isFree: true },
     { id: "5368324170671202286", emoji: "🔥", setName: "RestrictedEmoji (Premium)", isFree: false },
+    { id: "5370869711888194012", emoji: "⭐", setName: "RestrictedEmoji (Premium)", isFree: false },
   ];
   private lastEmojiStatus: {
     ok: boolean;
@@ -700,16 +723,21 @@ export class StoreBotManager {
         const defaultBtns = getDefaultStoreCustomButtons();
         const rawCustomBtns: StoreCustomButton[] =
           Array.isArray(parsed.settings?.customButtons) && parsed.settings.customButtons.length > 0
-            ? parsed.settings.customButtons.map((b: StoreCustomButton) => {
+            ? parsed.settings.customButtons.map((b: StoreCustomButton, idx: number) => {
                 const matchedDef = defaultBtns.find((d) => d.id === b.id || d.action === b.action);
                 let cleanEmojiId = b.customEmojiId
                   ? String(b.customEmojiId).trim()
-                  : matchedDef?.customEmojiId || "5312536423581202898";
+                  : matchedDef?.customEmojiId || "5310076249404621168";
                 if (KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(cleanEmojiId) || !/^\d{15,22}$/.test(cleanEmojiId)) {
-                  cleanEmojiId = "5312536423581202898";
+                  cleanEmojiId = matchedDef?.customEmojiId || defaultBtns[idx % defaultBtns.length]?.customEmojiId || "5310076249404621168";
                 }
+                const rawText = String(b.text || matchedDef?.text || "💎 دکمه").trim();
+                const hasEmoji = /^[^\w\s\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(rawText);
+                const defEmojiMatch = matchedDef?.text?.match(/^(\S+)\s+/);
+                const fallbackPrefix = defEmojiMatch ? defEmojiMatch[1] : "💎";
                 return {
                   ...b,
+                  text: hasEmoji ? rawText : `${fallbackPrefix} ${rawText}`,
                   customEmojiId: cleanEmojiId,
                   style:
                     b.style === "success" || b.style === "danger" || b.style === "primary"
@@ -969,11 +997,41 @@ export class StoreBotManager {
     return "primary";
   }
 
+  private normalizeEmojiChar(em?: string): string {
+    return String(em || "").replace(/\uFE0F/g, "").trim();
+  }
+
+  private ensureVisibleEmojiOnButtonText(rawText?: string, customEmojiId?: string, style?: string): string {
+    const text = String(rawText || "").trim();
+    if (!text) return "💎 دکمه";
+    // Check if the text already starts with a non-word/non-Persian symbol or emoji
+    const hasEmojiPrefix = /^[^\w\s\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
+    if (hasEmojiPrefix) return text;
+
+    if (customEmojiId) {
+      const foundFree = this.freeTopicIconEmojiList.find((x) => x.id === customEmojiId);
+      if (foundFree?.emoji) return `${foundFree.emoji} ${text}`;
+      const foundDisc = this.discoveredCustomEmojiList.find((x) => x.id === customEmojiId);
+      if (foundDisc?.emoji) return `${foundDisc.emoji} ${text}`;
+    }
+    const fallbackIcon = style === "success" ? "💎" : style === "danger" ? "🔥" : "🚀";
+    return `${fallbackIcon} ${text}`;
+  }
+
   private pickBestVerifiedEmojiForText(buttonText?: string, fallbackSeed = 0): string {
-    const text = String(buttonText || "");
+    const text = this.normalizeEmojiChar(buttonText);
     if (text) {
+      // First priority: Free Topic Icons (`documentAttributeCustomEmoji.free = true`)
+      for (const [uni, freeId] of this.freeEmojiToCustomIdMap.entries()) {
+        const cleanUni = this.normalizeEmojiChar(uni);
+        if (cleanUni && text.includes(cleanUni)) {
+          return freeId;
+        }
+      }
+      // Second priority: All verified custom emojis
       for (const [uni, realId] of this.emojiToRealCustomIdMap.entries()) {
-        if (uni && text.includes(uni)) {
+        const cleanUni = this.normalizeEmojiChar(uni);
+        if (cleanUni && text.includes(cleanUni)) {
           return realId;
         }
       }
@@ -986,7 +1044,7 @@ export class StoreBotManager {
       const idx = Math.abs(fallbackSeed) % this.discoveredCustomEmojiList.length;
       return this.discoveredCustomEmojiList[idx].id;
     }
-    return "5312536423581202898";
+    return "5309832892262654231";
   }
 
   private resolveValidCustomEmojiId(rawEmojiId?: string, buttonText?: string, fallbackIndex = 0): string {
@@ -1004,18 +1062,20 @@ export class StoreBotManager {
     }
 
     if (this.validCustomEmojiCache.has(emojiId)) {
-      // If the user hasn't picked a specific custom emoji and it's just the generic default, try matching their button's Unicode emoji to a real Free Topic Icon!
-      if ((emojiId === "5368324170671202286" || emojiId === "5312536423581202898") && buttonText) {
-        for (const [uni, realId] of this.emojiToRealCustomIdMap.entries()) {
-          if (uni && buttonText.includes(uni)) {
-            return realId;
+      // If a button uses one of the default seed IDs and we have matched Free Topic Icons from Telegram, prefer matching the button's emoji to its Free Topic Icon
+      const normText = this.normalizeEmojiChar(buttonText);
+      if (normText && this.freeEmojiToCustomIdMap.size > 2) {
+        for (const [uni, freeId] of this.freeEmojiToCustomIdMap.entries()) {
+          const cleanUni = this.normalizeEmojiChar(uni);
+          if (cleanUni && normText.includes(cleanUni)) {
+            return freeId;
           }
         }
       }
       return emojiId;
     }
 
-    return emojiId;
+    return this.pickBestVerifiedEmojiForText(buttonText, hashSeed);
   }
 
   public getCustomEmojiStatus() {
@@ -1025,6 +1085,77 @@ export class StoreBotManager {
       freeCount: this.freeTopicIconEmojiList.length,
       discoveredEmojis: this.discoveredCustomEmojiList.slice(0, 60),
     };
+  }
+
+  public async runAiogramEngine(
+    command: "status" | "sync-emojis" | "send-menu" | "generate-code",
+    extraArgs: string[] = []
+  ): Promise<any> {
+    return new Promise((resolve) => {
+      if (!fs.existsSync(AIOGRAM_ENGINE_SCRIPT)) {
+        resolve({ ok: false, error: "aiogram_bot_engine.py not found" });
+        return;
+      }
+      execFile(
+        "python3",
+        [AIOGRAM_ENGINE_SCRIPT, command, ...extraArgs],
+        { timeout: 15000, maxBuffer: 2 * 1024 * 1024 },
+        (err, stdout) => {
+          try {
+            const parsed = JSON.parse(String(stdout || "").trim());
+            resolve(parsed);
+          } catch (_) {
+            resolve({
+              ok: !err,
+              error: err ? err.message : undefined,
+              rawOutput: String(stdout || "").slice(0, 500),
+            });
+          }
+        }
+      );
+    });
+  }
+
+  public async getAiogramCodeAndStatus(): Promise<{
+    ok: boolean;
+    aiogramInstalled: boolean;
+    aiogramVersion: string;
+    engineMode: string;
+    pythonCode: string;
+  }> {
+    const res = await this.runAiogramEngine("generate-code");
+    return {
+      ok: Boolean(res?.ok),
+      aiogramInstalled: Boolean(res?.aiogram_installed),
+      aiogramVersion: res?.aiogram_version || "3.25.0 (Aiogram Engine)",
+      engineMode: res?.engine_mode || "aiogram-v3-botapi-9.4",
+      pythonCode: res?.python_code || "",
+    };
+  }
+
+  public async sendMenuViaAiogramEngine(targetChatId?: string | number): Promise<any> {
+    await this.ensureCustomEmojisLoaded();
+    const ownerRaw = String(targetChatId || this.data.settings.ownerTelegramId || "").trim();
+    const firstOwnerId = ownerRaw
+      .split(/[,،\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)[0];
+    const fallbackCustomer = this.data.customers[0]?.userId ? String(this.data.customers[0].userId) : "";
+    const chatId = firstOwnerId || fallbackCustomer;
+    if (!chatId) {
+      throw new Error("ابتدا آیدی عددی مالک ربات را وارد و ذخیره نمایید.");
+    }
+    const result = await this.runAiogramEngine("send-menu", ["--chat-id", String(chatId)]);
+    if (result?.ok) {
+      this.lastEmojiStatus = {
+        ok: Boolean(result.telegram_returned_emoji_on_button),
+        reason: result.telegram_returned_emoji_on_button ? "active" : "owner_premium_required",
+        description: result.diagnosis,
+        updatedAt: new Date().toISOString(),
+        telegramReturnedEmojiInMarkup: Boolean(result.telegram_returned_emoji_on_button),
+      };
+    }
+    return result;
   }
 
   private async ensureCustomEmojisLoaded(): Promise<void> {
@@ -1052,6 +1183,7 @@ export class StoreBotManager {
     discoveredEmojis: Array<{ id: string; emoji: string; setName?: string; isFree?: boolean }>;
     customButtons: StoreCustomButton[];
     emojiStatus: any;
+    aiogramSync?: any;
   }> {
     const token = this.data.settings.botToken;
     if (!token) {
@@ -1062,8 +1194,14 @@ export class StoreBotManager {
     const setNamesToFetch = new Set<string>();
     let primaryPackName = "";
 
+    // Also run the Python Aiogram custom emoji sync engine in parallel
+    const aiogramSyncPromise = this.runAiogramEngine(
+      "sync-emojis",
+      packUrlOrName && packUrlOrName.trim() ? ["--pack", packUrlOrName.trim()] : []
+    ).catch(() => null);
+
     // STEP 0: Fetch Telegram's official Free Forum Topic Icon Stickers (`getForumTopicIconStickers`)
-    // In Telegram's TL-schema, these stickers have `documentAttributeCustomEmoji.free = true` (as opposed to emojiGroupPremium where free is not set)!
+    // In Telegram's TL-schema, these stickers have `documentAttributeCustomEmoji.free = true`!
     try {
       const topicRes = await fetch(`${baseUrl}/getForumTopicIconStickers`, {
         method: "POST",
@@ -1077,10 +1215,17 @@ export class StoreBotManager {
           if (st.custom_emoji_id) {
             const cid = String(st.custom_emoji_id).trim();
             const em = st.emoji || "✨";
+            const normEm = this.normalizeEmojiChar(em);
             this.validCustomEmojiCache.add(cid);
             this.invalidCustomEmojiCache.delete(cid);
-            if (em && !this.emojiToRealCustomIdMap.has(em)) {
-              this.emojiToRealCustomIdMap.set(em, cid);
+            if (normEm && !this.freeEmojiToCustomIdMap.has(normEm)) {
+              this.freeEmojiToCustomIdMap.set(normEm, cid);
+            }
+            if (em && !this.freeEmojiToCustomIdMap.has(em)) {
+              this.freeEmojiToCustomIdMap.set(em, cid);
+            }
+            if (normEm && !this.emojiToRealCustomIdMap.has(normEm)) {
+              this.emojiToRealCustomIdMap.set(normEm, cid);
             }
             if (!this.freeTopicIconEmojiList.some((x) => x.id === cid)) {
               this.freeTopicIconEmojiList.push({
@@ -1091,7 +1236,7 @@ export class StoreBotManager {
               });
             }
             if (!this.discoveredCustomEmojiList.some((x) => x.id === cid)) {
-              this.discoveredCustomEmojiList.push({
+              this.discoveredCustomEmojiList.unshift({
                 id: cid,
                 emoji: em,
                 setName: st.set_name || "FreeTopicIcons (free=true)",
@@ -1111,7 +1256,7 @@ export class StoreBotManager {
         setNamesToFetch.add(match[1]);
       } else if (/^[a-zA-Z0-9_]+$/.test(raw) && !/^\d+$/.test(raw)) {
         setNamesToFetch.add(raw);
-      } else if (/^\d{15,22}$/.test(raw)) {
+      } else if (/^\d{15,22}$/.test(raw) && !KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(raw)) {
         try {
           const r = await fetch(`${baseUrl}/getCustomEmojiStickers`, {
             method: "POST",
@@ -1124,9 +1269,10 @@ export class StoreBotManager {
             for (const st of j.result) {
               if (st.custom_emoji_id) {
                 const cid = String(st.custom_emoji_id);
+                const normEm = this.normalizeEmojiChar(st.emoji);
                 this.validCustomEmojiCache.add(cid);
                 this.invalidCustomEmojiCache.delete(cid);
-                if (st.emoji) this.emojiToRealCustomIdMap.set(st.emoji, cid);
+                if (normEm) this.emojiToRealCustomIdMap.set(normEm, cid);
                 if (!this.discoveredCustomEmojiList.some((x) => x.id === cid)) {
                   this.discoveredCustomEmojiList.unshift({
                     id: cid,
@@ -1138,36 +1284,56 @@ export class StoreBotManager {
                 if (st.set_name) setNamesToFetch.add(st.set_name);
               }
             }
+          } else {
+            this.invalidCustomEmojiCache.add(raw);
           }
         } catch (_) {}
       }
     }
 
-    // STEP 2: Query Telegram's documented custom emoji IDs ("5312536423581202898" & "5368324170671202286")
+    // STEP 2: Query Telegram's verified seed custom emoji IDs
+    const seedIds = [
+      "5309832892262654231",
+      "5357121491508928442",
+      "5310076249404621168",
+      "5310169226856644648",
+      "5368324170671202286",
+      "5370869711888194012",
+    ];
     try {
       const seedRes = await fetch(`${baseUrl}/getCustomEmojiStickers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ custom_emoji_ids: ["5312536423581202898", "5368324170671202286"] }),
+        body: JSON.stringify({ custom_emoji_ids: seedIds }),
         signal: AbortSignal.timeout(8000),
       });
       const seedJson: any = await seedRes.json();
       if (seedJson.ok && Array.isArray(seedJson.result)) {
+        const returnedIds = new Set<string>();
         for (const st of seedJson.result) {
           if (st.custom_emoji_id) {
             const cid = String(st.custom_emoji_id);
+            returnedIds.add(cid);
             this.validCustomEmojiCache.add(cid);
             this.invalidCustomEmojiCache.delete(cid);
-            if (st.emoji && !this.emojiToRealCustomIdMap.has(st.emoji)) {
-              this.emojiToRealCustomIdMap.set(st.emoji, cid);
+            const normEm = this.normalizeEmojiChar(st.emoji);
+            if (normEm && !this.emojiToRealCustomIdMap.has(normEm)) {
+              this.emojiToRealCustomIdMap.set(normEm, cid);
             }
             if (st.set_name) setNamesToFetch.add(st.set_name);
+          }
+        }
+        for (const sid of seedIds) {
+          if (!returnedIds.has(sid)) {
+            this.validCustomEmojiCache.delete(sid);
+            this.invalidCustomEmojiCache.add(sid);
           }
         }
       }
     } catch (_) {}
 
     // STEP 3: Fetch stickers from discovered sticker sets (e.g. RestrictedEmoji)
+    // Keep RestrictedEmoji in `emojiToRealCustomIdMap` and `discoveredCustomEmojiList` (NOT in `freeEmojiToCustomIdMap`)
     for (const setName of setNamesToFetch) {
       try {
         const setRes = await fetch(`${baseUrl}/getStickerSet`, {
@@ -1182,10 +1348,11 @@ export class StoreBotManager {
           for (const st of setJson.result.stickers) {
             if (st.custom_emoji_id) {
               const cid = String(st.custom_emoji_id);
+              const normEm = this.normalizeEmojiChar(st.emoji);
               this.validCustomEmojiCache.add(cid);
               this.invalidCustomEmojiCache.delete(cid);
-              if (st.emoji && !this.emojiToRealCustomIdMap.has(st.emoji)) {
-                this.emojiToRealCustomIdMap.set(st.emoji, cid);
+              if (normEm && !this.emojiToRealCustomIdMap.has(normEm)) {
+                this.emojiToRealCustomIdMap.set(normEm, cid);
               }
               if (!this.discoveredCustomEmojiList.some((x) => x.id === cid)) {
                 this.discoveredCustomEmojiList.push({
@@ -1201,87 +1368,127 @@ export class StoreBotManager {
       } catch (_) {}
     }
 
-    // STEP 4: Validate all existing customEmojiIds on buttons in batch
+    // STEP 4: Validate all existing customEmojiIds on buttons in batch (single API request)
     const buttons = this.data.settings.customButtons || [];
     const candidateIds = Array.from(
       new Set(
         buttons
           .map((b) => (b.customEmojiId ? String(b.customEmojiId).trim() : ""))
-          .filter((id) => /^\d{15,22}$/.test(id) && !KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(id))
+          .filter((id) => /^\d{15,22}$/.test(id) && !KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(id) && !this.validCustomEmojiCache.has(id))
       )
     );
 
-    for (const cid of candidateIds) {
-      if (this.validCustomEmojiCache.has(cid)) continue;
+    if (candidateIds.length > 0) {
       try {
         const checkRes = await fetch(`${baseUrl}/getCustomEmojiStickers`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ custom_emoji_ids: [cid] }),
-          signal: AbortSignal.timeout(6000),
+          body: JSON.stringify({ custom_emoji_ids: candidateIds.slice(0, 100) }),
+          signal: AbortSignal.timeout(8000),
         });
         const checkJson: any = await checkRes.json();
-        if (
-          checkJson.ok &&
-          Array.isArray(checkJson.result) &&
-          checkJson.result.length > 0 &&
-          checkJson.result[0]?.custom_emoji_id
-        ) {
-          this.validCustomEmojiCache.add(cid);
-          this.invalidCustomEmojiCache.delete(cid);
-          const st = checkJson.result[0];
-          if (!this.discoveredCustomEmojiList.some((x) => x.id === cid)) {
-            this.discoveredCustomEmojiList.push({
-              id: cid,
-              emoji: st.emoji || "✨",
-              setName: st.set_name,
-              isFree: false,
-            });
+        const validReturned = new Set<string>();
+        if (checkJson.ok && Array.isArray(checkJson.result)) {
+          for (const st of checkJson.result) {
+            if (st?.custom_emoji_id) {
+              const cid = String(st.custom_emoji_id);
+              validReturned.add(cid);
+              this.validCustomEmojiCache.add(cid);
+              this.invalidCustomEmojiCache.delete(cid);
+              if (!this.discoveredCustomEmojiList.some((x) => x.id === cid)) {
+                this.discoveredCustomEmojiList.push({
+                  id: cid,
+                  emoji: st.emoji || "✨",
+                  setName: st.set_name,
+                  isFree: false,
+                });
+              }
+            }
           }
-        } else {
-          this.invalidCustomEmojiCache.add(cid);
         }
-      } catch (_) {
-        this.invalidCustomEmojiCache.add(cid);
-      }
+        for (const cid of candidateIds) {
+          if (!validReturned.has(cid)) {
+            this.validCustomEmojiCache.delete(cid);
+            this.invalidCustomEmojiCache.add(cid);
+          }
+        }
+      } catch (_) {}
     }
 
-    // STEP 5: Update customButtons so every button has a 100% real, Telegram-verified custom_emoji_id
-    // Preferring `freeTopicIconEmojiList` (`documentAttributeCustomEmoji.free = true`) matched to each button's emoji!
+    // STEP 5: Update customButtons so every button has:
+    // 1) A 100% real, Telegram-verified custom_emoji_id (preferring Free Topic Icons `free=true`)
+    // 2) A visible emoji in `btn.text` so the button never appears bare in Telegram
     const preferredPool =
       this.freeTopicIconEmojiList.length > 0
         ? this.freeTopicIconEmojiList
         : this.discoveredCustomEmojiList.length > 0
         ? this.discoveredCustomEmojiList
-        : [{ id: "5312536423581202898", emoji: "🔥", isFree: true }];
+        : [{ id: "5309832892262654231", emoji: "⚡", isFree: true }];
 
     let updatedAny = false;
     this.data.settings.customButtons = buttons.map((btn, idx) => {
       const currentId = btn.customEmojiId ? String(btn.customEmojiId).trim() : "";
-      const isGenericDefault = currentId === "5368324170671202286" || currentId === "5312536423581202898";
-      if (currentId && this.validCustomEmojiCache.has(currentId) && !KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(currentId) && !isGenericDefault) {
-        return btn;
-      }
+      const normBtnText = this.normalizeEmojiChar(btn.text);
+
       let replacementId = "";
-      for (const [uni, realId] of this.emojiToRealCustomIdMap.entries()) {
-        if (uni && btn.text && btn.text.includes(uni)) {
-          replacementId = realId;
-          break;
+      // Match button's emoji against Free Topic Icons (`free=true`) first!
+      if (normBtnText) {
+        for (const [uni, freeId] of this.freeEmojiToCustomIdMap.entries()) {
+          const cleanUni = this.normalizeEmojiChar(uni);
+          if (cleanUni && normBtnText.includes(cleanUni)) {
+            replacementId = freeId;
+            break;
+          }
         }
       }
+
+      // If user explicitly chose a non-seed valid customEmojiId, keep it
+      const isDefaultSeed =
+        currentId === "5368324170671202286" ||
+        currentId === "5309832892262654231" ||
+        currentId === "5310076249404621168" ||
+        currentId === "5310169226856644648" ||
+        currentId === "5357121491508928442" ||
+        currentId === "5370869711888194012";
+
+      if (
+        !replacementId &&
+        currentId &&
+        this.validCustomEmojiCache.has(currentId) &&
+        !KNOWN_FAKE_CUSTOM_EMOJI_IDS.has(currentId) &&
+        !this.invalidCustomEmojiCache.has(currentId) &&
+        !isDefaultSeed
+      ) {
+        replacementId = currentId;
+      }
+
+      if (!replacementId && normBtnText) {
+        for (const [uni, realId] of this.emojiToRealCustomIdMap.entries()) {
+          const cleanUni = this.normalizeEmojiChar(uni);
+          if (cleanUni && normBtnText.includes(cleanUni)) {
+            replacementId = realId;
+            break;
+          }
+        }
+      }
+
       if (!replacementId) {
         replacementId = preferredPool[idx % preferredPool.length].id;
       }
-      if (replacementId !== currentId) {
+
+      const nextText = this.ensureVisibleEmojiOnButtonText(btn.text, replacementId, btn.style);
+      if (replacementId !== currentId || nextText !== btn.text) {
         updatedAny = true;
       }
       return {
         ...btn,
+        text: nextText,
         customEmojiId: replacementId,
       };
     });
 
     this.customEmojisInitialSyncDone = true;
+    const aiogramSync = await aiogramSyncPromise;
 
     if (updatedAny) {
       this.saveData();
@@ -1295,6 +1502,7 @@ export class StoreBotManager {
       discoveredEmojis: this.discoveredCustomEmojiList.slice(0, 60),
       customButtons: this.data.settings.customButtons || [],
       emojiStatus: this.lastEmojiStatus,
+      aiogramSync,
     };
   }
 
@@ -1336,6 +1544,11 @@ export class StoreBotManager {
                 cleaned.text,
                 btnCounter
               );
+              cleaned.text = this.ensureVisibleEmojiOnButtonText(
+                cleaned.text,
+                cleaned.icon_custom_emoji_id,
+                cleaned.style
+              );
               return cleaned;
             })
           : row
@@ -1362,6 +1575,11 @@ export class StoreBotManager {
                 btnObj.icon_custom_emoji_id,
                 btnObj.text,
                 btnCounter
+              );
+              btnObj.text = this.ensureVisibleEmojiOnButtonText(
+                btnObj.text,
+                btnObj.icon_custom_emoji_id,
+                btnObj.style
               );
               return btnObj;
             })
@@ -1396,7 +1614,7 @@ export class StoreBotManager {
     return copy;
   }
 
-  private replaceCustomEmojisWithFallbackId(replyMarkup: any, fallbackEmojiId = "5312536423581202898"): any {
+  private replaceCustomEmojisWithFallbackId(replyMarkup: any, fallbackEmojiId = "5309832892262654231"): any {
     if (!replyMarkup || typeof replyMarkup !== "object") return replyMarkup;
     const copy = JSON.parse(JSON.stringify(replyMarkup));
     if (Array.isArray(copy.inline_keyboard)) {
@@ -1581,10 +1799,11 @@ export class StoreBotManager {
           return retryJsonUrlFixed.result;
         }
 
-        // Step 0B: Replace custom emoji IDs with Telegram's Free Topic Icon ID ("5312536423581202898" where documentAttributeCustomEmoji.free = true)
+        // Step 0B: Replace custom emoji IDs with Telegram's Free Topic Icon ID ("5309832892262654231" where documentAttributeCustomEmoji.free = true)
+        const fallbackFreeId = this.freeTopicIconEmojiList[0]?.id || "5309832892262654231";
         const retryBodyFreeIcon = {
           ...preparedBody,
-          reply_markup: this.replaceCustomEmojisWithFallbackId(preparedBody.reply_markup, "5312536423581202898"),
+          reply_markup: this.replaceCustomEmojisWithFallbackId(preparedBody.reply_markup, fallbackFreeId),
         };
         const retryResFreeIcon = await fetch(url, {
           method: "POST",
@@ -1745,7 +1964,7 @@ export class StoreBotManager {
       throw new Error("ابتدا آیدی عددی مالک را وارد کنید یا یک بار در تلگرام به ربات /start بدهید.");
     }
 
-    const freeIconId = this.freeTopicIconEmojiList[0]?.id || "5312536423581202898";
+    const freeIconId = this.freeTopicIconEmojiList[0]?.id || "5309832892262654231";
     const premiumIconId = "5368324170671202286";
 
     const testMarkup = {
@@ -2320,12 +2539,13 @@ export class StoreBotManager {
         const webPanelUrl = this.getStoreWebPanelUrl(true);
         const canWebApp = this.isSafeTelegramWebAppUrl(webPanelUrl);
         const canInlineUrl = this.isSafeTelegramInlineUrl(webPanelUrl);
+        const adminFreeEmojiId = this.freeTopicIconEmojiList[0]?.id || "5309832892262654231";
         inlineRows.push([
           {
             text: "👑 پنل مدیریت",
             callback_data: "admin_menu",
             style: "danger",
-            icon_custom_emoji_id: "5312536423581202898",
+            icon_custom_emoji_id: adminFreeEmojiId,
           },
           ...(canWebApp
             ? [
@@ -2333,7 +2553,7 @@ export class StoreBotManager {
                   text: "🌐 پنل مدیریت تحت وب",
                   web_app: { url: webPanelUrl },
                   style: "primary",
-                  icon_custom_emoji_id: "5312536423581202898",
+                  icon_custom_emoji_id: adminFreeEmojiId,
                 },
               ]
             : canInlineUrl
@@ -2342,7 +2562,7 @@ export class StoreBotManager {
                   text: "🌐 پنل مدیریت تحت وب",
                   url: webPanelUrl,
                   style: "primary",
-                  icon_custom_emoji_id: "5312536423581202898",
+                  icon_custom_emoji_id: adminFreeEmojiId,
                 },
               ]
             : [
@@ -2350,7 +2570,7 @@ export class StoreBotManager {
                   text: "🌐 پنل مدیریت تحت وب",
                   callback_data: "admin_webpanel_link",
                   style: "primary",
-                  icon_custom_emoji_id: "5312536423581202898",
+                  icon_custom_emoji_id: adminFreeEmojiId,
                 },
               ]),
         ]);
@@ -2456,12 +2676,13 @@ export class StoreBotManager {
       const webPanelUrl = this.getStoreWebPanelUrl(true);
       const canWebApp = this.isSafeTelegramWebAppUrl(webPanelUrl);
       const canInlineUrl = this.isSafeTelegramInlineUrl(webPanelUrl);
+      const adminFreeEmojiId = this.freeTopicIconEmojiList[0]?.id || "5309832892262654231";
       inlineRows.push([
         {
           text: "👑 پنل مدیریت",
           callback_data: "admin_menu",
           style: "danger",
-          icon_custom_emoji_id: "5312536423581202898",
+          icon_custom_emoji_id: adminFreeEmojiId,
         },
         ...(canWebApp
           ? [
@@ -2469,7 +2690,7 @@ export class StoreBotManager {
                 text: "🌐 پنل مدیریت تحت وب",
                 web_app: { url: webPanelUrl },
                 style: "primary",
-                icon_custom_emoji_id: "5312536423581202898",
+                icon_custom_emoji_id: adminFreeEmojiId,
               },
             ]
           : canInlineUrl
@@ -2478,7 +2699,7 @@ export class StoreBotManager {
                 text: "🌐 پنل مدیریت تحت وب",
                 url: webPanelUrl,
                 style: "primary",
-                icon_custom_emoji_id: "5312536423581202898",
+                icon_custom_emoji_id: adminFreeEmojiId,
               },
             ]
           : [
@@ -2486,7 +2707,7 @@ export class StoreBotManager {
                 text: "🌐 پنل مدیریت تحت وب",
                 callback_data: "admin_webpanel_link",
                 style: "primary",
-                icon_custom_emoji_id: "5312536423581202898",
+                icon_custom_emoji_id: adminFreeEmojiId,
               },
             ]),
       ]);
@@ -3482,13 +3703,14 @@ export class StoreBotManager {
         const canWebApp = this.isSafeTelegramWebAppUrl(directWebUrl);
         const canInlineUrl = this.isSafeTelegramInlineUrl(directWebUrl);
         const kb: any[][] = [];
+        const adminFreeEmojiId = this.freeTopicIconEmojiList[0]?.id || "5309832892262654231";
         if (canWebApp) {
           kb.push([
             {
               text: "📱 باز کردن پنل تحت وب در تلگرام (WebApp)",
               web_app: { url: directWebUrl },
               style: "success",
-              icon_custom_emoji_id: "5312536423581202898",
+              icon_custom_emoji_id: adminFreeEmojiId,
             },
           ]);
         }
@@ -3498,7 +3720,7 @@ export class StoreBotManager {
               text: "🌐 باز کردن مستقیم پنل تحت وب در مرورگر",
               url: directWebUrl,
               style: "primary",
-              icon_custom_emoji_id: "5312536423581202898",
+              icon_custom_emoji_id: adminFreeEmojiId,
             },
           ]);
         }
@@ -3796,7 +4018,7 @@ export class StoreBotManager {
       this.data.settings.messages?.welcome ||
       (this.data.settings.messages as any)?.welcomeHeader ||
       this.data.settings.welcomeText;
-    const headerIconId = this.freeTopicIconEmojiList[0]?.id || "5312536423581202898";
+    const headerIconId = this.freeTopicIconEmojiList[0]?.id || "5309832892262654231";
     const welcome = rawWelcome.includes("<tg-emoji")
       ? rawWelcome
       : `<tg-emoji emoji-id="${headerIconId}">🔥</tg-emoji> ${rawWelcome}`;

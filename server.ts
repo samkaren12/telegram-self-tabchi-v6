@@ -1381,6 +1381,31 @@ async function startServer() {
     }
   });
 
+  app.get("/api/store-bot/aiogram-code", async (_req, res) => {
+    try {
+      const info = await storeBotManager.getAiogramCodeAndStatus();
+      return res.json({ success: true, ...info });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
+  app.post("/api/store-bot/send-via-aiogram", async (req, res) => {
+    try {
+      const { chatId } = req.body || {};
+      const result = await storeBotManager.sendMenuViaAiogramEngine(chatId);
+      return res.json({
+        success: Boolean(result?.ok),
+        ...result,
+        message: result?.ok
+          ? "کیبورد رنگی و ایموجی‌های پرمیوم با موتور پایتون Aiogram v3 ارسال شد!"
+          : result?.error || "خطا در ارسال با موتور پایتون Aiogram",
+      });
+    } catch (err: any) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  });
+
   app.put("/api/store-bot/messages", (req, res) => {
     try {
       const { messages } = req.body;
